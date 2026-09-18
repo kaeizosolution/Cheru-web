@@ -1,0 +1,1335 @@
+<?php if (!defined('BASEPATH'))
+    exit('No direct script access allowed');
+
+class Product_model extends MY_Model
+{
+
+    // FIX: Updated to match your DB
+    var $column_search = array('name', 'date_added', 'status');
+    var $column_alias = array();
+
+    function __construct()
+    {
+        parent::__construct();
+
+        $type = $this->session->userdata('type');
+        $session_data = $this->session->userdata($type);
+
+        if ($type == 'vendor') {
+            // Logic for Vendor Panel
+            $this->login_id = isset($session_data['login_id']) ? (int) $session_data['login_id'] : (isset($session_data['vendor_id']) ? (int) $session_data['vendor_id'] : 0);
+        } else {
+            // Logic for Customer Panel (Keeping original key)
+            $this->login_id = isset($session_data['login_id']) ? $session_data['login_id'] : 0;
+        }
+    }
+
+    public function insertProduct($data)
+    {
+        $insert_id = $this->Query_model->insert_data('products', $data);
+        return $insert_id;
+    }
+
+    public function updateProduct($id, $data)
+    {
+        $status = $this->Query_model->update_data('products', $data, ['id' => $id]);
+        return $id;
+    }
+
+    public function get_new_product($id)
+    {
+        $id = (int) $id;
+        if ($id <= 0) {
+            return null;
+        }
+        $this->slave->select('p.*');
+        $this->slave->from('products p');
+        $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left');
+        $this->slave->where('p.id', $id);
+        $this->slave->group_start()
+            ->where('p.status', '1')
+            ->or_where('p.status', 'active')
+            ->or_where('p.status', 'Active')
+        ->group_end();
+        $this->slave->group_start()
+            ->where('p.vendor_id', 0)
+            ->or_where('p.vendor_id IS NULL', null, false)
+            ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+        ->group_end();
+        $this->slave->limit(1);
+        $row = $this->slave->get()->row();
+        return $row ? $row : null;
+    }
+
+    public function get_new_products_page($page = 1, $per_page = 12, $q = '', $category_ctx = null, $sorting = null, $brand_ids = null, $price_from = null, $price_to = null, $vendor_id = null)
+    {
+        $page = (int) $page;
+        $per_page = (int) $per_page;
+        if ($page < 1) {
+            $page = 1;
+        }
+        if ($per_page < 1) {
+            $per_page = 12;
+        }
+        if ($per_page > 100) {
+            $per_page = 100;
+        }
+
+        $q = trim((string) $q);
+
+        $pf = ($price_from !== null && $price_from !== '') ? (float)$price_from : null;
+        $pt = ($price_to !== null && $price_to !== '') ? (float)$price_to : null;
+        if ($pf !== null && $pt !== null && $pt > 0 && $pf > $pt) {
+            $tmp = $pf;
+            $pf = $pt;
+            $pt = $tmp;
+        }
+
+        // Base price per variation: choose row with smallest min_qty
+        $price_sql = "SELECT pp.variation_id, pp.price
+            FROM product_variation_price pp
+            JOIN (
+                SELECT variation_id, MIN(COALESCE(min_qty,0)) AS min_qty
+                FROM product_variation_price
+                GROUP BY variation_id
+            ) x ON x.variation_id = pp.variation_id AND COALESCE(pp.min_qty,0) = x.min_qty";
+
+        $rating_sql = "SELECT product_id, AVG(rating) AS avg_rating, COUNT(review_rating_id) AS review_count
+            FROM ec_review_rating
+            WHERE status = '1'
+            GROUP BY product_id";
+
+        $this->slave->select('p.id, p.name, p.slug, p.description, p.product_type, p.category, p.sub_category, p.sub_sub_category, p.stock, p.video_path, p.vendor_id');
+        $this->slave->select('MIN(img.id) AS first_image_id, SUBSTRING_INDEX(GROUP_CONCAT(img.image_path ORDER BY img.id ASC SEPARATOR ","), ",", 1) AS first_image_path', false);
+        $this->slave->select('MIN(pr.price) AS min_price', false);
+        $this->slave->select('MAX(pr.price) AS max_price', false);
+        $this->slave->select('COALESCE(rt.avg_rating, 0) AS avg_rating, COALESCE(rt.review_count, 0) AS review_count', false);
+        $this->slave->from('products p');
+        $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left');
+        $this->slave
+            ->group_start()
+                ->where('p.status', '1')
+                ->or_where('p.status', 'active')
+                ->or_where('p.status', 'Active')
+            ->group_end();
+        $this->slave->group_start()
+            ->where('p.vendor_id', 0)
+            ->or_where('p.vendor_id IS NULL', null, false)
+            ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+        ->group_end();
+        $vendor_id_int = ($vendor_id !== null && $vendor_id !== '') ? (int)$vendor_id : 0;
+        if ($vendor_id_int > 0) {
+            $this->slave->where('p.vendor_id', $vendor_id_int);
+        }
+        if ($brand_ids !== null) {
+            $vals = is_array($brand_ids) ? $brand_ids : [$brand_ids];
+            $vals = array_values(array_unique(array_filter(array_map(function($v){ return (int)$v; }, $vals), function($v){ return $v > 0; })));
+            if ($vals) {
+                $this->slave->where_in('p.brand_id', $vals);
+            }
+        }
+        if ($q !== '') {
+            $this->slave->like('p.name', $q);
+        }
+		if ($category_ctx !== null) {
+			$vals = is_array($category_ctx) ? $category_ctx : [$category_ctx];
+			$vals = array_values(array_unique(array_filter(array_map(function($v){ return (string)$v; }, $vals), function($v){ return $v !== ''; })));
+			if ($vals) {
+				$this->slave->group_start();
+				foreach($vals as $v){
+					if (is_numeric($v)) {
+						$this->slave->or_where('p.category', $v);
+						$this->slave->or_where('p.sub_category', $v);
+						$this->slave->or_where('p.sub_sub_category', $v);
+					} else {
+						$this->slave->or_like('p.category', $v);
+						$this->slave->or_like('p.sub_category', $v);
+						$this->slave->or_like('p.sub_sub_category', $v);
+					}
+				}
+				$this->slave->group_end();
+			}
+		}
+        $this->slave->join('product_variations v', 'v.product_id = p.id', 'left');
+        $this->slave->join('product_variation_images img', 'img.variation_id = v.id', 'left');
+        $this->slave->join("($price_sql) pr", 'pr.variation_id = v.id', 'left', false);
+        $this->slave->join("($rating_sql) rt", 'rt.product_id = p.id', 'left', false);
+        $this->slave->group_by('p.id');
+
+        if ($pf !== null) {
+            $this->slave->having('MIN(pr.price) >= '.$this->slave->escape($pf), null, false);
+            if ($pt !== null && $pt > 0) {
+                $this->slave->having('MIN(pr.price) <= '.$this->slave->escape($pt), null, false);
+            }
+        } elseif ($pt !== null && $pt > 0) {
+            $this->slave->having('MIN(pr.price) <= '.$this->slave->escape($pt), null, false);
+        }
+
+		$sorting_val = $sorting;
+		if ($sorting_val === null || $sorting_val === '') {
+			$sorting_val = 1;
+		}
+		$sorting_val = is_numeric($sorting_val) ? (int)$sorting_val : (string)$sorting_val;
+		if ($sorting_val === 2 || $sorting_val === '2' || $sorting_val === 'low_to_high') {
+			$this->slave->order_by('min_price', 'ASC', false);
+			$this->slave->order_by('p.id', 'DESC');
+		} elseif ($sorting_val === 3 || $sorting_val === '3' || $sorting_val === 'high_to_low') {
+			$this->slave->order_by('min_price', 'DESC', false);
+			$this->slave->order_by('p.id', 'DESC');
+		} else {
+			$this->slave->order_by('p.id', 'DESC');
+		}
+        		// Total: if price filter active, count grouped rows with the same HAVING
+        if ($pf !== null || ($pt !== null && $pt > 0)) {
+            $count_db = $this->slave->db; // keep same connection
+            $sql = $this->slave->get_compiled_select('', false);
+            $cnt_q = $count_db->query('SELECT COUNT(*) AS cnt FROM ('.$sql.') x');
+            $cnt_row = $cnt_q ? $cnt_q->row() : null;
+            $total = $cnt_row && isset($cnt_row->cnt) ? (int)$cnt_row->cnt : 0;
+        } else {
+            // Fast path: no price filter, use simple count
+            $this->slave->reset_query();
+            $this->slave->from('products p');
+            $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left');
+            $this->slave
+                ->group_start()
+                    ->where('p.status', '1')
+                    ->or_where('p.status', 'active')
+                    ->or_where('p.status', 'Active')
+                ->group_end();
+            $this->slave->group_start()
+                ->where('p.vendor_id', 0)
+                ->or_where('p.vendor_id IS NULL', null, false)
+                ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+            ->group_end();
+			if ($vendor_id_int > 0) {
+				$this->slave->where('p.vendor_id', $vendor_id_int);
+			}
+            if ($brand_ids !== null) {
+                $vals = is_array($brand_ids) ? $brand_ids : [$brand_ids];
+                $vals = array_values(array_unique(array_filter(array_map(function($v){ return (int)$v; }, $vals), function($v){ return $v > 0; })));
+                if ($vals) {
+                    $this->slave->where_in('p.brand_id', $vals);
+                }
+            }
+            if ($q !== '') {
+                $this->slave->like('p.name', $q);
+            }
+			if ($category_ctx !== null) {
+				$vals = is_array($category_ctx) ? $category_ctx : [$category_ctx];
+				$vals = array_values(array_unique(array_filter(array_map(function($v){ return (string)$v; }, $vals), function($v){ return $v !== ''; })));
+				if ($vals) {
+					$this->slave->group_start();
+					foreach($vals as $v){
+						if (is_numeric($v)) {
+							$this->slave->or_where('p.category', $v);
+							$this->slave->or_where('p.sub_category', $v);
+							$this->slave->or_where('p.sub_sub_category', $v);
+						} else {
+							$this->slave->or_like('p.category', $v);
+							$this->slave->or_like('p.sub_category', $v);
+							$this->slave->or_like('p.sub_sub_category', $v);
+						}
+					}
+					$this->slave->group_end();
+				}
+			}
+            $total = (int) $this->slave->count_all_results();
+
+            // Rebuild items query after reset
+            $this->slave->select('p.id, p.name, p.description, p.product_type, p.category, p.sub_category, p.sub_sub_category, p.stock, p.video_path, p.vendor_id');
+            $this->slave->select('MIN(img.id) AS first_image_id, SUBSTRING_INDEX(GROUP_CONCAT(img.image_path ORDER BY img.id ASC SEPARATOR ","), ",", 1) AS first_image_path', false);
+            $this->slave->select('MIN(pr.price) AS min_price', false);
+            $this->slave->select('MAX(pr.price) AS max_price', false);
+            $this->slave->select('COALESCE(rt.avg_rating, 0) AS avg_rating, COALESCE(rt.review_count, 0) AS review_count', false);
+            $this->slave->from('products p');
+            $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left');
+            $this->slave
+                ->group_start()
+                    ->where('p.status', '1')
+                    ->or_where('p.status', 'active')
+                    ->or_where('p.status', 'Active')
+                ->group_end();
+            $this->slave->group_start()
+                ->where('p.vendor_id', 0)
+                ->or_where('p.vendor_id IS NULL', null, false)
+                ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+            ->group_end();
+			if ($vendor_id_int > 0) {
+				$this->slave->where('p.vendor_id', $vendor_id_int);
+			}
+            if ($brand_ids !== null) {
+                $vals = is_array($brand_ids) ? $brand_ids : [$brand_ids];
+                $vals = array_values(array_unique(array_filter(array_map(function($v){ return (int)$v; }, $vals), function($v){ return $v > 0; })));
+                if ($vals) {
+                    $this->slave->where_in('p.brand_id', $vals);
+                }
+            }
+            if ($q !== '') {
+                $this->slave->like('p.name', $q);
+            }
+			if ($category_ctx !== null) {
+				$vals = is_array($category_ctx) ? $category_ctx : [$category_ctx];
+				$vals = array_values(array_unique(array_filter(array_map(function($v){ return (string)$v; }, $vals), function($v){ return $v !== ''; })));
+				if ($vals) {
+					$this->slave->group_start();
+					foreach($vals as $v){
+						if (is_numeric($v)) {
+							$this->slave->or_where('p.category', $v);
+							$this->slave->or_where('p.sub_category', $v);
+							$this->slave->or_where('p.sub_sub_category', $v);
+						} else {
+							$this->slave->or_like('p.category', $v);
+							$this->slave->or_like('p.sub_category', $v);
+							$this->slave->or_like('p.sub_sub_category', $v);
+						}
+					}
+					$this->slave->group_end();
+				}
+			}
+            $this->slave->join('product_variations v', 'v.product_id = p.id', 'left');
+            $this->slave->join('product_variation_images img', 'img.variation_id = v.id', 'left');
+            $this->slave->join("($price_sql) pr", 'pr.variation_id = v.id', 'left', false);
+            $this->slave->join("($rating_sql) rt", 'rt.product_id = p.id', 'left', false);
+            $this->slave->group_by('p.id');
+
+			// Re-apply sorting after reset_query() + rebuild
+			if ($sorting_val === 2 || $sorting_val === '2' || $sorting_val === 'low_to_high') {
+				$this->slave->order_by('min_price', 'ASC', false);
+				$this->slave->order_by('p.id', 'DESC');
+			} elseif ($sorting_val === 3 || $sorting_val === '3' || $sorting_val === 'high_to_low') {
+				$this->slave->order_by('min_price', 'DESC', false);
+				$this->slave->order_by('p.id', 'DESC');
+			} else {
+				$this->slave->order_by('p.id', 'DESC');
+			}
+        }
+
+        $this->slave->limit($per_page, ($page - 1) * $per_page);
+        $items = $this->slave->get()->result();
+
+        return [
+            'total' => $total,
+            'items' => $items ? $items : [],
+            'page' => $page,
+            'per_page' => $per_page,
+        ];
+    }
+
+    public function get_variation_price_tiers($variation_ids)
+    {
+        if (!is_array($variation_ids) || !$variation_ids) {
+            return [];
+        }
+        $ids = [];
+        foreach ($variation_ids as $vid) {
+            $vid = (int) $vid;
+            if ($vid > 0) {
+                $ids[] = $vid;
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        if (!$ids) {
+            return [];
+        }
+
+        $rows = $this->slave
+            ->select('variation_id, min_qty, max_qty, price')
+            ->from('product_variation_price')
+            ->where_in('variation_id', $ids)
+            ->order_by('variation_id', 'ASC')
+            ->order_by('COALESCE(min_qty,0)', 'ASC', false)
+            ->get()->result();
+
+        $out = [];
+        if ($rows) {
+            foreach ($rows as $r) {
+                $vid = isset($r->variation_id) ? (int) $r->variation_id : 0;
+                if ($vid <= 0) {
+                    continue;
+                }
+                if (!isset($out[$vid])) {
+                    $out[$vid] = [];
+                }
+                $out[$vid][] = [
+                    'min_qty' => isset($r->min_qty) ? (int) $r->min_qty : null,
+                    'max_qty' => isset($r->max_qty) ? (int) $r->max_qty : null,
+                    'price' => isset($r->price) && $r->price !== null ? number_format((float) $r->price, 2, '.', '') : null,
+                ];
+            }
+        }
+        return $out;
+    }
+
+    function category_item_exist()
+    {
+        $this->slave->select('cp.*');
+        $this->slave->from('ec_categories_prod as cp');
+        // FIX: product_id -> id
+        $this->slave->join('products as p', 'p.category_id = cp.id', 'inner');
+        $this->slave->where('cp.parent_id', '0');
+        $this->slave->where('cp.status', '1');
+        $this->slave->group_by('cp.id');
+
+        return $this->slave->get()->result();
+    }
+
+    // --- EXPORT FUNCTION ---
+    public function get_export($supplier_id = NULL)
+    {
+        $this->slave->select('*');
+        $this->slave->from('products');
+        // FIX: product_id -> id
+        $this->slave->order_by('id', 'desc');
+        if ($this->session->userdata('type') === 'vendor' && $this->login_id) {
+            $this->slave->where('login_id', $this->login_id);
+        }
+
+        $result = $this->slave->get()->result();
+        $i = 0;
+        $data_arr = array();
+        foreach ($result as $data) {
+            // FIX: Safe mapping to your DB columns
+            $data_arr[$i]['product_id'] = $data->id;
+            $data_arr[$i]['product_uid'] = isset($data->product_uid) ? $data->product_uid : '';
+            $data_arr[$i]['post_title'] = $data->name;
+
+            // Safe checks
+            $data_arr[$i]['post_title_es'] = '';
+            $data_arr[$i]['post_content'] = isset($data->description) ? $data->description : '';
+            $data_arr[$i]['sale_price'] = isset($data->price) ? $data->price : 0;
+            $data_arr[$i]['sku'] = isset($data->sku) ? $data->sku : '';
+            $data_arr[$i]['stock'] = isset($data->stock) ? $data->stock : 0;
+            $data_arr[$i]['created'] = $data->date_added;
+
+            $i++;
+        }
+        return $data_arr;
+    }
+
+    // --- DATATABLES ---
+    public function get_datatable($login_id = NULL)
+    {
+        $this->slave->select('*');
+        $this->slave->from('products');
+        if ($this->session->userdata('type') === 'vendor') {
+            $vid = $login_id !== NULL ? (int) $login_id : (int) $this->login_id;
+            if ($vid) {
+                $this->slave->where('vendor_id', $vid);
+            }
+        }
+
+        $this->get_datatables_query();
+        // FIX: product_id -> id
+        $this->slave->order_by('id', 'desc');
+
+        if (isset($_POST['length']) && $_POST['length'] != -1)
+            $this->slave->limit($_POST['length'], $_POST['start']);
+
+        $user = $this->slave->get()->result();
+        return $user;
+    }
+
+    public function get_datatables_query()
+    {
+        if (isset($_POST['filter'])) {
+            $this->slave->group_start();
+            foreach ($_POST['filter'] as $col_name => $col_value) {
+                if (in_array($col_name, $this->column_search) && (is_array($col_value) || $col_value != '')) {
+                    $column_name_alias = $col_name;
+                    if (isset($this->column_alias[$col_name])) {
+                        $column_name_alias = $this->column_alias[$col_name] . "." . $col_name;
+                    }
+                    if (is_array($col_value)) {
+                        $this->slave->where_in($column_name_alias, $col_value);
+                    } else {
+                        $this->slave->like($column_name_alias, $col_value);
+                    }
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+
+    public function count_filtered($login_id = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from('products');
+        if ($this->session->userdata('type') === 'vendor') {
+            $vid = $login_id !== NULL ? (int) $login_id : (int) $this->login_id;
+            if ($vid) {
+                $this->slave->where('vendor_id', $vid);
+            }
+        }
+        $this->get_datatables_query();
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+
+    public function count_all($login_id = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from('products');
+        if ($this->session->userdata('type') === 'vendor') {
+            $vid = $login_id !== NULL ? (int) $login_id : (int) $this->login_id;
+            if ($vid) {
+                $this->slave->where('vendor_id', $vid);
+            }
+        }
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+
+    public function edit($product_id)
+    {
+        $this->slave->select('*');
+        $this->slave->from('products');
+        // FIX: product_id -> id
+        $this->slave->where("id='" . $product_id . "'");
+        $postArray = $this->slave->get()->row();
+        return $postArray;
+    }
+
+    public function delete_post($product_id)
+    {
+        // FIX: product_id -> id
+        $this->master->where('id', $product_id);
+        $status = $this->master->delete('products');
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+    public function delete_image($id, $product_id)
+    {
+        $this->master->where('id', $id);
+        $this->master->where('product_id', $product_id);
+        $status = $this->master->delete('ec_gallery');
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+    public function delete_image_variation($id, $product_id)
+    {
+        $this->master->where('variation_id', $id);
+        $this->master->where('product_id', $product_id);
+        $status = $this->master->delete('ec_product_variation');
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+    public function delete_variation_post($attr_item_id, $product_id)
+    {
+        $this->master->where('attribute_item_id', $attr_item_id);
+        $this->master->where('product_id', $product_id);
+        $status = $this->master->delete('ec_product_variation');
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+    function delete_cart($id)
+    {
+        // Fixed table name ec_orders
+        $this->master->delete('ec_orders', array('id' => $id));
+        // Fixed table name ec_order_items
+        $this->master->delete('ec_order_items', array('id' => $id));
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+    public function get_attr_item($product_id = null)
+    {
+        $sql = "select a.*,b.attribute_id, c.name as attribute_name, b.name 
+            from ec_product_attribute a,ec_attribute_item b,ec_attribute c 
+            where a.attribute_item_id = b.attribute_item_id and c.attribute_id=b.attribute_id and a.product_id=$product_id";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_variation_bundle($product_id)
+    {
+        $product_id = (int) $product_id;
+        if ($product_id <= 0) {
+            return [];
+        }
+
+        // Base price per variation: choose the row with the smallest min_qty (fallback to 0)
+        $price_sql = "SELECT pp.variation_id, pp.price
+            FROM product_variation_price pp
+            JOIN (
+                SELECT variation_id, MIN(COALESCE(min_qty,0)) AS min_qty
+                FROM product_variation_price
+                GROUP BY variation_id
+            ) x ON x.variation_id = pp.variation_id AND COALESCE(pp.min_qty,0) = x.min_qty";
+
+        $sql = "SELECT v.id AS variation_id,
+                       v.product_id,
+                       v.attr_json,
+                       v.stock,
+                       pr.price,
+                       GROUP_CONCAT(img.image_path ORDER BY img.id ASC SEPARATOR ',') AS images
+                FROM product_variations v
+                LEFT JOIN ($price_sql) pr ON pr.variation_id = v.id
+                LEFT JOIN product_variation_images img ON img.variation_id = v.id
+                WHERE v.product_id = ?
+                GROUP BY v.id
+                ORDER BY v.id ASC";
+
+        $q = $this->slave->query($sql, [$product_id]);
+        $rows = $q ? $q->result() : [];
+        return $rows ? $rows : [];
+    }
+
+    public function taglist($product_id = null)
+    {
+        $sql = "select tag_id from ec_product_tags where post_id=$product_id";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_term_id_by_slug($table, $term_slug = null)
+    {
+        $sql = "SELECT * FROM $table WHERE slug ='$term_slug'";
+        $query = $this->slave->query($sql);
+        $data = $query->row();
+        return $data;
+    }
+
+    public function get_data_by_termid($termid = null)
+    {
+        $sql = "SELECT products.* FROM products
+            LEFT JOIN ec_vendor v_check ON v_check.vendor_id = products.vendor_id
+            LEFT JOIN ec_product_categories
+            ON ec_product_categories.post_id = products.id
+            WHERE ec_product_categories.category_id=$termid
+              AND (products.status = '1' OR products.status = 'active' OR products.status = 'Active')
+              AND (products.vendor_id = 0 OR products.vendor_id IS NULL OR v_check.status = 1 OR v_check.status = '1' OR v_check.status = 'approved' OR v_check.status = 'Approved')";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_data_by_tagid($tagid = null)
+    {
+        $sql = "SELECT products.* FROM ec_product_tags
+            LEFT JOIN products
+            ON ec_product_tags.post_id = products.id
+            LEFT JOIN ec_vendor v_check ON v_check.vendor_id = products.vendor_id
+            WHERE ec_product_tags.tag_id=$tagid
+              AND (products.status = '1' OR products.status = 'active' OR products.status = 'Active')
+              AND (products.vendor_id = 0 OR products.vendor_id IS NULL OR v_check.status = 1 OR v_check.status = '1' OR v_check.status = 'approved' OR v_check.status = 'Approved')";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function Does_email_exists($email)
+    {
+        $sql = "SELECT `email` FROM ec_customer WHERE `email`='$email'";
+        $result = $this->slave->query($sql);
+        if ($result->row()) {
+            return $result->row();
+        } else {
+            return false;
+        }
+    }
+
+    public function Does_note_otp_exists($otp)
+    {
+        $sql = "SELECT `otp` FROM ec_customer WHERE `otp`!='$otp'";
+        $result = $this->slave->query($sql);
+        if ($result->row()) {
+            return $result->row();
+        } else {
+            return false;
+        }
+    }
+
+    // --- FRONTEND / EXTRA FUNCTIONS ---
+
+    public function get_product_info($args)
+    {
+        $product_obj = $args['product_obj'];
+        $cur = current_currency();
+        $currency = get_currency($cur);
+        $rate = $currency->rate;
+        $symbol = $currency->symbol;
+
+        $product_obj->symbol = $symbol;
+        $product_obj->iso_code = $currency->iso_code;
+
+        // FIX: Map 'name' to 'post_title' for compatibility
+        $product_obj->post_title = $product_obj->name;
+        // Fix: content
+        $product_obj->post_content = isset($product_obj->description) ? $product_obj->description : '';
+
+        // FIX: product_id -> id
+        $product_id_val = $product_obj->id;
+
+        // Ensure type exists, default to simple
+        $type = isset($product_obj->type) ? $product_obj->type : 'simple';
+
+        if ($type == 'simple') {
+            $product_gallery = $this->Query_model->get_data_obj('ec_gallery', array('product_id' => $product_id_val), array(), array('length' => 1));
+            if ($product_gallery) {
+                $productimg = base_url() . 'assets/uploads/files/' . $product_gallery->file_name;
+            } else {
+                $productimg = base_url() . 'assets/default_images/product.jpg';
+            }
+        } else {
+            $variation_obj = $this->Query_model->get_data_obj('ec_product_variation', array('product_id' => $product_id_val), array(), array('length' => 1));
+            if ($variation_obj) {
+                $productimg = base_url() . 'assets/uploads/' . $variation_obj->_thumbnail_id;
+                $product_obj->sale_price = $variation_obj->_sale_price;
+                $product_obj->regular_price = $variation_obj->_regular_price;
+            } else {
+                $productimg = base_url() . 'assets/default_images/product.jpg';
+            }
+        }
+
+        $regular = null;
+        $sale = null;
+        if (isset($product_obj->prices) && $product_obj->prices) {
+            $prices = json_decode($product_obj->prices, true);
+            if (is_array($prices) && isset($prices[0]) && is_array($prices[0])) {
+                $p0 = $prices[0];
+                if (isset($p0['regular_price']) && $p0['regular_price'] !== '') {
+                    $regular = (float)$p0['regular_price'];
+                }
+                if (isset($p0['sales_price']) && $p0['sales_price'] !== '') {
+                    $sale = (float)$p0['sales_price'];
+                }
+            }
+        }
+        if ($regular === null && isset($product_obj->regular_price)) {
+            $regular = (float)$product_obj->regular_price;
+        }
+        if ($sale === null && isset($product_obj->sale_price)) {
+            $sale = (float)$product_obj->sale_price;
+        }
+        if ($regular === null) {
+            $regular = 0;
+        }
+        if ($sale === null || $sale <= 0) {
+            $sale = $regular;
+        }
+        $prod_currency_id = isset($product_obj->currency_id) && $product_obj->currency_id !== '' ? (int)$product_obj->currency_id : 1;
+        $product_obj->regular_price = sprintf('%.02f', convert_price($regular, $prod_currency_id, $cur));
+        $product_obj->sale_price = sprintf('%.02f', convert_price($sale, $prod_currency_id, $cur));
+
+        $product_obj->url = detail_page_url($product_obj);
+        $product_obj->featured_image = $productimg;
+
+        // Pass ID as product_id for compatibility
+        $product_obj->product_id = $product_id_val;
+
+        return $product_obj;
+    }
+
+    public function get_category($product_id)
+    {
+        $product_id = (int) $product_id;
+        if (!$product_id) {
+            return array();
+        }
+
+        $product = $this->Query_model->get_data_obj('products', array('id' => $product_id), array(), array('length' => 1));
+        if (!$product) {
+            return array();
+        }
+
+        $cat_ids = array();
+        if (isset($product->category_id) && $product->category_id) {
+            $cat_ids[] = (int) $product->category_id;
+        }
+        if (isset($product->sub_cat_id) && $product->sub_cat_id) {
+            $cat_ids[] = (int) $product->sub_cat_id;
+        }
+        $cat_ids = array_values(array_unique(array_filter($cat_ids)));
+        if (!$cat_ids) {
+            return array();
+        }
+
+        $cats = $this->Query_model->get_data('ec_categories_prod', array('id' => $cat_ids), array('parent_id' => 'ASC', 'id' => 'ASC'));
+        return $cats ? $cats : array();
+    }
+
+    public function featured_product($length = NULL)
+    {
+        if (!$length)
+            $length = 6;
+        $this->slave->select('products.*');
+        $this->slave->from('products');
+        $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = products.vendor_id', 'left');
+        $this->slave->where('products.status', '1');
+        $this->slave->group_start()
+            ->where('products.vendor_id', 0)
+            ->or_where('products.vendor_id IS NULL', null, false)
+            ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+        ->group_end();
+        $this->slave->order_by('products.id', 'desc');
+        $this->slave->limit($length);
+        $obj = $this->slave->get()->result();
+
+        if ($obj) {
+            foreach ($obj as $product_obj) {
+                $this->get_product_info(array('product_obj' => $product_obj));
+            }
+        }
+        return $obj;
+    }
+
+    public function new_arrivals($length = NULL)
+    {
+        if (!$length)
+            $length = 6;
+
+        $res = $this->get_new_products_page(1, (int)$length, '');
+        $rows = $res['items'] ?? [];
+        $out = [];
+        if ($rows) {
+            foreach ($rows as $r) {
+                if (!is_object($r)) {
+                    continue;
+                }
+                $img_path = isset($r->first_image_path) ? trim((string)$r->first_image_path) : '';
+                $imgs = $img_path !== '' ? json_encode([basename($img_path)]) : '';
+                $min_price = isset($r->min_price) && $r->min_price !== null ? (float)$r->min_price : 0;
+                $prices = json_encode([
+                    ['regular_price' => $min_price, 'sale_price' => $min_price, 'sales_price' => $min_price]
+                ]);
+                $out[] = (object)[
+                    'id' => (int)($r->id ?? 0),
+                    'name' => (string)($r->name ?? ''),
+                    'images' => $imgs,
+                    'prices' => $prices,
+                    'status' => '1',
+                ];
+            }
+        }
+        return $out;
+    }
+
+    public function best_deals($length = NULL)
+    {
+        if (!$length)
+            $length = 6;
+
+        // New schema doesn't guarantee legacy sale date columns, so use new products list for deals section.
+        // (This ensures we never pull from legacy `ec_product`.)
+        $res = $this->get_new_products_page(1, (int)$length, '');
+        $rows = $res['items'] ?? [];
+        $out = [];
+        if ($rows) {
+            foreach ($rows as $r) {
+                if (!is_object($r)) {
+                    continue;
+                }
+                $img_path = isset($r->first_image_path) ? trim((string)$r->first_image_path) : '';
+                $imgs = $img_path !== '' ? json_encode([basename($img_path)]) : '';
+                $min_price = isset($r->min_price) && $r->min_price !== null ? (float)$r->min_price : 0;
+                $prices = json_encode([
+                    ['regular_price' => $min_price, 'sale_price' => $min_price, 'sales_price' => $min_price]
+                ]);
+                $out[] = (object)[
+                    'id' => (int)($r->id ?? 0),
+                    'name' => (string)($r->name ?? ''),
+                    'images' => $imgs,
+                    'prices' => $prices,
+                    'status' => '1',
+                ];
+            }
+        }
+        return $out;
+    }
+
+    public function top_rated($length = NULL)
+    {
+        if (!$length)
+            $length = 6;
+
+        // FIX: join on id
+        $this->slave->select('a.product_id,count(*) CNT');
+        $this->slave->from('ec_order_items a');
+        $this->slave->join('products b', 'a.product_id = b.id');
+        $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = b.vendor_id', 'left');
+        $this->slave->where('b.status', '1');
+        $this->slave->group_start()
+            ->where('b.vendor_id', 0)
+            ->or_where('b.vendor_id IS NULL', null, false)
+            ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+        ->group_end();
+        $this->slave->group_by('a.product_id');
+        $this->slave->order_by('CNT', 'desc');
+        $this->slave->limit($length);
+        $obj = $this->slave->get()->result();
+        $product_ids = array();
+        if ($obj) {
+            foreach ($obj as $r) {
+                $product_ids[] = $r->product_id;
+            }
+        }
+
+        if (count($product_ids) < $length) {
+            $length = $length - count($product_ids);
+            $this->slave->select('products.*');
+            $this->slave->from('products');
+            $this->slave->join('ec_vendor v_check', 'v_check.vendor_id = products.vendor_id', 'left');
+            if ($product_ids) {
+                $this->slave->where_not_in('products.id', $product_ids);
+            }
+            $this->slave->where('products.status', '1');
+            $this->slave->group_start()
+                ->where('products.vendor_id', 0)
+                ->or_where('products.vendor_id IS NULL', null, false)
+                ->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+            ->group_end();
+            $this->slave->order_by('products.id', 'desc');
+            $this->slave->limit($length);
+            $result = $this->slave->get()->result();
+            if ($result) {
+                foreach ($result as $r) {
+                    $product_ids[] = $r->id;
+                }
+            }
+        }
+        if ($product_ids) {
+            $this->slave->select('*');
+            $this->slave->from('products');
+            $this->slave->where_in('id', $product_ids);
+            $obj = $this->slave->get()->result();
+        } else {
+            $obj = [];
+        }
+
+        if ($obj) {
+            foreach ($obj as $product_obj) {
+                $this->get_product_info(array('product_obj' => $product_obj));
+            }
+        }
+        return $obj;
+    }
+
+    public function related_product($product_id = null)
+    {
+        $category = $this->category($product_id);
+        $category_id = isset($category->category_id) ? $category->category_id : '';
+        $obj = array();
+        if ($category_id && isset($category_id)) {
+            // FIX: enabled->status, product_id->id
+            $sql = "select a.* from products a 
+                left join ec_vendor v_check on v_check.vendor_id = a.vendor_id
+                inner join ec_product_categories b on a.id = b.post_id
+                where b.category_id IN($category_id) 
+                  and b.post_id !=$product_id 
+                  and a.id = b.post_id 
+                  and a.status = '1' 
+                  and (a.vendor_id = 0 or a.vendor_id is null or v_check.status = 1 or v_check.status = '1' or v_check.status = 'approved' or v_check.status = 'Approved')
+                group by a.id 
+                ORDER BY a.id DESC limit 10";
+
+            $query = $this->slave->query($sql);
+            $obj = $query->result();
+            foreach ($obj as $product_obj) {
+                $this->get_product_info(array('product_obj' => $product_obj));
+            }
+        }
+        return $obj;
+    }
+
+    public function get_product_by_category($category_id, $product_ids = null, $vendor_cat_array = null)
+    {
+        if ($vendor_cat_array && count($vendor_cat_array)) {
+            $vendor_cat_join = implode(',', $vendor_cat_array);
+            $sql = "SELECT distinct pc.post_id AS product_id FROM ec_product_categories pc
+                    JOIN products p ON p.id = pc.post_id
+                    LEFT JOIN ec_vendor v ON v.vendor_id = p.vendor_id
+                    WHERE pc.category_id in ($vendor_cat_join)
+                      AND p.status = '1'
+                      AND (p.vendor_id = 0 OR p.vendor_id IS NULL OR CAST(v.status AS CHAR) IN ('1', 'approved', 'Approved'))";
+        } else if (is_numeric($category_id)) {
+            $sub_cat_obj = $this->get_all_subcat($category_id);
+            $sub_cat_array = array();
+            $sub_cat_array[] = $category_id;
+            if ($sub_cat_obj) {
+                foreach ($sub_cat_obj as $r) {
+                    $sub_cat_array[] = $r->category_id;
+                }
+            }
+            $sub_cat_str = implode(',', $sub_cat_array);
+            $sql = "SELECT distinct pc.post_id AS product_id FROM ec_product_categories pc
+                    JOIN products p ON p.id = pc.post_id
+                    LEFT JOIN ec_vendor v ON v.vendor_id = p.vendor_id
+                    WHERE pc.category_id in ($sub_cat_str)
+                      AND p.status = '1'
+                      AND (p.vendor_id = 0 OR p.vendor_id IS NULL OR CAST(v.status AS CHAR) IN ('1', 'approved', 'Approved'))";
+            if ($product_ids) {
+                $sql .= " and pc.post_id in ($product_ids)";
+            }
+        } else {
+            $cat_synonym = cat_synonym();
+            $category_id = isset($cat_synonym[$category_id]) ? $cat_synonym[$category_id] : $category_id;
+
+            $sql = "SELECT distinct pc.post_id AS product_id FROM ec_product_categories pc
+                    JOIN products p ON p.id = pc.post_id
+                    LEFT JOIN ec_vendor v ON v.vendor_id = p.vendor_id
+                    JOIN ec_categories_prod b ON pc.category_id = b.id
+                    WHERE UPPER(b.name) = UPPER('$category_id')
+                      AND p.status = '1'
+                      AND (p.vendor_id = 0 OR p.vendor_id IS NULL OR CAST(v.status AS CHAR) IN ('1', 'approved', 'Approved'))";
+        }
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_search_result($args)
+    {
+        $synonym = synonym();
+        $fts = isset($synonym[$args['fts']]) ? $synonym[$args['fts']] : $args['fts'];
+        $fts = isset($fts) ? urldecode($fts) : '';
+        $fts = preg_replace('/-/', ' ', $fts);
+
+        $fts = trim((string) $fts);
+        if ($fts === '') {
+            return array();
+        }
+
+        		// New products first
+		$this->slave
+			->select('DISTINCT p.id AS product_id', false)
+			->from('products p')
+			->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left')
+			->group_start()
+				->where('p.status', 1)
+				->or_where('p.status', '1')
+				->or_where('p.status', 'active')
+				->or_where('p.status', 'Active')
+            ->group_end()
+			->group_start()
+				->where('p.vendor_id', 0)
+				->or_where('p.vendor_id IS NULL', null, false)
+				->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+			->group_end()
+            ->like('p.name', $fts);
+        $data = $this->slave->get()->result();
+        if ($data && count($data) > 0) {
+            return $data;
+        }
+
+        		// Fallback legacy (pointing to products table now)
+		$this->slave
+			->select('DISTINCT ep.id AS product_id', false)
+			->from('products ep')
+			->join('ec_vendor v_check', 'v_check.vendor_id = ep.vendor_id', 'left')
+			->where('ep.status', '1')
+			->group_start()
+				->where('ep.vendor_id', 0)
+				->or_where('ep.vendor_id IS NULL', null, false)
+				->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+			->group_end()
+			->like('ep.name', $fts);
+		return $this->slave->get()->result();
+	}
+
+    public function category($product_id = null)
+    {
+        $sql = "select group_concat(category_id) category_id from ec_product_categories where post_id=$product_id group by post_id";
+        $query = $this->slave->query($sql);
+        $data = $query->row();
+        return $data;
+    }
+
+    public function get_order_data($customer_id = NULL, $orderStatus = NULL)
+    {
+        $this->slave->select('eop.*, eos.id as order_id, eos.shipping_address_id, eos.order_uid, eos.num_items_sold, eos.total_amount as order_total, eos.payment_mode');
+        $this->slave->from('ec_orders as eos');
+        $this->slave->join('ec_order_items as eop', 'eop.order_id =eos.id');
+        $this->slave->where('eos.customer_id', $customer_id);
+
+        if ($orderStatus !== null) {
+            $filter = strtolower(trim((string)$orderStatus));
+            if ($filter === 'active' || $filter === 'process') {
+                // Safe combined condition:
+                // Match by status enum OR by order_status integer,
+                // but NEVER show delivered/cancelled in active.
+                $this->slave->group_start()
+                    ->where_in('eos.status', ['pending', 'confirmed', 'shipped'])
+                    ->or_group_start()
+                        ->where_in('eos.order_status', [1, 2, 3])
+                        ->where_not_in('eos.status', ['delivered', 'cancelled'])
+                    ->group_end()
+                ->group_end();
+            } elseif ($filter === 'completed') {
+                // Completed = delivered only
+                $this->slave->where('eos.status', 'delivered');
+            } elseif ($filter === 'cancelled' || $filter === 'cancel') {
+                // Cancelled = cancelled only (returned orders keep status 'delivered')
+                $this->slave->where('eos.status', 'cancelled');
+            }
+            // Other/unknown filter: no extra WHERE → returns all
+        }
+
+        $this->slave->order_by('eop.date_added  DESC');
+        $obj = $this->slave->get()->result();
+        return $obj;
+    }
+
+
+    public function get_order_count_process($customer_id = NULL)
+    {
+        $this->config->load('custom_config');
+        $status = $this->config->item('INPROCESS_ITEM');
+        $this->slave->select('count(*) as cnt');
+        $this->slave->from('ec_orders as eos');
+        $this->slave->join('ec_order_items as eop', 'eop.order_id =eos.id');
+        $this->slave->where('eos.customer_id', $customer_id);
+        //$this->slave->where_in('eop.status', $status);
+        $obj = $this->slave->get()->row();
+        return $obj;
+    }
+
+    public function get_order_count_completed($customer_id = NULL)
+    {
+        $this->config->load('custom_config');
+        $status = $this->config->item('COMPLETED_ITEM');
+        $this->slave->select('count(*) as cnt');
+        $this->slave->from('ec_orders as eos');
+        $this->slave->join('ec_order_items as eop', 'eop.order_id =eos.id');
+        $this->slave->where('eos.customer_id', $customer_id);
+        //$this->slave->where_in('eop.status', $status);
+        $obj = $this->slave->get()->row();
+        return $obj;
+    }
+
+    public function get_order_count_cancel($customer_id = NULL)
+    {
+        $this->config->load('custom_config');
+        $status = $this->config->item('CANCEL_ITEM');
+        $this->slave->select('count(*) as cnt');
+        $this->slave->from('ec_orders as eos');
+        $this->slave->join('ec_order_items as eop', 'eop.order_id =eos.id');
+        $this->slave->where('eos.customer_id', $customer_id);
+        //$this->slave->where_in('eop.status', $status);
+        $obj = $this->slave->get()->row();
+        return $obj;
+    }
+
+    // ... (Keeping rest of standard functions) ...
+    public function get_product_comment($product_id)
+    {
+        $this->slave->select('cmt.review as comment,cmt.rating,DATE_FORMAT(cmt.last_updated,\'%d %b %Y\') last_updated,cus.fname,cus.lname, cmt.title');
+        $this->slave->from('ec_review_rating as cmt');
+        $this->slave->join('ec_customer as cus', 'cmt.customer_id = cus.customer_id');
+        $this->slave->where('cmt.product_id', $product_id);
+        $obj = $this->slave->get()->result();
+        return $obj;
+    }
+
+    public function get_rating($product_id)
+    {
+        $this->slave->select('avg(rating) as rating, count(review) as cntreview, sum(rating) as sumrating');
+        $this->slave->from('ec_review_rating');
+        $this->slave->where('product_id', $product_id);
+        $obj = $this->slave->get()->row();
+        return $obj;
+    }
+
+    public function get_starcnt($product_id)
+    {
+        $this->slave->select('rating, count(rating) as starcount');
+        $this->slave->from('ec_review_rating');
+        $this->slave->where('product_id', $product_id);
+        $this->slave->group_by('rating');
+        $this->slave->order_by('rating', 'DESC');
+        $obj = $this->slave->get()->result();
+        return $obj;
+    }
+
+    public function get_all_subcat($parent_id = null)
+    {
+        $sql = "SELECT T1.id as category_id FROM ec_categories_prod AS T1 INNER JOIN (SELECT id FROM ec_categories_prod WHERE parent_id = $parent_id) AS T2  ON T2.id = T1.parent_id OR T1.parent_id = $parent_id GROUP BY T1.id";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_all_parent($category_id = null)
+    {
+        $sql = "SELECT T2.id as category_id, T2.name FROM (SELECT @r AS _id, (SELECT @r := parent_id FROM ec_categories_prod WHERE id = _id) AS parent_id, @l := @l + 1 AS lvl FROM (SELECT @r := $category_id, @l := 0) vars, ec_categories_prod h WHERE @r <> 0) T1 JOIN ec_categories_prod T2 ON T1._id = T2.id ORDER BY T1.lvl DESC";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_all_childs($category_ids = null)
+    {
+        $sql = "SELECT T1.id,T1.parent_id,T1.name,T1.slug  FROM ec_categories_prod AS T1  INNER JOIN (SELECT id FROM ec_categories_prod WHERE status='1' and parent_id in ($category_ids)) AS T2  ON T2.id = T1.parent_id OR T1.parent_id in($category_ids)  or T1.id in ($category_ids) GROUP BY T1.id";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_root_parent($category_id = null)
+    {
+        $sql = "SELECT T2.id as category_id, T2.name, T2.slug FROM (SELECT @r AS _id, (SELECT @r := parent_id FROM ec_categories_prod WHERE id = _id) AS parent_id, @l := @l + 1 AS lvl FROM (SELECT @r := $category_id, @l := 0) vars, ec_categories_prod h WHERE @r <> 0) T1 JOIN ec_categories_prod T2 ON T1._id = T2.id ORDER BY T1.lvl DESC";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function get_name_by_id($all_cates)
+    {
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        $this->slave->where_in('id', $all_cates);
+        $result = $this->slave->get()->result();
+    }
+
+    public function product_by_single_category($cat_id = null)
+    {
+        $sql = "SELECT distinct pc.post_id AS product_id FROM ec_product_categories pc
+                JOIN products p ON p.id = pc.post_id
+                LEFT JOIN ec_vendor v ON v.vendor_id = p.vendor_id
+                WHERE pc.category_id = $cat_id
+                  AND p.status = '1'
+                  AND (p.vendor_id = 0 OR p.vendor_id IS NULL OR CAST(v.status AS CHAR) IN ('1', 'approved', 'Approved'))
+                limit 10";
+        $query = $this->slave->query($sql);
+        $data = $query->result();
+        return $data;
+    }
+
+    public function categories_all_strip()
+    {
+        $data = array();
+        $catdata = $this->Query_model->get_data('ec_categories_prod', array('parent_id' => '0', 'status' => '1'));
+        $cnt = 0;
+        foreach ($catdata as $catdata_list) {
+            $cnt++;
+            $catdata_list->thumbnail = isset($catdata_list->thumbnail) ? base_url() . 'assets/categories/' . $catdata_list->thumbnail : base_url() . 'assets/images/no-image.png';
+            $catdata_list->banner_image = isset($catdata_list->banner_image) ? base_url() . 'assets/categories/' . $catdata_list->banner_image : base_url() . 'assets/images/no-image.png';
+            $data['all_cat'][] = $catdata_list;
+            if ($cnt <= 6) {
+                $data['five_cat'][] = $catdata_list;
+            } else if ($cnt > 6 || $cnt <= 13) {
+                $data['five_greater'][] = $catdata_list;
+            }
+
+        }
+        return $data;
+    }
+
+    public function get_vendor_list($table_name, $condition = NULL, $order = NULL, $limit = NULL)
+    {
+        // Removed supplier_id select as it likely doesn't exist
+        $this->slave->select('*');
+        $this->slave->from($table_name);
+        if ($condition) {
+            foreach ($condition as $column => $value) {
+                if (is_array($value)) {
+                    $this->slave->where_in($column, $value);
+                } else {
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        if ($order) {
+            foreach ($order as $column => $value) {
+                $this->slave->order_by($column, $value);
+            }
+        }
+        if ($limit) {
+            if (isset($limit['start'])) {
+                $this->slave->limit($limit['length'], $limit['start']);
+            } else {
+                $this->slave->limit($limit['length']);
+            }
+        }
+
+        $obj = $this->slave->get()->result();
+        return $obj;
+    }
+
+    // --- LEGACY DATATABLES (PRIVATE) ---
+    private $table = 'products';
+    private $column_order = ['id', 'name', 'status'];
+    private $column_searchp = ['name'];
+    private $order = ['id' => 'desc'];
+
+    private function _get_datatables_query()
+    {
+        $this->slave->from($this->table);
+
+        // ── Built-in DataTables global search ──────────────────────────────
+        $dt_search = !empty($_POST['search']['value']) ? trim($_POST['search']['value']) : '';
+        $i = 0;
+        foreach ($this->column_searchp as $item) {
+            if ($dt_search !== '') {
+                if ($i === 0) {
+                    $this->slave->group_start();
+                    $this->slave->like($item, $dt_search);
+                } else {
+                    $this->slave->or_like($item, $dt_search);
+                }
+                if (count($this->column_searchp) - 1 === $i) {
+                    $this->slave->group_end();
+                }
+            }
+            $i++;
+        }
+
+        // ── Quick-search bar: #searchName sends d.name ──────────────────────
+        $name_search = isset($_POST['name']) ? trim($_POST['name']) : '';
+        if ($name_search !== '' && strlen($name_search) >= 2) {
+            $this->slave->like('name', $name_search);
+        }
+
+        // ── Filter modal: #product_name sends d.post_title ──────────────────
+        // Only apply when quick search is not already filtering the same column.
+        $post_title_search = isset($_POST['post_title']) ? trim($_POST['post_title']) : '';
+        if ($post_title_search !== '' && $name_search === '') {
+            $this->slave->like('name', $post_title_search);
+        }
+
+        // ── Status filter: #enabled sends d.enabled ─────────────────────────
+        $enabled = isset($_POST['enabled']) ? trim($_POST['enabled']) : '';
+        if ($enabled !== '') {
+            $this->slave->where('status', $enabled);
+        }
+
+        // ── Date filter: #date sends d.modified ─────────────────────────────
+        $modified = isset($_POST['modified']) ? trim($_POST['modified']) : '';
+        if ($modified !== '') {
+            $this->slave->like('date_added', $modified);
+        }
+
+        // ── Ordering ─────────────────────────────────────────────────────────
+        if (isset($_POST['order'])) {
+            $col_index = (int)$_POST['order']['0']['column'];
+            $col_dir   = in_array(strtolower($_POST['order']['0']['dir']), ['asc','desc']) ? $_POST['order']['0']['dir'] : 'desc';
+            if (isset($this->column_order[$col_index])) {
+                $this->slave->order_by($this->column_order[$col_index], $col_dir);
+            }
+        } elseif ($this->order) {
+            $this->slave->order_by(key($this->order), $this->order[key($this->order)]);
+        }
+    }
+
+    public function get_datatables()
+    {
+        $this->_get_datatables_query();
+        if ($_POST['length'] !== -1)
+            $this->slave->limit($_POST['length'], $_POST['start']);
+
+        return $this->slave->get()->result();
+    }
+
+    public function count_filteredp()
+    {
+        $this->_get_datatables_query();
+        return $this->slave->get()->num_rows();
+    }
+
+    public function count_allp()
+    {
+        $this->slave->from($this->table);
+        return $this->slave->count_all_results();
+    }
+}

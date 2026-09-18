@@ -1,0 +1,793 @@
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "/" !important;
+  }
+  
+  /* ======================================
+     Address / Checkout page
+  ====================================== */
+  
+  .address-card {
+    border: 1px solid #e6e8ec;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+  }
+  
+  .address-card.selected {
+    border-color: #f5c34b;
+    background-color: #fff9e8;
+    box-shadow: 0 6px 14px rgba(245, 195, 75, 0.15);
+  }
+  
+  .address-card:hover {
+    border-color: #f5c34b;
+  }
+  
+  /* Extra spacing between radio and text inside address cards */
+  .address-card .me10 {
+    margin-right: 16px;
+  }
+  
+  /* Align radio vertically */
+  .address-card .form-check-input {
+    margin-top: 4px;
+  }
+  
+  /* Saved addresses title spacing */
+  .saved-addresses-title {
+    margin-top: 25px;
+  }
+  
+  /* Left column width (Address + Payment) */
+  .checkout-left {
+    max-width: 100%;
+  }
+  
+  /* Sticky order summary – same on all steps */
+  .order-summary-box {
+    position: sticky;
+    top: 1px;
+    border-radius: 14px;
+    border: 1px solid #e6e8ec;
+  }
+  
+  /* Softer secondary button for Back to Cart / Back to Address */
+  .btn-back-cart {
+    border-radius: 999px;
+    border: 1px solid #d4d7e2;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    color: #4a4f5c;
+  }
+  
+  .btn-back-cart:hover {
+    background-color: #f7f8fb;
+    border-color: #c3c7d4;
+  }
+  
+  /* ======================================
+     Checkout Button System (all pages)
+  ====================================== */
+  
+  .checkout-btn {
+    height: 52px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+  }
+  
+  /* Primary CTA */
+  .checkout-btn-primary {
+    background-color: #f5c34b;
+    color: #1f2937;
+    border: none;
+  }
+  
+  .checkout-btn-primary:hover:not(:disabled) {
+    background-color: #f3b933;
+  }
+  
+  .checkout-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  /* Secondary CTA */
+  .checkout-btn-secondary {
+    background-color: #ffffff;
+    color: #4a4f5c;
+    border: 1px solid #d4d7e2;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+  
+  .checkout-btn-secondary:hover {
+    background-color: #f7f8fb;
+    border-color: #c3c7d4;
+  }
+  
+  /* Common spacing for bottom button row */
+  .checkout-actions {
+    margin-top: 30px;
+  }
+  
+  /* ======================================
+     Payment page
+  ====================================== */
+  
+  /* Step indicator */
+  .checkout-steps {
+    color: #6c727f;
+    margin: 20px 0 30px;
+  }
+  
+  .checkout-steps li.text-thm {
+    font-weight: 600;
+  }
+  
+  /* Section spacing */
+  .payment-section {
+    margin-bottom: 28px;
+  }
+  
+  .payment-section-title {
+    margin-bottom: 16px;
+  }
+  
+  /* Payment methods list */
+  .payment_method_list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .payment-card {
+    border: 1px solid #e6e8ec;
+    border-radius: 12px;
+    padding: 14px 18px; /* slightly slimmer for cleaner look */
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  
+  .payment-card .form-check-input {
+    margin-right: 18px; /* a bit more space between radio and text */
+    margin-top: 3px;
+  }
+  
+  .payment-card-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  
+  .payment-card-subtitle {
+    font-size: 13px;
+    color: #6c727f;
+    margin: 0;
+  }
+  
+  /* Selected state – match address card selection */
+  .payment-card.selected {
+    border-color: #f5c34b;
+    background-color: #fff9e8;
+    box-shadow: 0 6px 14px rgba(245, 195, 75, 0.15);
+  }
+  
+  .payment-card:hover {
+    border-color: #f5c34b;
+  }
+  
+  /* Delivery address block on payment page */
+  .delivery-address-card {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+  
+  /* ======================================
+     Order Complete / Thank You page
+  ====================================== */
+  
+  .order-complete-wrapper {
+    max-width: 100%;
+  }
+  
+  .order-complete-card {
+    border-radius: 16px;
+    border: 1px solid #e6e8ec;
+  }
+  
+  /* Make success headline a bit stronger */
+  .order-complete-card h3 {
+    font-weight: 700;
+  }
+  
+  /* Success icon */
+  .order-success-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .checkmark-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #e8f8e9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #22a547;
+    font-size: 26px;
+  }
+  
+  /* Order meta small blocks */
+  .order-meta-row {
+    margin-top: 10px;
+  }
+  
+  .order-meta-item {
+    background-color: #f8fafc;
+    border-radius: 10px;
+    padding: 10px 12px;
+    height: 100%;
+  }
+  
+  .order-meta-label {
+    font-size: 12px;
+    color: #6c727f;
+    margin-bottom: 2px;
+  }
+  
+  .order-meta-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+  }
+
+  /* Page Accpunt Dashboard */
+  /* ===========================
+   My Account – Layout & Sidebar
+=========================== */
+
+.account-page {
+    background-color: #ffffff;
+  }
+  
+  .account-sidebar {
+    border: 1px solid #e6e8ec;
+    border-radius: 14px;
+    padding: 18px 18px 10px;
+    background-color: #ffffff;
+  }
+  
+  .account-user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background-color: #f3f4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    color: #4f46e5;
+  }
+  
+  .account-hello {
+    font-size: 13px;
+    color: #6c727f;
+  }
+  
+  .account-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+  }
+  
+  .account-nav {
+    margin-top: 10px;
+  }
+  
+  .account-nav-item a {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 999px;
+    font-size: 14px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  
+  .account-nav-item a:hover {
+    background-color: #f3f4ff;
+    color: #111827;
+  }
+  
+  .account-nav-item.active a {
+    background-color: #fff9e8;
+    color: #111827;
+    font-weight: 500;
+  }
+  
+  .account-nav-item.logout a {
+    color: #b91c1c;
+  }
+  
+  /* ===========================
+     My Account – Panels & Stats
+  =========================== */
+  
+  .account-panel {
+    border: 1px solid #e6e8ec;
+    border-radius: 14px;
+    padding: 18px 20px;
+    background-color: #ffffff;
+  }
+  
+  .account-stat-card {
+    border: 1px solid #e6e8ec;
+    border-radius: 14px;
+    padding: 12px 14px;
+    background-color: #fafafa;
+  }
+  
+  .account-stat-card .label {
+    font-size: 12px;
+    color: #6c727f;
+  }
+  
+  .account-stat-card .value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+  }
+  
+  /* ===========================
+     My Account – Orders table
+  =========================== */
+  
+  .account-orders-table thead th {
+    border-bottom: 1px solid #e6e8ec;
+    font-size: 13px;
+    color: #6c727f;
+    font-weight: 500;
+  }
+  
+  .account-orders-table tbody td {
+    border-bottom: 1px solid #f1f1f4;
+    font-size: 14px;
+    color: #111827;
+    vertical-align: middle;
+  }
+  
+  /* Status pills */
+  .order-status {
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+  
+  .badge-soft-green {
+    background-color: #e8f8e9;
+    color: #15803d;
+  }
+  
+  .badge-soft-purple {
+    background-color: #ede9fe;
+    color: #4c1d95;
+  }
+  
+  .badge-soft-gray {
+    background-color: #f3f4f6;
+    color: #374151;
+  }
+  
+  /* Responsive tweaks */
+  @media (max-width: 991.98px) {
+    .account-sidebar {
+      margin-bottom: 20px;
+    }
+  }
+
+  /* Page account dashboard */
+  /* Orders filter pills (All / Active / Completed / Cancelled) */
+.orders-filter-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    gap: 6px;
+  }
+  
+  .orders-filter-list li {
+    margin: 0;
+  }
+  
+  .orders-filter-pill {
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  
+  .orders-filter-pill:hover {
+    background-color: #f3f4ff;
+    border-color: #d1d5db;
+  }
+  
+  .orders-filter-pill.active {
+    background-color: #fff9e8;
+    border-color: #f5c34b;
+    color: #111827;
+    font-weight: 500;
+  }
+  
+  /* Extra status color for Cancelled */
+  .badge-soft-red {
+    background-color: #fee2e2;
+    color: #b91c1c;
+  }
+
+  /* page account order detail */
+  /* ===========================
+   Order Details – items + totals
+=========================== */
+
+.order-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+  }
+  
+  /* Items table */
+  .order-items-table thead th {
+    border-bottom: 1px solid #e6e8ec;
+    font-size: 13px;
+    color: #6c727f;
+    font-weight: 500;
+  }
+  
+  .order-items-table tbody td {
+    border-bottom: 1px solid #f1f1f4;
+    font-size: 14px;
+    color: #111827;
+    vertical-align: middle;
+  }
+  
+  .order-items-table tfoot td {
+    font-size: 14px;
+  }
+  
+  .order-total-row td {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 10px;
+  }
+  
+  /* Product thumb inside order details */
+  .order-item-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: #f3f4f6;
+    flex-shrink: 0;
+  }
+  
+  .order-item-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .order-item-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #111827;
+  }
+  
+  .order-item-meta {
+    font-size: 12px;
+  }
+  
+  /* Small margin utility */
+  .mb2 {
+    margin-bottom: 2px;
+  }
+
+  /* page account address */
+  /* ===========================
+   My Account – Addresses
+=========================== */
+
+/* Tag on top of address card (Default / Non-default etc.) */
+.address-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background-color: #f3f4f6;
+    font-size: 11px;
+    color: #4b5563;
+  }
+  
+  /* Default tag variant */
+  .badge-default {
+    background-color: #fff9e8;
+    color: #92400e;
+    border: 1px solid #f5c34b;
+  }
+  
+  /* Actions row subtle border */
+  .address-actions {
+    border-top: 1px dashed #e5e7eb;
+  }
+  
+  /* “Add new address” card look */
+  .address-add-card {
+    border: 1px dashed #d4d7e2;
+    background-color: #fafafa;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .address-add-card:hover {
+    background-color: #f3f4ff;
+    border-color: #b4b9d3;
+  }
+  
+  .address-add-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid #d4d7e2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  
+  /* Small utility for gap (if needed) */
+  .gap-3 {
+    gap: 12px;
+  }
+
+  /* Small spacing utilities */
+.mb12 { margin-bottom: 12px; }
+.mt4  { margin-top: 4px; }
+
+/* Ensure radio + label are not cramped */
+.address-card .form-check-input {
+  margin-top: 0;          /* align center with text */
+}
+
+.address-card .form-check-label {
+  line-height: 1.3;
+}
+
+/* Tag styling (already used, but ensure this exists) */
+.address-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #f3f4f6;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.badge-default {
+  background-color: #fff9e8;
+  color: #92400e;
+  border: 1px solid #f5c34b;
+}
+
+/* Divider line for actions area */
+.address-actions {
+  border-top: 1px dashed #e5e7eb;
+}
+
+/* Add-new card look */
+.address-add-card {
+  border: 1px dashed #d4d7e2;
+  background-color: #fafafa;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.address-add-card:hover {
+  background-color: #f3f4ff;
+  border-color: #b4b9d3;
+}
+
+.address-add-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #d4d7e2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+/* Gap helper for actions */
+.gap-3 { gap: 12px; }
+
+/* ===============================
+   Account / Checkout Modal Backdrop
+================================ */
+
+/* Replace dark bootstrap backdrop */
+.modal-backdrop.show {
+    background-color: rgba(17, 24, 39, 0.35); /* soft neutral overlay */
+  }
+  
+  /* Optional: subtle blur for premium feel (safe for modern browsers) */
+  @supports (backdrop-filter: blur(4px)) {
+    .modal-backdrop.show {
+      backdrop-filter: blur(4px);
+    }
+  }
+  
+  /* Ensure modal feels slightly elevated, not floating harshly */
+  .modal-content {
+    border-radius: 16px;
+    border: 1px solid #e6e8ec;
+    box-shadow: 0 20px 60px rgba(17, 24, 39, 0.18);
+  }
+
+  /* page account detail css*/
+  /* ===============================
+   My Account – Shared Styles
+================================ */
+
+.account_sidebar {
+    border-radius: 16px;
+  }
+  
+  .account-menu li a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 999px;
+    font-size: 14px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  
+  .account-menu li + li {
+    margin-top: 4px;
+  }
+  
+  .account-menu li.active a,
+  .account-menu li a:hover {
+    background-color: #fff9e8;
+    color: #111827;
+  }
+  
+  .account-menu .logout-item a {
+    color: #dc2626;
+  }
+  
+  .avatar-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #f5c34b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: #111827;
+    font-size: 18px;
+  }
+  
+  /* Account content cards */
+  .account-card {
+    border-radius: 16px;
+    border: 1px solid #e6e8ec;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+  }
+
+  /* ===============================
+   My Account Sidebar – Canonical
+================================ */
+
+.account-sidebar {
+    border: 1px solid #e6e8ec;
+    border-radius: 16px;
+    background: #fff;
+    padding: 20px 18px;
+  }
+  
+  .account-user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #f5c34b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #111827;
+  }
+  
+  .account-hello {
+    font-size: 12px;
+    color: #6c727f;
+  }
+  
+  .account-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  
+  .account-nav-item + .account-nav-item {
+    margin-top: 4px;
+  }
+  
+  .account-nav-item a {
+    display: flex;
+    align-items: center;
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+  
+  .account-nav-item a:hover,
+  .account-nav-item.active a {
+    background-color: #fff9e8;
+    color: #111827;
+  }
+  
+  .account-nav-item.logout a {
+    color: #dc2626;
+  }
+
+  /* page account wishlist */
+  /* ===============================
+   Wishlist Page
+================================ */
+
+.wishlist-item {
+    padding: 14px 0;
+    border-bottom: 1px solid #e6e8ec;
+  }
+  
+  .wishlist-item:last-child {
+    border-bottom: none;
+  }
+  
+  .wishlist-img {
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid #e6e8ec;
+  }
+  
+  .wishlist-actions .btn-link {
+    font-size: 13px;
+    text-decoration: none;
+  }
+  
+  .wishlist-actions .btn-link:hover {
+    text-decoration: underline;
+  }
+  
+  .wishlist-empty img {
+    opacity: 0.9;
+  }

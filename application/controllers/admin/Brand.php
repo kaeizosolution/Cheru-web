@@ -1,0 +1,160 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Brand extends MY_Controller {
+
+    function __construct()
+    {
+            parent::__construct();
+            $this->load->model('Query_model');
+            $this->load->model('Brand_model');
+            $this->load->model('Category_prod_model');
+            $this->TYPE = $this->session->userdata('type');
+            $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+            $this->FNAME = $this->session->userdata($this->TYPE)['fname'];
+    
+        $this->check_module_permission('brand');
+    }
+    
+    public function index()
+    {
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->brand => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count();
+        $this->load->template("$this->TYPE/brand/index_brand",$data);
+    }
+
+    public function index_ajax_brand()
+    {
+            $length = (isset($_POST['length']))?$_POST['length']: page_count();
+            $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+            $type_array = array(1 => 'Fixed', 2 => 'Percentage');
+            $type_status = array(1 => 'Active', 0 => 'Inactive');
+            $list = $this->Brand_model->get_datatable();
+            $data = array();
+            foreach ($list as $obj) {
+                    $row = array();
+                    if (array_key_exists($obj->status, $type_status)) {
+                            $status = $type_status[$obj->status];
+                    }   
+                    $row['brand_id']   = $obj->brand_id;
+                    $row['name']        = $obj->name;
+                    $row['discount']    = $obj->discount;
+                    $row['type']        = $type_array[$obj->type];
+                    $row['start_date']  = isset($obj->start_date) ? date("d-M-Y", strtotime($obj->start_date)) : '';
+                    $row['end_date']    = isset($obj->end_date) ? date("d-M-Y", strtotime($obj->end_date)) : '';
+                    $row['status']      = $status;
+
+                    $data[] = $row;
+            }
+            $output = array(
+                            "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                            "recordsTotal" => $this->Brand_model->count_all(),
+                            "recordsFiltered" => $this->Brand_model->count_filtered(),
+                            "data" => $data,
+                           );
+
+            echo json_encode($output);
+    }
+
+    public function add()
+    {
+        $this->post();
+    }
+
+    public function update($brand_id)
+    {
+        $this->post($brand_id);
+    }
+
+    function post($brand_id = NULL)
+    {
+        $this->load->library('form_validation');
+
+        $this->form_validation->set_rules('cat_id', 'Category', 'trim|required');
+        $this->form_validation->set_rules('name', 'Name', 'trim|required');
+         
+        if(isset($brand_id)){
+            $brand_obj = $this->Query_model->get_data_obj('ec_brand',array('brand_id' => $brand_id));
+            if(!$brand_obj){
+                $this->session->set_flashdata('error', 'Invalid Error.');
+                redirect("$this->TYPE/brand");
+            }
+        }
+
+        if($_POST) {
+            $data = array(
+                    'cat_id'        => $this->input->post('cat_id'),
+                    'name'          => $this->input->post('name'),
+                    'status'        => $this->input->post('status'),
+                );
+        }else{
+            if(isset($brand_id)){
+                $data =  array(
+                    'cat_id'        => $brand_obj->cat_id,
+                    'name'          => $brand_obj->name,
+                    'status'        => $brand_obj->status,
+                );
+            }
+        }
+        $cat_list_prod = $this->Category_prod_model->find_list_prod_vendor();
+        $data['parent_categories'] = $cat_list_prod['parent'];
+
+        if ($this->form_validation->run() == FALSE){
+            $page_lang = get_page_language_data('admin_page_lang');
+            $action_bc = isset($brand_id) ? $page_lang->update : $page_lang->add;
+            $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->brand => "/$this->TYPE/brand/", "$action_bc" => 'action');
+            $breadcrumbs = $this->breadcrumbs->show($crumbs);
+            $data['breadcrumbs']    = $breadcrumbs;
+
+            $data['csrf'] = csrf_token();
+            $data['TYPE'] = $this->TYPE;
+            
+            // Fix: Force action to lowercase to match routes
+            $data['action'] = isset($brand_id) ? strtolower($page_lang->update) : strtolower($page_lang->add);
+            
+            $data['brand_id'] = isset($brand_id) ? $brand_id : NULL;
+            $this->load->template("$this->TYPE/brand/brand",$data);
+        }else{
+            $data['status'] = (isset($data['status']) && $data['status']) ? $data['status'] : '0';
+
+            $db_data =  array(
+                'cat_id'        => $data['cat_id'],
+                'name'          => $data['name'],
+                'status'        => $data['status'],
+                'login_id'      => $this->LOGIN_ID,
+            );
+            
+            if(isset($brand_id)){
+                $this->Query_model->update_data('ec_brand',$db_data,array('brand_id' => $brand_id));
+                $this->session->set_flashdata('success', 'Updated Successfully.');
+            }else{
+               $st =  $this->Query_model->get_data_obj('ec_brand',array('name'=>$db_data['name'],'cat_id'=>$db_data['cat_id']));
+               if(!$st){
+                $this->Query_model->insert_data('ec_brand',$db_data);
+                $this->session->set_flashdata('success', 'Inserted Successfully.');
+               }else {
+                  $this->session->set_flashdata('error', 'Brand already exists.');
+               }
+            }
+            
+            // Use lowercase "brand" in redirect
+            redirect("$this->TYPE/brand");
+        }
+    }
+    
+    public function delimg()
+    {
+        $id = $this->input->post('id'); 
+        $delete = 0;
+        if($id){
+            $delete = $this->Brand_model->delete_image($id);
+        }
+        echo json_encode(array('success' => $delete));
+    }
+}

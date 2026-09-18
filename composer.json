@@ -1,0 +1,6 @@
+{
+    "require": {
+        "facebook/graph-sdk": "^5.7",
+        "workerman/phpsocket.io": "^1.1"
+    }
+}

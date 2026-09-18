@@ -1,0 +1,577 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Banner extends MY_Controller {
+
+    public function __construct(){
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Attribute_model');
+        $this->TYPE = $this->session->userdata('type');		
+    }
+
+    public function index(){
+
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+        $this->get_ajax_banner(1);
+    }
+
+
+    public function add($widget_id = NULL)
+    {
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+		if (!$_POST) {
+			$this->session->unset_userdata('banner_message');
+			$this->session->unset_userdata('error');
+		}
+
+        if ($widget_id === null || $widget_id === '' || (int)$widget_id <= 0) {
+            $widget_id = 1;
+        }
+        $data = array();
+        $data['admin'] = 1;
+        $banner_type = banner_type($widget_id);
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", 'Banner' => "/$this->TYPE/banner", "add banner"=>'');
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['error'] = false;
+        $data['type'] = '';
+        $data['banner_type'] = $banner_type;
+        $data['widget_id'] = $widget_id;
+        $data['message']['error'] = '';
+
+        $this->banner_validation();
+
+        if($_POST) {
+            $data['type']          		= $widget_id;
+            $data['url']             	= $this->input->post('url');
+            $data['title']             	= $this->input->post('title');
+            $data['banner_image']       = $this->input->post('banner_image');
+            $data['tag']            		= $this->input->post('tag');
+            $data['description']    		= $this->input->post('description');
+            $data['enabled']          	= $this->input->post('enabled');
+        }else{
+            if(isset($banner_id)){
+
+                redirect("$this->TYPE/banner/add", $data);				
+            }
+        }
+        if ($_POST && $this->form_validation->run())
+        {
+            $post_data = array(
+                    'type'     		=> $widget_id,
+                    'title'         => $data['title'],
+                    'url'           => $data['url'],
+                    'banner_image'  => $data['banner_image'],
+                    'tag'           => $data['tag'],
+                    'description'   => $data['description'],
+                    'enabled'       => $data['enabled'],
+                    );
+            if(isset($banner_id)){
+                $condition = array('banner_id' => $banner_id);
+                $this->Query_model->update_data('ec_banner',$post_data, $condition);
+                $ok = $this->banner_upload($banner_id, $widget_id);
+                if ($ok) {
+                    $this->session->set_flashdata('error', '');
+                    $this->session->set_flashdata('banner_message', 'Banner updated successfully.');
+                }
+                redirect("$this->TYPE/banner/add/$widget_id");
+            }else{
+                $banner_id = $this->Query_model->insert_data('ec_banner',$post_data);
+                $ok = $this->banner_upload($banner_id,$widget_id);
+                if ($ok) {
+                    $this->session->set_flashdata('error', '');
+                    $this->session->set_flashdata('banner_message', 'Banner added successfully.');
+                }
+                redirect("$this->TYPE/banner/get_ajax_banner/$widget_id");
+            }
+        }else{
+            $data['TYPE']          = $this->TYPE;
+            $data['csrf']          = csrf_token();
+            $this->load->template("$this->TYPE/banner/add",$data); 	
+        }  
+
+    }
+
+
+    public function banner_validation()
+    {
+        $this->load->library('form_validation');
+        $this->form_validation->set_rules('title', 'Banner Heading', 'trim|required');
+		#$this->form_validation->set_rules('url', 'URL', 'trim|required');
+        //$this->form_validation->set_rules('image', 'Image', 'trim|required');
+		#$this->form_validation->set_rules('height', 'Banner Height in px', 'trim|required');
+		#$this->form_validation->set_rules('width', 'Banner width in px', 'trim|required');
+    }
+
+
+
+    public function update($banner_id = NULL)
+    {
+
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+		if (!$_POST) {
+			$this->session->unset_userdata('banner_message');
+			$this->session->unset_userdata('error');
+		}
+        $data = array();
+        $data['admin'] = 1;
+        $page_lang = get_page_language_data('admin_page_lang'); 
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", 'Banner' => "/$this->TYPE/banner", "update banner"=>'');
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['error'] = false;
+        $data['message']['error'] = '';
+
+        $this->banner_validation();
+
+        $condition = array("banner_id" => $banner_id);
+        $requirement_obj = $this->Query_model->get_data_obj('ec_banner', $condition);
+
+        //	echo "<pre>"; print_r($requirement_obj); echo "</pre>";
+        //die;
+        if( isset($requirement_obj) && !empty($requirement_obj) ){
+			$img_arr = [];
+			$img_val = isset($requirement_obj->banner_image) ? (string)$requirement_obj->banner_image : '';
+			if ($img_val !== '') {
+				$un = @unserialize($img_val);
+				if (is_array($un)) {
+					$img_arr = $un;
+				}
+			}
+			$data['banner_id']              = $requirement_obj->banner_id;
+			$data['title']                  = $requirement_obj->title;
+			$data['type']                   = $requirement_obj->type;
+			$data['url']                    = $requirement_obj->url;
+			if ($img_arr && isset($img_arr['thumb'])) {
+				$data['banner_image']           = $img_arr['thumb'];
+			} else {
+				$data['banner_image']           = $img_val;
+			}
+			$data['tag']                    = isset($requirement_obj->tag) ? $requirement_obj->tag : '';
+			$data['description']            = isset($requirement_obj->description) ? $requirement_obj->description : '';
+			$data['enabled']                = $requirement_obj->enabled;
+		}
+        if ($_POST && $this->form_validation->run())
+        {   
+            if($_POST){
+                $post_data = array(
+                        'type'          => $this->input->post('type'),
+                        'title'         => $this->input->post('title'),
+                        'url'           => $this->input->post('url'),
+                        //'banner_image'  => $this->input->post('banner_image'),
+                        'tag'           => $this->input->post('tag'),
+                        'description'   => $this->input->post('description'),
+                        'enabled'       => $this->input->post('enabled')
+                        );
+            }
+
+            if(isset($banner_id)){
+                $condition = array('banner_id' => $banner_id);
+                $widget_id = $post_data['type'];
+                $this->Query_model->update_data('ec_banner',$post_data, $condition);
+                $ok = $this->banner_upload($banner_id,$widget_id);
+                if ($ok) {
+                    $this->session->set_flashdata('error', '');
+                    $this->session->set_flashdata('banner_message', 'Banner updated successfully.');
+                }
+
+                redirect("$this->TYPE/banner/get_ajax_banner/$widget_id");
+            }
+        }
+
+        if( isset($data['type']) ){
+            $banner_type = banner_type($data['type']);
+            $data['banner_type'] = $banner_type;
+        }	 
+        $this->load->template("$this->TYPE/banner/add",$data);
+    }
+
+    public function banner_upload($banner_id = NULL, $widget_id = NULL)
+    	{	
+        if(!isset($_FILES["banner_image"]["name"]) || $_FILES["banner_image"]["name"] == '' ){
+			return true;
+		}
+
+		$upload_dir = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'home_page_banner' . DIRECTORY_SEPARATOR;
+		if (!is_dir($upload_dir)) {
+			@mkdir($upload_dir, 0755, true);
+		}
+		@chmod($upload_dir, 0775);
+		if (!is_writable($upload_dir)) {
+			$this->session->set_flashdata('banner_message', '');
+			$this->session->set_flashdata('error', 'The upload destination folder does not appear to be writable.');
+			return false;
+		}
+		$config = array(				
+					'upload_path' => $upload_dir,
+					'allowed_types' => "gif|jpg|png|jpeg|pdf",
+					'max_size' => "20240000",
+					);				
+
+		$this->load->library('Upload', $config);
+		$this->upload->initialize($config);
+		if ($this->upload->do_upload('banner_image'))
+		{
+                $data_file = $this->upload->data();	
+                $ppnewimagename = $data_file["file_name"];
+                $thumb_arr = explode(".", $ppnewimagename);
+                $large = $thumb_arr[0] . "_large". "." . $thumb_arr[1];
+                $ppthumb = $thumb_arr[0] . "_thumb". "." . $thumb_arr[1];
+
+                if($widget_id==1){
+                    //code for resize image
+
+                    $config2 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>1262,
+                            //	'height' =>auto, 
+                            'new_image' 	=> "./assets/home_page_banner/".$large,				
+                            );	
+                    $this->load->library('image_lib', $config2); 
+                    $this->image_lib->initialize($config2);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+
+                    $config3 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>500,
+                            //	'height' >250, 
+                            'new_image' 	=> "./assets/home_page_banner/".$ppthumb,				
+                            );	
+                    $this->load->library('image_lib', $config3); 
+                    $this->image_lib->initialize($config3);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                }elseif($widget_id==3){
+                    //code for resize image	
+                    $config2 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>400,
+                            //'height' =>400, 
+                            'new_image' 	=> "./assets/home_page_banner/".$ppthumb,				
+                            );
+                    $this->load->library('image_lib', $config2); 
+                    $this->image_lib->initialize($config2);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                    $config3 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>500,
+                            'height' =>300, 
+                            'new_image' 	=> "./assets/home_page_banner/".$large,				
+                            );	
+                    $this->load->library('image_lib', $config3); 						
+                    $this->image_lib->initialize($config3);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                }elseif($widget_id==2){
+                    //code for resize image	
+                    $config2 = array(
+                            'image_library' 	=>	'gd2', //get original image
+                            'source_image' 		=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'	=> true,
+                            'width' 			=>150,
+                            'height' 			=>150, 
+                            'new_image' 		=> "./assets/home_page_banner/".$ppthumb,				
+                            );	
+                    $this->load->library('image_lib', $config2); 
+                    $this->image_lib->initialize($config2);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                    $config3 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>500,
+                            'height' =>300, 
+                            'new_image' 	=> "./assets/home_page_banner/".$large,				
+                            );	
+                    $this->load->library('image_lib', $config3); 
+                    $this->image_lib->initialize($config3);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                }elseif($widget_id==4){
+                    //code for resize image	
+                    $config2 = array(
+                            'image_library' 	=>	'gd2', //get original image
+                            'source_image' 		=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'	=> true,
+                            'width' 			=>600,
+                            'height' 			=>600, 
+                            'new_image' 		=> "./assets/home_page_banner/".$large,				
+                            );	
+                    $this->load->library('image_lib', $config2); 
+                    $this->image_lib->initialize($config2);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                    $config3 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>500,
+                            'height' =>300, 
+                            'new_image' 	=> "./assets/home_page_banner/".$ppthumb,				
+                            );	
+                    $this->load->library('image_lib', $config3); 
+                    $this->image_lib->initialize($config3);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                }else{
+                    $config2 = array(
+                            'image_library' 	=>	'gd2', //get original image
+                            'source_image' 		=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'	=> true,
+                            'width' 			=>800,
+                            'height' 			=>800, 
+                            'new_image' 		=> "./assets/home_page_banner/".$large,				
+                            );
+                    $this->load->library('image_lib', $config2); 
+                    $this->image_lib->initialize($config2);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+
+                    $config3 = array(
+                            'image_library' =>	'gd2', //get original image
+                            'source_image' 	=> "./assets/home_page_banner/".$data_file['file_name'],
+                            'maintain_ratio'=> true,
+                            'width' =>500,
+                            'height' =>300, 
+                            'new_image' 	=> "./assets/home_page_banner/".$ppthumb,				
+                            );	
+                    $this->load->library('image_lib', $config3); 
+                    $this->image_lib->initialize($config3);
+                    $this->image_lib->resize();
+                    $this->image_lib->clear();
+
+                }												
+                $img_url = $ppthumb;	
+                $aa = array();
+                $aa = array('large'=>$large,'thumb'=> $ppthumb);
+                $img=serialize($aa);							
+                $post_data = array('banner_image' => $img);
+                $condition = array('banner_id' => $banner_id);				
+                $this->Query_model->update_data('ec_banner',$post_data, $condition);
+
+                return true;
+            }
+		$err = strip_tags((string)$this->upload->display_errors('', ''));
+		if ($err !== '') {
+			$this->session->set_flashdata('banner_message', '');
+			$this->session->set_flashdata('error', $err);
+		}
+		return false;
+	}
+
+	public function ajax_get_widget_type()
+	{
+		$length = (isset($_POST['length']))?$_POST['length']: page_count();
+		$page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+		$arg = array();
+		$widgetlist = $this->Query_model->get_data('ec_widget',array('status' => array('1')));
+		$i =1;
+		$button_widget_id = ''; $data=[];
+		foreach ($widgetlist as $widgetdata) {
+			$row = array();
+
+			$row ['button_widget_id'] = '';
+			$row['sl_id'] 	= $i;
+			$row['widget_id'] 	= $widgetdata->widget_id;
+			$row['widget_name'] = "<a href='/admin/banner/get_ajax_banner/$widgetdata->widget_id'>".$widgetdata->widget_name.'</a>';			
+			$row['button_widget_id'] 	.="<br><a href=\"/admin/banner/add/$widgetdata->widget_id\" target=\"_blank\"  class=\"table_btn_add\">Add</a>";
+			$data[] = $row;
+			$i++;	
+		}
+
+		$output = array(
+				"draw" => isset($_POST['draw'])?$_POST['draw']:'',
+				"recordsTotal" => $this->Query_model->count_all('ec_widget'),
+				"recordsFiltered" => $this->Query_model->count_filtered('ec_widget'),
+				"data" => $data,
+				);
+
+		echo json_encode($output);
+	}
+
+	public function ajax_get_banner_stats()
+	{
+		if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+		$widget_id = (int)$this->input->post('widget_id');
+		$active_count = 0;
+		if ($widget_id > 0) {
+			$active_count = (int)$this->db
+				->from('ec_banner')
+				->where('type', $widget_id)
+				->where('enabled', '1')
+				->count_all_results();
+		}
+
+		echo json_encode([
+			'success' => true,
+			'active_count' => $active_count,
+		]);
+	}
+
+    public function ajax_set_visible_selected()
+    {
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+        $widget_id = (int)$this->input->post('widget_id');
+        $ids = $this->input->post('banner_ids');
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        if ($widget_id <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Invalid widget_id']);
+            return;
+        }
+
+        $this->db->trans_start();
+        $this->db->where('type', $widget_id)->update('ec_banner', ['enabled' => '0']);
+        if ($ids) {
+            $this->db->where_in('banner_id', $ids)->where('type', $widget_id)->update('ec_banner', ['enabled' => '1']);
+        }
+        $this->db->trans_complete();
+
+        echo json_encode(['success' => $this->db->trans_status() ? true : false]);
+    }
+
+
+    public function get_ajax_banner($widget_id = NULL)
+    {
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+        $data = array();
+        $banner_type = banner_type($widget_id);
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", 'Banner' => "/$this->TYPE/banner", "home page banner"=>''); 
+        $breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['banner_type'] = $banner_type;
+        $data['page_count'] = page_count();     
+        $data['widget_id'] = $widget_id;
+        $this->load->template("$this->TYPE/banner/index_banner",$data); 
+    }
+
+
+    public function index_ajax_get_banner()
+    {   
+        $widget_id = $this->input->post('widget_id'); 
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+        $condition = array('type' => $widget_id);
+        $bannerlist = $this->Query_model->get_data('ec_banner', $condition);
+        $data = array();
+        foreach ($bannerlist as $bannerlistdata) {
+
+            $row = array();
+            $thumb = null;
+            if (isset($bannerlistdata->banner_image) && $bannerlistdata->banner_image !== null && $bannerlistdata->banner_image !== '') {
+                $un = @unserialize($bannerlistdata->banner_image);
+                if (is_array($un)) {
+                    $thumb = isset($un['thumb']) ? $un['thumb'] : null;
+                } else {
+                    $thumb = $bannerlistdata->banner_image;
+                }
+            }
+            $row['banner_id']       = $bannerlistdata->banner_id;
+            $row['title']           = $bannerlistdata->title;
+            $row['url']             = $bannerlistdata->url;
+            $row['banner_image']    = $thumb ? (base_url().'assets/home_page_banner/'.$thumb) : '';
+            $row['tag']             = isset($bannerlistdata->tag) ? $bannerlistdata->tag : '';
+            $row['description']     = isset($bannerlistdata->description) ? $bannerlistdata->description : '';
+            $row['status']          = ($bannerlistdata->enabled == 1) ? "Active" : "Inactive";
+            $row['enabled']         = (int)$bannerlistdata->enabled;
+            $data[] = $row;
+        }
+
+        $output = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsTotal" => $this->Query_model->count_all('ec_banner', $condition),
+                "recordsFiltered" => $this->Query_model->count_filtered('ec_banner', $condition),
+                "data" => $data,
+                );
+
+        echo json_encode($output);
+    }
+
+
+    public function update_ajax_status()
+    {
+        $id = $this->input->post('id');
+        $status = $this->input->post('status');
+        if($status == 'Active'){
+            $status = '0';
+        }
+        else if($status == 'Inactive'){
+            $status = '1';
+        }
+        $post_data = array('enabled' => $status);
+        $condition = array('banner_id' => $id);
+        $this->Query_model->update_data('ec_banner',$post_data, $condition);
+        $data['message']  = 'Status Changed Successfully';
+        echo json_encode($data);
+        die();
+    }
+
+
+    public function ajax_delete_banner()
+    {
+        $id = $this->input->post('id');
+        $condition = array('banner_id' => $id);
+        $this->Query_model->delete('ec_banner', $condition);
+        $data['message']  = 'Status Changed Successfully';
+        echo json_encode($data);
+        die();
+    }
+
+    public function delimg()
+    {
+        $data['csrf'] = csrf_token();
+        $banner_id = $this->input->post('id');	
+        $product_id = $this->input->post('product_id');			
+        $data['csrf'] = csrf_token();
+        $data = array();
+        $delete = 0;
+        if($banner_id){
+            $delete = $this->Attribute_model->delete_image($product_id, $banner_id);
+        }
+        //echo '==='.$delete;
+        //die;
+        echo json_encode(array('success' => $delete));
+    }
+
+}

@@ -1,0 +1,54 @@
+<?php
+$lang['about_us']           = 'Sobre nosotros';
+$lang['contact_us']         = 'Contáctenos';
+$lang['help_faqs']          = 'Ayuda y preguntas frecuentes';
+$lang['login']              = 'Acceso';
+$lang['cart']               = 'Carrito';
+$lang['register']           = 'Registrarse';
+$lang['my_account']         = 'Mi cuenta';
+$lang['logout']             = 'Cerrar sesión';
+$lang['search_product']     = 'Buscar producto';
+$lang['browse_categories']  = 'Examinar categorías';
+$lang['coupon_code']        = 'Cupón PORTO10<span> 10% de descuento</span>';
+$lang['hi']                 = 'Hola';
+$lang['profile']            = 'Perfil';
+$lang['my_orders']          = 'Mis pedidos';
+$lang['saved_address']      = 'Dirección guardada';
+$lang['home']               = 'Inicio';
+$lang['wishlist']           = 'Lista de deseos';
+
+// New header keys
+$lang['all_category']       = 'Todas las categorías';
+$lang['search_products']     = 'Buscar productos…';
+$lang['my_items']           = 'Mis artículos';
+$lang['hello']              = 'Hola,';
+$lang['dashboard']          = 'Tablero';
+$lang['account_details']    = 'Detalles de la cuenta';
+$lang['sign_in']            = 'Iniciar sesión';
+$lang['account']            = 'Cuenta';
+$lang['items']              = 'Artículos:';
+$lang['total']              = 'Total';
+$lang['deal_of_the_day']    = 'Oferta del día';
+$lang['best_sellers']       = 'Más vendidos';
+$lang['new_arrivals']       = 'Novedades';
+$lang['mobile_number']      = 'Número de móvil';
+$lang['use_email_instead']  = 'Usar correo en su lugar';
+$lang['password']           = 'Contraseña';
+$lang['remember_me']        = 'Recuérdame';
+$lang['lost_your_password'] = '¿Perdiste tu contraseña?';
+$lang['dont_have_account']  = '¿No tienes una cuenta?';
+$lang['create_account']     = 'Crear cuenta';
+$lang['or']                 = 'o';
+$lang['your_cart']          = 'Su carrito';
+$lang['cart_empty']         = 'Su carrito está vacío';
+$lang['buy_more_for_free_shipping'] = 'Compre %s más para envío GRATIS';
+$lang['free_shipping']      = '¡Tiene envío GRATIS!';
+$lang['view_cart']          = 'Ver carrito';
+$lang['checkout_now']       = 'Pagar ahora';
+$lang['create_your_account'] = 'Crea tu cuenta';
+$lang['your_name']          = 'Su nombre';
+$lang['placeholder_name']   = 'Ali Tufan';
+$lang['email']              = 'Correo electrónico';
+$lang['placeholder_email']  = 'Dirección de correo electrónico';
+$lang['already_have_account'] = '¿Ya tienes una cuenta?';
+?>

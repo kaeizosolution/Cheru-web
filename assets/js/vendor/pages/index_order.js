@@ -1,0 +1,677 @@
+$(document).ready(function () {
+
+  // ── Single API call on page load — cache all grouped data ──────────────
+  var cachedOrders = null;  // will hold { pending, inprogress, shipped, completed, cancelled }
+  var activeTab    = 'pending';
+  var currentPages = { pending: 1, inprogress: 1, shipped: 1, completed: 1, cancelled: 1 };
+  var itemsPerPage = 10;
+
+  // Fetch all orders once and populate the active tab
+  loadAllOrders(function () {
+    updateTabBadges();
+    // Auto-switch to first tab that has orders (fallback to pending)
+    var tabOrder = ['pending', 'inprogress', 'shipped', 'completed', 'cancelled'];
+    var btnMap   = { pending: '.pending_order_btn', inprogress: '.inprocess_order_btn', shipped: '.shipped_order_btn', completed: '.complete_order_btn', cancelled: '.cancel_order_btn' };
+    var firstTab = 'pending';
+    for (var i = 0; i < tabOrder.length; i++) {
+      if (cachedOrders[tabOrder[i]] && cachedOrders[tabOrder[i]].length > 0) {
+        firstTab = tabOrder[i];
+        break;
+      }
+    }
+    activeTab = firstTab;
+    setActiveBtn(btnMap[firstTab]);
+    renderTab(firstTab);
+  });
+
+  // Pagination click events
+  $(document).on('click', '.custom-pagination .page-link-custom:not(.disabled):not(.active)', function (e) {
+    e.preventDefault();
+    var tab = $(this).data('tab');
+    var page = parseInt($(this).data('page'), 10);
+    if (tab && page > 0) {
+      currentPages[tab] = page;
+      renderTab(tab);
+      // Scroll to the top of the order list card smoothly
+      $('html, body').animate({
+          scrollTop: $(".customCard").offset().top - 120
+      }, 300);
+    }
+  });
+
+  refreshOrderCounts();
+
+  // ── Tab click handlers — just re-render from cache (no new API call) ───
+  $(document).on('click', '.pending_order_btn', function () {
+    activeTab = 'pending';
+    setActiveBtn('.pending_order_btn');
+    if (cachedOrders) {
+      renderTab('pending');
+    } else {
+      loadAllOrders(function () { renderTab('pending'); });
+    }
+  });
+
+  $(document).on('click', '.inprocess_order_btn', function () {
+    activeTab = 'inprogress';
+    setActiveBtn('.inprocess_order_btn');
+    if (cachedOrders) {
+      renderTab('inprogress');
+    } else {
+      loadAllOrders(function () { renderTab('inprogress'); });
+    }
+  });
+
+  $(document).on('click', '.shipped_order_btn', function () {
+    activeTab = 'shipped';
+    setActiveBtn('.shipped_order_btn');
+    if (cachedOrders) {
+      renderTab('shipped');
+    } else {
+      loadAllOrders(function () { renderTab('shipped'); });
+    }
+  });
+
+  $(document).on('click', '.complete_order_btn', function () {
+    activeTab = 'completed';
+    setActiveBtn('.complete_order_btn');
+    if (cachedOrders) {
+      renderTab('completed');
+    } else {
+      loadAllOrders(function () { renderTab('completed'); });
+    }
+  });
+
+  $(document).on('click', '.cancel_order_btn', function () {
+    activeTab = 'cancelled';
+    setActiveBtn('.cancel_order_btn');
+    if (cachedOrders) {
+      renderTab('cancelled');
+    } else {
+      loadAllOrders(function () { renderTab('cancelled'); });
+    }
+  });
+
+  // ── Load all orders from API (single call) ─────────────────────────────
+  function loadAllOrders(callback) {
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/order_list' : '/vendor/order/ajax_order_list';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+
+    var postData = {};
+    postData[csrf.name] = csrf.hash;
+    if (typeof active_cur !== 'undefined') {
+      postData['cur'] = active_cur;
+    }
+
+    $('.order_list_div').html('<div class="text-center py-4"><i class="fa fa-spinner fa-spin fa-2x"></i></div>');
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok      = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      var payload = resp && resp.DATA ? resp.DATA : (resp && resp.data ? resp.data : null);
+
+      if (ok && payload) {
+        // New grouped format: { pending, inprogress, shipped, completed, cancelled }
+        if (payload.pending !== undefined || payload.inprogress !== undefined) {
+          cachedOrders = {
+            pending:    Array.isArray(payload.pending)    ? payload.pending    : [],
+            inprogress: Array.isArray(payload.inprogress) ? payload.inprogress : [],
+            shipped:    Array.isArray(payload.shipped)    ? payload.shipped    : [],
+            completed:  Array.isArray(payload.completed)  ? payload.completed  : [],
+            cancelled:  Array.isArray(payload.cancelled)  ? payload.cancelled  : []
+          };
+        } else if (Array.isArray(payload.order_wise)) {
+          // Fallback: old flat format — bucket it ourselves
+          cachedOrders = { pending: [], inprogress: [], shipped: [], completed: [], cancelled: [] };
+          $.each(payload.order_wise, function (i, v) {
+            var st = parseInt(v.status, 10);
+            if      (st === 1)               cachedOrders.pending.push(v);
+            else if (st === 2)               cachedOrders.inprogress.push(v);
+            else if (st === 3)               cachedOrders.shipped.push(v);
+            else if (st === 10)              cachedOrders.completed.push(v);
+            else if (st === 5 || st === 17)  cachedOrders.cancelled.push(v);
+            else                             cachedOrders.pending.push(v);
+          });
+        } else {
+          cachedOrders = { pending: [], inprogress: [], shipped: [], completed: [], cancelled: [] };
+        }
+      } else {
+        cachedOrders = { pending: [], inprogress: [], shipped: [], completed: [], cancelled: [] };
+      }
+
+      if (typeof callback === 'function') callback();
+    }).fail(function () {
+      cachedOrders = { pending: [], inprogress: [], shipped: [], completed: [], cancelled: [] };
+      if (typeof callback === 'function') callback();
+    });
+  }
+
+  // ── Render orders for a tab from cached data ───────────────────────────
+  function renderTab(tab) {
+    var orders = cachedOrders ? (cachedOrders[tab] || []) : [];
+    var html   = '';
+
+    var page = currentPages[tab] || 1;
+    var totalItems = orders.length;
+    var totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (page > totalPages) page = totalPages || 1;
+    currentPages[tab] = page;
+
+    var startIndex = (page - 1) * itemsPerPage;
+    var endIndex = startIndex + itemsPerPage;
+    var pagedOrders = orders.slice(startIndex, endIndex);
+
+    if (pagedOrders.length === 0) {
+      html = '<div class="alert alert-warning">No orders found.</div>';
+    } else {
+      $.each(pagedOrders, function (k, v) {
+        var created_time  = v.date_created_modify || '';
+        var product_title = (v.product_obj && v.product_obj.post_title) ? v.product_obj.post_title : ('Order #' + v.order_uid);
+        var product_price = v.total_amount || 0;
+        var sym           = v.currency_symbol || '$';
+        var row_id        = v.id;
+        var order_uid     = v.order_uid;
+        var order_id      = v.order_id || v.orderId || '';
+        var order_status  = parseInt(v.status, 10);
+
+        html += '<div class="orderID"><ul><li>Order ID# <a href="javascript:void(0);" class="view-order-details" data-orderid="' + order_id + '" data-orderuid="' + order_uid + '" style="color: var(--primary); text-decoration: underline; font-weight: 600;">' + order_uid + '</a>' +
+                ' <span>' + created_time + '</span></li><li></li></ul></div>' +
+                '<div class="itemOrders">';
+
+        html += '<ul><li>' + product_title + '</li><li>' + sym + parseFloat(product_price).toFixed(2) + '</li></ul>';
+
+        if (order_status === 1) {
+          var cancel_html1 = cancel_html(row_id, order_id);
+          html += '<div class="msg_move_div_' + row_id + '">' +
+                  '<ul><li><a href="javascript:void(0);" class="btnAccept order_accept_btn" data-orderid="' + row_id + '">In Process</a></li>' +
+                  '<li><a href="javascript:void(0);" data-orderid="' + row_id + '" class="btnCancel" data-toggle="collapse" data-target="#cno_' + row_id + '" aria-expanded="true"><i class="fa fa-times" aria-hidden="true"></i></a></li>' +
+                  '</ul></div></div>' + cancel_html1 + '<hr>';
+        } else if (order_status === 2) {
+          html += '<div class="msg_move_div_' + row_id + '">' +
+                  '<ul><li><a href="javascript:void(0);" class="btnAccept order_shipped_btn" data-orderid="' + row_id + '">Mark as Shipped</a></li>' +
+                  '</ul></div></div><hr>';
+        } else if (order_status === 3) {
+          html += '<div class="msg_move_div_' + row_id + '">' +
+                  '<ul><li><a href="javascript:void(0);" class="btnAccept order_delivered_btn" data-orderid="' + row_id + '">Mark as Delivered</a></li>' +
+                  '</ul></div></div><hr>';
+        } else {
+          html += '</div><hr>';
+        }
+      });
+
+      // Render pagination controls if totalPages > 1
+      if (totalPages > 1) {
+        html += '<div class="custom-pagination">';
+        
+        // Prev button
+        if (page > 1) {
+          html += '<a class="page-link-custom prev-page-btn" data-tab="' + tab + '" data-page="' + (page - 1) + '" href="javascript:void(0);">&laquo;</a>';
+        } else {
+          html += '<span class="page-link-custom disabled">&laquo;</span>';
+        }
+
+        // Page number buttons
+        for (var i = 1; i <= totalPages; i++) {
+          if (i === page) {
+            html += '<span class="page-link-custom active">' + i + '</span>';
+          } else {
+            html += '<a class="page-link-custom page-num-btn" data-tab="' + tab + '" data-page="' + i + '" href="javascript:void(0);">' + i + '</a>';
+          }
+        }
+
+        // Next button
+        if (page < totalPages) {
+          html += '<a class="page-link-custom next-page-btn" data-tab="' + tab + '" data-page="' + (page + 1) + '" href="javascript:void(0);">&raquo;</a>';
+        } else {
+          html += '<span class="page-link-custom disabled">&raquo;</span>';
+        }
+
+        html += '</div>';
+      }
+    }
+
+    $('.order_list_div').html(html);
+
+    // Directly populate cancel reason dropdowns right after HTML is in the DOM.
+    // Event-based approaches (click / show.bs.collapse) are unreliable here
+    // because Bootstrap's event system doesn't bubble consistently on this site.
+    // Populating immediately after render is the safest approach.
+    if (tab === 'pending') {
+      $('.order_list_div [id^="reason_"]').each(function () {
+        populateCancellationReasons($(this));
+      });
+    }
+  }
+
+  // ── Highlight active tab button ─────────────────────────────────────────
+  function setActiveBtn(selector) {
+    $('.customNavPills .nav-link').removeClass('active');
+    $(selector).addClass('active');
+  }
+
+  // ── Update count badges on each tab ────────────────────────────────────
+  function updateTabBadges() {
+    if (!cachedOrders) return;
+    var map = {
+      '.pending_order_btn':   'pending',
+      '.inprocess_order_btn': 'inprogress',
+      '.shipped_order_btn':   'shipped',
+      '.complete_order_btn':  'completed',
+      '.cancel_order_btn':    'cancelled'
+    };
+    $.each(map, function (btn, key) {
+      var count = cachedOrders[key] ? cachedOrders[key].length : 0;
+      var $btn  = $(btn);
+      $btn.find('.tab-badge').remove();
+      if (count > 0) {
+        $btn.append(' <span class="tab-badge badge badge-pill" style="background:#6366f1;color:#fff;font-size:11px;padding:2px 7px;border-radius:12px;">' + count + '</span>');
+      }
+    });
+  }
+
+  // ── Refresh top stat counts ─────────────────────────────────────────────
+  function refreshOrderCounts() {
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/order_counts' : '/vendor/order/ajax_order_counts';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+
+    var postData = {};
+    postData[csrf.name] = csrf.hash;
+    if (typeof active_cur !== 'undefined') {
+      postData['cur'] = active_cur;
+    }
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok      = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      var payload = resp && resp.DATA ? resp.DATA : (resp && resp.data ? resp.data : {});
+      if (!ok || !payload) return;
+
+      if (typeof payload.total_order !== 'undefined') {
+        $('#total_order_count').text(payload.total_order || 0);
+      }
+      if (typeof payload.delivered_order !== 'undefined') {
+        $('#delivered_order_count').text(payload.delivered_order || 0);
+      }
+      if (typeof payload.total_amount !== 'undefined') {
+        var sym = payload.currency_symbol || '$';
+        $('#total_amount_count').text(sym + parseFloat(payload.total_amount || 0).toFixed(2));
+      }
+    });
+  }
+
+  // ── Order status update ─────────────────────────────────────────────────
+  $(document).on('click', '.order_accept_btn', function () {
+    var postData = {};
+    postData[csrf.name]      = csrf.hash;
+    postData['item_id']      = $(this).data('orderid');
+    postData['order_type']   = 'in_process';
+    postData['button_class'] = 'inprocess_order_btn';
+    update_order_status(postData);
+  });
+
+  $(document).on('click', '.order_shipped_btn', function () {
+    var postData = {};
+    postData[csrf.name]      = csrf.hash;
+    postData['item_id']      = $(this).data('orderid');
+    postData['order_type']   = 'shipped';
+    postData['button_class'] = 'shipped_order_btn';
+    update_order_status(postData);
+  });
+
+  $(document).on('click', '.order_delivered_btn', function () {
+    var postData = {};
+    postData[csrf.name]      = csrf.hash;
+    postData['item_id']      = $(this).data('orderid');
+    postData['order_type']   = 'delivered';
+    postData['button_class'] = 'complete_order_btn';
+    update_order_status(postData);
+  });
+
+  function update_order_status(postData) {
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/update_order_item_status' : '/vendor/order/ajax_order_item_status_update';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      if (ok) {
+        $('.msg_move_div_' + postData['item_id']).html(
+          '<div class="alert alert-success">' + (resp && (resp.MSG || resp.msg || resp.message) ? (resp.MSG || resp.msg || resp.message) : 'Updated') + '</div>'
+        );
+        // Reload from API after 2s so cache is fresh, then go to relevant tab
+        setTimeout(function () {
+          cachedOrders = null;
+          refreshOrderCounts();
+          loadAllOrders(function () {
+            updateTabBadges();
+            if (postData['order_type'] === 'in_process') {
+              activeTab = 'inprogress';
+              setActiveBtn('.inprocess_order_btn');
+              renderTab('inprogress');
+            } else if (postData['order_type'] === 'shipped') {
+              activeTab = 'shipped';
+              setActiveBtn('.shipped_order_btn');
+              renderTab('shipped');
+            } else if (postData['order_type'] === 'delivered') {
+              activeTab = 'completed';
+              setActiveBtn('.complete_order_btn');
+              renderTab('completed');
+            } else {
+              activeTab = 'pending';
+              setActiveBtn('.pending_order_btn');
+              renderTab('pending');
+            }
+          });
+        }, 2000);
+      }
+    });
+  }
+
+  // ── Re-fetch cancel reasons on cancel-button click (makes API visible in DevTools) ──
+  // Uses data-target (Bootstrap's own collapse attribute) to reliably find
+  // the correct select inside the collapse panel — avoids data-orderid issues.
+  $(document).on('click', '.btnCancel', function () {
+    var target = $(this).attr('data-target') || $(this).attr('data-bs-target');
+    if (target) {
+      var $select = $(target).find('select[name="reason"]');
+      if ($select.length) {
+        populateCancellationReasons($select);
+      }
+    }
+  });
+
+  function populateCancellationReasons($select) {
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/order/cancel-reasons' : '/vendor/order/ajax_cancel_reasons';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+    var postData = {};
+    postData[csrf.name] = csrf.hash;
+
+    // Put placeholder while loading
+    $select.html('<option value="">Loading...</option>').prop('disabled', true);
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      var payload = resp && resp.DATA ? resp.DATA : (resp && resp.data ? resp.data : null);
+      if (ok && Array.isArray(payload)) {
+        var html = '<option value="">Select Reason</option>';
+        payload.forEach(function (reason) {
+          html += '<option value="' + reason + '">' + reason + '</option>';
+        });
+        $select.html(html).prop('disabled', false);
+      } else {
+        // Fallback default reasons
+        $select.html(
+          '<option value="">Select Reason</option>' +
+          '<option value="Product is not available">Product is not available</option>' +
+          '<option value="Other">Other</option>'
+        ).prop('disabled', false);
+      }
+    }).fail(function () {
+      // Fallback default reasons
+      $select.html(
+        '<option value="">Select Reason</option>' +
+        '<option value="Product is not available">Product is not available</option>' +
+        '<option value="Other">Other</option>'
+      ).prop('disabled', false);
+    });
+  }
+
+  // ── Cancel order ────────────────────────────────────────────────────────
+  $(document).on('click', '.save_reason', function (e) {
+    e.preventDefault();
+    var $form    = $(this).closest('form');
+    var postData = {};
+    postData[csrf.name]    = csrf.hash;
+    postData['order_id']   = $form.find('input[name="order_id"]').val();
+    postData['item_id']    = $form.find('input[name="item_id"]').val();
+    postData['reason']     = $form.find('select[name="reason"]').val();
+    postData['comment']    = $form.find('textarea[name="comment"]').val();
+
+    if (!postData['reason']) {
+      alert('Please select Reason');
+      return false;
+    }
+    save_reason_func(postData);
+  });
+
+  function save_reason_func(postData) {
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/cancel_order' : '/vendor/order/ajax_cancel_order';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      if (ok) {
+        $('.msg_cancel_div_' + postData['item_id']).html(
+          '<div class="alert alert-success">' + (resp && (resp.MSG || resp.msg || resp.message) ? (resp.MSG || resp.msg || resp.message) : 'Cancelled') + '</div>'
+        );
+        setTimeout(function () {
+          cachedOrders = null;
+          refreshOrderCounts();
+          loadAllOrders(function () {
+            updateTabBadges();
+            activeTab = 'cancelled';
+            setActiveBtn('.cancel_order_btn');
+            renderTab('cancelled');
+          });
+        }, 2000);
+      } else {
+        $('#error_msg').html(
+          '<div class="alert alert-danger">' + (resp && (resp.MSG || resp.msg || resp.message) ? (resp.MSG || resp.msg || resp.message) : 'Failed') + '</div>'
+        );
+      }
+    });
+  }
+
+  // ── Show Order Invoice Modal ────────────────────────────────────────────
+  $(document).on('click', '.view-order-details', function (e) {
+    e.preventDefault();
+    var orderId = $(this).attr('data-orderid');
+    var orderUid = $(this).attr('data-orderuid');
+    if (!orderId && !orderUid) return;
+
+    // Open modal programmatically (Bootstrap 5)
+    var myModal = new bootstrap.Modal(document.getElementById('orderDetailModal'), {});
+    myModal.show();
+
+    // Reset view to loading state
+    $('#mdOrderUid').text(orderUid || orderId);
+    $('#orderDetailLoader').show();
+    $('#orderDetailContent').hide();
+
+    var isApi   = (typeof use_api !== 'undefined' && use_api && typeof access_token !== 'undefined' && access_token);
+    var url     = isApi ? '/api/v1/vendor/order/detail' : '/vendor/order/ajax_order_detail_modal';
+    var headers = {};
+    if (isApi) {
+      headers['Authorization'] = 'Bearer ' + access_token;
+    }
+
+    var postData = {};
+    postData['order_id'] = orderId;
+    postData[csrf.name] = csrf.hash;
+
+    $.ajax({
+      url:      url,
+      type:     'POST',
+      headers:  headers,
+      data:     postData,
+      dataType: 'json'
+    }).done(function (resp) {
+      var ok = resp && (resp.STATUS === 1 || resp.STATUS === '1' || resp.status === 1 || resp.status === '1');
+      var payload = resp && resp.DATA ? resp.DATA : (resp && resp.data ? resp.data : null);
+
+      if (ok && payload) {
+        var order = payload.order || {};
+        var shipping = payload.shipping || {};
+        var items = payload.items || [];
+
+        // Set Order Details
+        $('#mdOrderDate').text(order.date || 'N/A');
+        $('#mdPaymentMethod').text(order.payment_method || 'N/A');
+        $('#mdPaymentStatus').text(order.payment_status || 'N/A');
+
+        // Status Badge Style
+        var st = (order.status || 'pending').toLowerCase();
+        var badgeCls = 'bg-warning text-dark';
+        if (st === 'inprogress' || st === 'in_process' || st === 'processing' || st === 'confirmed') {
+          badgeCls = 'bg-info text-white';
+        } else if (st === 'shipped') {
+          badgeCls = 'bg-primary text-white';
+        } else if (st === 'completed' || st === 'delivered') {
+          badgeCls = 'bg-success text-white';
+        } else if (st === 'cancelled' || st === 'canceled') {
+          badgeCls = 'bg-danger text-white';
+        }
+        $('#mdStatusBadge').text(order.status || 'Pending').attr('class', 'badge ' + badgeCls);
+
+        // Shipping Address
+        if (shipping && shipping.fullname) {
+          $('#mdShippingName').text(shipping.fullname);
+          $('#mdShippingMobile').text(shipping.mobile || 'N/A');
+          $('#mdShippingAddress').text(shipping.address || 'N/A');
+          $('#mdShippingCity').text((shipping.city || '') + (shipping.postcode ? ' - ' + shipping.postcode : ''));
+        } else {
+          $('#mdShippingName').text('N/A');
+          $('#mdShippingMobile').text('N/A');
+          $('#mdShippingAddress').text('N/A');
+          $('#mdShippingCity').text('N/A');
+        }
+
+        // Render Items List
+        var itemsHtml = '';
+        var sym = order.currency_symbol || '$';
+        $.each(items, function (index, item) {
+          var img = item.product_img || '/assets/images/default_images/product.jpg';
+          var name = item.product_name || 'Product';
+          var link = item.product_url ? '<a href="' + item.product_url + '" target="_blank" style="color: var(--primary); font-weight: 500;">' + name + '</a>' : '<span style="font-weight:500;">' + name + '</span>';
+          
+          var attrBadges = '';
+          if (item.attributes && item.attributes.length > 0) {
+            $.each(item.attributes, function (i, attr) {
+              attrBadges += '<span class="badge bg-secondary me-1" style="font-size:10px; padding: 3px 6px;">' + attr + '</span>';
+            });
+          }
+
+          var itemSt = (item.status_label || 'Pending');
+          var itemBadgeCls = 'bg-warning text-dark';
+          if (item.status === 2) itemBadgeCls = 'bg-info text-white';
+          else if (item.status === 3) itemBadgeCls = 'bg-primary text-white';
+          else if (item.status === 10) itemBadgeCls = 'bg-success text-white';
+          else if (item.status === 5 || item.status === 17) itemBadgeCls = 'bg-danger text-white';
+
+          itemsHtml += '<tr>' +
+            '<td><img src="' + img + '" width="55" height="55" style="object-fit:cover; border-radius: 8px; border: 1px solid var(--border-color);"></td>' +
+            '<td>' + link + '<div class="mt-1">' + attrBadges + '</div></td>' +
+            '<td class="text-center"><span class="badge ' + itemBadgeCls + '" style="font-size:11px; padding: 4px 8px;">' + itemSt + '</span></td>' +
+            '<td class="text-end">' + sym + parseFloat(item.unit_price || 0).toFixed(2) + '</td>' +
+            '<td class="text-center">' + (item.quantity || 1) + '</td>' +
+            '<td class="text-end font-weight-bold">' + sym + parseFloat(item.subtotal || 0).toFixed(2) + '</td>' +
+            '</tr>';
+        });
+        $('#mdItemsList').html(itemsHtml);
+
+        // Set Totals
+        $('#mdSubtotal').text(sym + parseFloat(order.subtotal || 0).toFixed(2));
+        $('#mdShipping').text(sym + parseFloat(order.shipping || 0).toFixed(2));
+        $('#mdTax').text(sym + parseFloat(order.tax || 0).toFixed(2));
+
+        var discount = parseFloat(order.discount || 0);
+        if (discount > 0) {
+          $('#mdDiscount').text('-' + sym + discount.toFixed(2));
+          $('#mdDiscountRow').show();
+        } else {
+          $('#mdDiscountRow').hide();
+        }
+        $('#mdTotal').text(sym + parseFloat(order.total || 0).toFixed(2));
+
+        // Switch loader to content
+        $('#orderDetailLoader').hide();
+        $('#orderDetailContent').fadeIn(200);
+      } else {
+        alert(resp && resp.message ? resp.message : 'Failed to fetch invoice details.');
+        myModal.hide();
+      }
+    }).fail(function () {
+      alert('Connection error. Failed to load order invoice.');
+      myModal.hide();
+    });
+  });
+
+});
+
+// ── Cancel form HTML builder ──────────────────────────────────────────────
+function cancel_html(item_id, order_id) {
+  return '<div class="myaccount-writereviewform collapse" id="cno_' + item_id + '">' +
+    '<div class="review-product-wrap">' +
+    '<h4>Reason for Cancellation</h4>' +
+    '<div id="error_msg"></div>' +
+    '<form method="post" class="write-reviewform" id="cancel_order_form_' + item_id + '" name="cancel_order_form">' +
+    '<div class="row">' +
+    '<div class="col-lg-12">' +
+    '<div class="form-group mt-1">' +
+    '<select class="form-control" name="reason" id="reason_' + item_id + '" required>' +
+    '<option value="">Loading reasons...</option>' +
+    '</select>' +
+    '</div>' +
+    '<div class="form-group mt-1">' +
+    '<label class="control-label">Add Comment</label>' +
+    '<textarea rows="3" name="comment" id="comment_' + item_id + '" class="form-control" placeholder="Add your comment"></textarea>' +
+    '</div>' +
+    '</div>' +
+    '<div class="col-lg-12">' +
+    '<input type="hidden" name="item_id" value="' + item_id + '">' +
+    '<input type="hidden" name="order_id" value="' + order_id + '">' +
+    '<button class="btn-submit-cancel save_reason" type="submit" name="submit"><i class="fa fa-check mr-1"></i> Submit</button>' +
+    '<div class="msg_cancel_div_' + item_id + '"></div>' +
+    '</div>' +
+    '</div>' +
+    '</form>' +
+    '</div>' +
+    '</div>';
+}

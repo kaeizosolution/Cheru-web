@@ -1,0 +1,418 @@
+<?php
+// Get the session type (usually 'vendor')
+$TYPE = isset($_SESSION['type']) ? $_SESSION['type'] : 'vendor';
+
+if($this->session->userdata($TYPE)){
+    $session_obj = $this->session->userdata($TYPE);
+    
+    // FIX: Updated keys to match your new session structure
+    $logged_in   = isset($session_obj['vendor_id']) ? $session_obj['vendor_id'] : '';
+    $name        = isset($session_obj['vendor_name']) ? $session_obj['vendor_name'] : 'Vendor';
+    $email       = isset($session_obj['vendor_email']) ? $session_obj['vendor_email'] : '';
+    $super_admin = isset($session_obj['super_admin']) ? $session_obj['super_admin'] : 0;
+    $image       = isset($session_obj['image']) ? $session_obj['image'] : '';
+}
+
+// DATA PREPARATION (Chart Logic)
+$day = [];
+$salevalue = [];
+$day_wise = []; // Initialize to prevent errors
+
+if(isset($salevalue_past7days) && $salevalue_past7days){    
+    foreach($salevalue_past7days as $v){ 
+        $day_wise[$v->days] = (float)$v->sale_value; 
+    }   
+}
+
+for ($i = 6; $i >= 0; $i--) {
+    $d_name = date('D', strtotime("-$i days")); // e.g. "Mon", "Tue"
+    $day[] = $d_name;
+    $salevalue[] = isset($day_wise[$d_name]) ? $day_wise[$d_name] : 0.0;
+}
+
+// Ensure count variables exist to prevent notices in the HTML below
+$orders = isset($orders) ? $orders : 0;
+$sale_amount = isset($sale_amount) ? $sale_amount : '0.00';
+$count_all_product = isset($count_all_product) ? $count_all_product : 0;
+
+// Currency symbol — comes from the API (dashboard_currency_symbol),
+// falls back to session currency, then to bare '$'
+$_cur_sym = '$';
+if (!empty($dashboard_currency_symbol)) {
+    $_cur_sym = $dashboard_currency_symbol;
+} elseif (function_exists('get_currency')) {
+    $_cur_id  = $this->session->userdata('cur');
+    $_cur_obj = $_cur_id ? get_currency($_cur_id) : null;
+    if ($_cur_obj && !empty($_cur_obj->symbol)) {
+        $_cur_sym = html_entity_decode($_cur_obj->symbol);
+    }
+}
+?>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.8.0"></script>
+
+<style> 
+    :root {
+        --primary: #6366f1;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --slate-500: #64748b;
+        --slate-900: #0f172a;
+        --bg-body: #f8fafc;
+    }
+
+    body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); }
+
+    /* REFINED CARDS */
+    .dashboard-card {
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.03);
+        border-radius: 12px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        height: 100%;
+        transition: transform 0.2s ease;
+    }
+    
+    .dashboard-card:hover { transform: translateY(-2px); }
+
+    .card-icon-box {
+        width: 42px; height: 42px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; margin-bottom: 12px;
+    }
+
+    /* TYPOGRAPHY FIXES */
+    .card-label { 
+        font-size: 0.75rem; 
+        font-weight: 600; 
+        color: var(--slate-500); 
+        text-transform: uppercase; 
+        letter-spacing: 0.025em;
+        margin-bottom: 4px;
+    }
+    
+    .card-number { 
+        font-family: 'Poppins', sans-serif;
+        font-size: 1.5rem; 
+        font-weight: 700; 
+        color: var(--slate-900); 
+        margin: 0;
+    }
+
+    .trend-text {
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-top: 6px;
+        display: flex; align-items: center; gap: 4px;
+    }
+
+    /* ATTENTION WIDGET */
+    .attention-card { background: #fffbf5; border: 1px solid #fef3c7; }
+    .attention-header { font-size: 0.85rem; font-weight: 700; color: #92400e; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .attention-item {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 8px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.05);
+        font-size: 0.8rem; color: #92400e; font-weight: 500;
+    }
+    .badge-count { background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }
+
+    /* HEALTH SCORE */
+    .score-ring {
+        width: 80px; height: 80px; border-radius: 50%;
+        border: 6px solid #e2e8f0; border-top-color: var(--success);
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 10px; font-weight: 700; font-size: 1.2rem;
+    }
+
+    /* HELPERS */
+    .bg-light-primary { background: #eef2ff; color: var(--primary); }
+    .bg-light-secondary { background: #fdf2f8; color: #db2777; }
+    .bg-light-success { background: #ecfdf5; color: var(--success); }
+    .bg-light-info { background: #f0f9ff; color: #0284c7; }
+</style>
+
+<div class="content-body" style="padding: 2rem;">
+    <div class="container-fluid">
+        
+        <div class="row mb-4">
+            <div class="col-12"><h2 style="font-family: 'Poppins'; font-size: 1.75rem; color: var(--slate-900);">Overview</h2></div>
+        </div>
+
+        <div class="row">
+            <div class="col-xl-9 col-lg-12">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="card-icon-box bg-light-primary"><i class="fa fa-shopping-bag"></i></div>
+                            <div class="card-label">Orders</div>
+                            <div class="card-number" id="card-orders"><?=$orders?></div>
+                            <div id="card-orders-trend">
+                                <?php if(isset($orders_trend_pct)){ ?>
+                                    <?php $is_up = $orders_trend_pct >= 0; ?>
+                                    <div class="trend-text" style="color: <?= $is_up ? 'var(--success)' : 'var(--danger)' ?>;">
+                                        <i class="fa <?= $is_up ? 'fa-arrow-up' : 'fa-arrow-down' ?>"></i> 
+                                        <?= abs($orders_trend_pct) ?>% 
+                                        <span style="color: #94a3b8; font-weight: 400;">vs last week</span>
+                                    </div>
+                                <?php } else { ?>
+                                    <div class="trend-text" style="color: #94a3b8; font-weight: 400;">Activity trend</div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="card-icon-box bg-light-secondary"><i class="fa fa-line-chart"></i></div>
+                            <div class="card-label">Sales Value</div>
+                            <div class="card-number" id="card-sales" style="font-size: 1.2rem;"><?=$_cur_sym?><?=$sale_amount?></div>
+                            <div id="card-sales-trend">
+                                <?php if(isset($sales_trend_pct)){ ?>
+                                    <?php $is_up = $sales_trend_pct >= 0; ?>
+                                    <div class="trend-text" style="color: <?= $is_up ? 'var(--success)' : 'var(--danger)' ?>;">
+                                        <i class="fa <?= $is_up ? 'fa-arrow-up' : 'fa-arrow-down' ?>"></i> 
+                                        <?= abs($sales_trend_pct) ?>% 
+                                        <span style="color: #94a3b8; font-weight: 400;">vs last month</span>
+                                    </div>
+                                <?php } else { ?>
+                                    <div class="trend-text" style="color: #94a3b8; font-weight: 400;">Revenue trend</div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="card-icon-box bg-light-success"><i class="fa fa-box"></i></div>
+                            <div class="card-label">Items</div>
+                            <div class="card-number" id="card-items"><?=$count_all_product?></div>
+                            <div class="trend-text" style="color: #94a3b8; font-weight: 400;">Total Products</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="card-icon-box bg-light-info"><i class="fa fa-calendar-check-o"></i></div>
+                            <div class="card-label">Next Payout</div>
+                            <div class="card-number" id="card-payout-date" style="font-size: 1.2rem;"><?= isset($next_payout_date) ? $next_payout_date : 'Aug 15' ?></div>
+                            <div class="trend-text" id="card-payout-est" style="color: #94a3b8; font-weight: 400;">Est. <?=$_cur_sym?><?= isset($estimated_payout) ? $estimated_payout : '0.00' ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-lg-12 mb-4">
+                <div class="dashboard-card attention-card">
+                    <div class="attention-header"><i class="fa fa-exclamation-triangle"></i> Action Required</div>
+                    <div class="attention-item"><span>Unpaid Invoices</span> <span class="badge-count" id="badge-unpaid"><?= isset($unpaid_invoices_count) ? $unpaid_invoices_count : 0 ?></span></div>
+                    <div class="attention-item"><span>Out of Stock</span> <span class="badge-count" id="badge-stock" style="background:#fff7ed; color:#ea580c;"><?= isset($out_of_stock_count) ? $out_of_stock_count : 0 ?></span></div>
+                    <div class="attention-item" style="border:0;"><span>Returns Pending</span> <span class="badge-count" id="badge-returns" style="background:#f0f9ff; color:#0369a1;"><?= isset($returns_pending_count) ? $returns_pending_count : 0 ?></span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-xl-8 col-lg-12 mb-4">
+                <div class="dashboard-card" style="padding: 0;">
+                    <div style="padding: 1.25rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="font-size: 0.9rem; font-weight: 700; margin: 0;">Sales Performance</h4>
+                        <div class="btn-group">
+                            <button class="btn btn-xs btn-light" style="font-size: 10px;">Day</button>
+                            <button class="btn btn-xs btn-light active" style="font-size: 10px;">Week</button>
+                        </div>
+                    </div>
+                    <div style="padding: 1.25rem; height: 300px;"><canvas id="salesChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="col-xl-4 col-lg-12 mb-4">
+                <div class="dashboard-card text-center">
+                    <div class="card-label" style="margin-bottom: 20px;">Vendor Health Score</div>
+                    <div class="score-ring" id="health-ring" style="border-color: <?= isset($health_color) ? $health_color : 'var(--success)' ?>; color: <?= isset($health_color) ? $health_color : 'var(--success)' ?>;">
+                        <?= isset($health_score) ? $health_score : 100 ?>%
+                    </div>
+                    <div id="health-label" style="font-weight: 700; color: <?= isset($health_color) ? $health_color : 'var(--success)' ?>; font-size: 0.9rem;">
+                        <?= isset($health_label) ? $health_label : 'Excellent Performance' ?>
+                    </div>
+                    <p id="health-desc" style="font-size: 0.75rem; color: var(--slate-500); margin-top: 5px;">
+                        <?= isset($health_desc) ? $health_desc : 'Your store metrics are in the top 5%' ?>
+                    </p>
+                    <hr style="opacity: 0.1;">
+                    <div class="d-flex justify-content-between" style="font-size: 0.75rem; color: var(--slate-500);">
+                        <span>Resp. Time</span> <span style="color: var(--success); font-weight: 600;">Good</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    var ctx = document.getElementById('salesChart').getContext('2d');
+    var gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.2)');
+    gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+    window.mySalesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: <?=json_encode($day)?>,
+            datasets: [{
+                data: <?=json_encode($salevalue)?>,
+                borderColor: '#6366f1',
+                borderWidth: 2,
+                backgroundColor: gradient,
+                pointRadius: 0,
+                lineTension: 0.3
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            legend: { display: false },
+            scales: {
+                xAxes: [{ gridLines: { display: false }, ticks: { fontSize: 10, fontColor: '#94a3b8' } }],
+                yAxes: [{ gridLines: { color: '#f1f5f9' }, ticks: { fontSize: 10, fontColor: '#94a3b8', beginAtZero: true } }]
+            }
+        }
+    });
+
+    <?php if (isset($use_api) && $use_api && !empty($access_token)) { ?>
+    // Client-side API fetch to verify/retrieve live dynamic data asynchronously
+    (function() {
+        var token = '<?= $access_token ?>';
+        var apiUrl = '<?= base_url("api/v1/vendor/dashboard") ?>';
+        
+        fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Accept': 'application/json'
+            }
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(res) {
+            if (res.status === 'success' && res.data) {
+                var data = res.data;
+                // Resolve currency symbol from API response, fallback to '$'
+                var curSym = (data.currency_symbol && data.currency_symbol.trim() !== '') ? data.currency_symbol : '$';
+                
+                // 1. Update Orders Card
+                var ordersElem = document.getElementById('card-orders');
+                if (ordersElem && data.total_orders !== undefined) {
+                    ordersElem.textContent = data.total_orders;
+                }
+                var ordersTrendElem = document.getElementById('card-orders-trend');
+                if (ordersTrendElem && data.orders_trend_pct !== undefined) {
+                    var ordersTrendPct = parseInt(data.orders_trend_pct || 0);
+                    var ordersIsUp = ordersTrendPct >= 0;
+                    ordersTrendElem.style.color = ordersIsUp ? 'var(--success)' : 'var(--danger)';
+                    ordersTrendElem.innerHTML = `
+                        <div class="trend-text" style="color: ${ordersIsUp ? 'var(--success)' : 'var(--danger)'};">
+                            <i class="fa ${ordersIsUp ? 'fa-arrow-up' : 'fa-arrow-down'}"></i> 
+                            ${Math.abs(ordersTrendPct)}% 
+                            <span style="color: #94a3b8; font-weight: 400;">vs last week</span>
+                        </div>
+                    `;
+                }
+                
+                // 2. Update Sales Value Card
+                var salesElem = document.getElementById('card-sales');
+                if (salesElem && data.total_earnings !== undefined) {
+                    salesElem.textContent = curSym + parseFloat(data.total_earnings || 0).toFixed(2);
+                }
+                var salesTrendElem = document.getElementById('card-sales-trend');
+                if (salesTrendElem && data.sales_trend_pct !== undefined) {
+                    var salesTrendPct = parseInt(data.sales_trend_pct || 0);
+                    var salesIsUp = salesTrendPct >= 0;
+                    salesTrendElem.style.color = salesIsUp ? 'var(--success)' : 'var(--danger)';
+                    salesTrendElem.innerHTML = `
+                        <div class="trend-text" style="color: ${salesIsUp ? 'var(--success)' : 'var(--danger)'};">
+                            <i class="fa ${salesIsUp ? 'fa-arrow-up' : 'fa-arrow-down'}"></i> 
+                            ${Math.abs(salesTrendPct)}% 
+                            <span style="color: #94a3b8; font-weight: 400;">vs last month</span>
+                        </div>
+                    `;
+                }
+                
+                // 3. Update Items Card
+                var itemsElem = document.getElementById('card-items');
+                if (itemsElem && data.total_products !== undefined) {
+                    itemsElem.textContent = data.total_products;
+                }
+                
+                // 4. Update Next Payout Card
+                var payoutDateElem = document.getElementById('card-payout-date');
+                if (payoutDateElem && data.next_payout_date !== undefined) {
+                    payoutDateElem.textContent = data.next_payout_date;
+                }
+                var payoutEstElem = document.getElementById('card-payout-est');
+                if (payoutEstElem && data.estimated_payout !== undefined) {
+                    payoutEstElem.textContent = 'Est. ' + curSym + data.estimated_payout;
+                }
+                
+                // 5. Update Action Required Widget
+                var unpaidElem = document.getElementById('badge-unpaid');
+                if (unpaidElem && data.unpaid_invoices_count !== undefined) {
+                    unpaidElem.textContent = data.unpaid_invoices_count;
+                }
+                var stockElem = document.getElementById('badge-stock');
+                if (stockElem && data.out_of_stock_count !== undefined) {
+                    stockElem.textContent = data.out_of_stock_count;
+                }
+                var returnsElem = document.getElementById('badge-returns');
+                if (returnsElem && data.returns_pending_count !== undefined) {
+                    returnsElem.textContent = data.returns_pending_count;
+                }
+                
+                // 6. Update Vendor Health Score
+                var healthRingElem = document.getElementById('health-ring');
+                if (healthRingElem && data.health_score !== undefined) {
+                    healthRingElem.textContent = data.health_score + '%';
+                    healthRingElem.style.borderColor = data.health_color || 'var(--success)';
+                    healthRingElem.style.color = data.health_color || 'var(--success)';
+                }
+                var healthLabelElem = document.getElementById('health-label');
+                if (healthLabelElem && data.health_label !== undefined) {
+                    healthLabelElem.textContent = data.health_label;
+                    healthLabelElem.style.color = data.health_color || 'var(--success)';
+                }
+                var healthDescElem = document.getElementById('health-desc');
+                if (healthDescElem && data.health_desc !== undefined) {
+                    healthDescElem.textContent = data.health_desc;
+                }
+                
+                // 7. Update Chart.js Data and Labels
+                if (data.salevalue_past7days && data.salevalue_past7days.length) {
+                    var dayWise = {};
+                    data.salevalue_past7days.forEach(function(v) {
+                        dayWise[v.days] = parseFloat(v.sale_value || 0);
+                    });
+                    
+                    var days = [];
+                    var saleValues = [];
+                    for (var i = 6; i >= 0; i--) {
+                        var dateObj = new Date();
+                        dateObj.setDate(dateObj.getDate() - i);
+                        var dName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                        days.push(dName);
+                        saleValues.push(dayWise[dName] || 0.0);
+                    }
+                    
+                    if (window.mySalesChart) {
+                        window.mySalesChart.data.labels = days;
+                        window.mySalesChart.data.datasets[0].data = saleValues;
+                        window.mySalesChart.update();
+                    }
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error("Dashboard client-side API sync failed: ", err);
+        });
+    })();
+    <?php } ?>
+</script>

@@ -1,0 +1,18 @@
+.cart-btn single_add_to_cart_button {
+    font-size: 16px;
+    color: #fff;
+    padding: 8px 10px;
+    background: #2d88bc;
+    border-radius: 0;
+    font-weight: 500;
+    margin-left: 20px;
+	background: #ee1fa4;
+}
+
+.category_selected{
+	border:1px #E15E29 solid;
+}
+breadcrumb {
+    text-align: right;
+    float: right;
+}

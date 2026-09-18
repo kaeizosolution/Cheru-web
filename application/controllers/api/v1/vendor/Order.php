@@ -1,0 +1,776 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Order extends API_Controller
+{
+    // Cache whether currency columns exist on ec_order_items
+    private static $_items_has_currency = null;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Order_model');
+        $this->load->model('Query_model');
+        $this->load->library('session');
+    }
+
+    private function _get_bearer_token()
+    {
+        $header = $this->input->get_request_header('Authorization', true);
+        if (!$header) {
+            $header = $this->input->server('HTTP_AUTHORIZATION');
+        }
+        $header = trim((string)$header);
+        if ($header === '') {
+            return '';
+        }
+        if (stripos($header, 'Bearer ') === 0) {
+            return trim(substr($header, 7));
+        }
+        return '';
+    }
+
+    private function _require_vendor()
+    {
+        $token = $this->_get_bearer_token();
+        if ($token === '') {
+            $this->fail('unauthorized', ['Missing Authorization Bearer token'], 401);
+            return 0;
+        }
+
+        $claims = $this->verify_token($token);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'access' || ($claims['role'] ?? '') !== 'vendor') {
+            $this->fail('unauthorized', ['Invalid or expired vendor access token'], 401);
+            return 0;
+        }
+
+        $vendor_id = (int)$claims['sub'];
+        if ($vendor_id <= 0) {
+            $this->fail('unauthorized', ['Invalid token subject'], 401);
+            return 0;
+        }
+
+        // Merge session so browser session elements are not wiped
+        $vend = $this->session->userdata('vendor');
+        $vend = is_array($vend) ? $vend : [];
+        $vend['login_id'] = $vendor_id;
+        $vend['vendor_id'] = $vendor_id;
+        $vend['logged_in'] = $vend['logged_in'] ?? TRUE;
+        $this->session->set_userdata('vendor', $vend);
+        $this->session->set_userdata('type', 'vendor');
+
+        return $vendor_id;
+    }
+
+    /**
+     * Check once per request whether ec_order_items has currency_rate & currency_id columns.
+     */
+    private function _has_currency_cols()
+    {
+        if (self::$_items_has_currency !== null) {
+            return self::$_items_has_currency;
+        }
+        try {
+            $q = $this->db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ec_order_items' AND COLUMN_NAME IN ('currency_rate','currency_id')");
+            self::$_items_has_currency = ($q && $q->num_rows() >= 2);
+        } catch (Exception $e) {
+            self::$_items_has_currency = false;
+        }
+        return self::$_items_has_currency;
+    }
+
+    private function _get_display_currency()
+    {
+        $display_cur_id = (int)$this->input->get_post('cur') ?: (isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0);
+        $all_currencies = $this->db
+            ->select('currency_id, symbol, iso_code, rate, basic')
+            ->from('ec_currency')
+            ->where('status', '1')
+            ->get()->result();
+
+        $display_rate   = 1.0;
+        $display_symbol = '$';
+        foreach ($all_currencies as $c) {
+            if ((int)$c->basic === 1) {
+                $display_rate   = (float)$c->rate ?: 1.0;
+                $display_symbol = html_entity_decode($c->symbol);
+                break;
+            }
+        }
+        if ($display_cur_id > 0) {
+            foreach ($all_currencies as $c) {
+                if ((int)$c->currency_id === $display_cur_id) {
+                    $display_rate   = (float)$c->rate ?: 1.0;
+                    $display_symbol = html_entity_decode($c->symbol);
+                    break;
+                }
+            }
+        }
+        return [$display_rate, $display_symbol];
+    }
+
+    public function order_counts()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        list($display_rate, $display_symbol) = $this->_get_display_currency();
+
+        $counts = $this->Order_model->item_count_vendor_wise(array('vendor_id' => $vendor_id));
+
+        $has_currency = $this->_has_currency_cols();
+        if ($has_currency) {
+            $amount_row = $this->db
+                ->select("ROUND(SUM(subtotal / IFNULL(currency_rate, 1)) * {$display_rate}, 2) AS total", false)
+                ->from('ec_order_items')
+                ->where('login_id', $vendor_id)
+                ->get()->row();
+        } else {
+            $amount_row = $this->db
+                ->select("ROUND(SUM(subtotal) * {$display_rate}, 2) AS total", false)
+                ->from('ec_order_items')
+                ->where('login_id', $vendor_id)
+                ->get()->row();
+        }
+        $total_amount_converted = (float)($amount_row->total ?? 0.0);
+
+        $data = array(
+            'total_order' => (int)($counts['total_items'] ?? 0),
+            'delivered_order' => (int)($counts['delivered'] ?? 0),
+            'total_amount' => $total_amount_converted,
+            'currency_symbol' => $display_symbol
+        );
+
+        return $this->output
+            ->set_status_header(200)
+            ->set_output(json_encode([
+                "status" => 1,
+                "message" => "Success",
+                "data" => $data
+            ]));
+    }
+
+    public function order_list()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        list($display_rate, $display_symbol) = $this->_get_display_currency();
+
+        // Fetch ALL orders for this vendor in a single query (no status filter)
+        $order_list = $this->Order_model->order_list(array(
+            'post_data' => array('status' => ''),
+            'vendor_id' => $vendor_id
+        ));
+
+        // Status code buckets
+        // pending    => 1
+        // inprogress => 2
+        // shipped    => 3
+        // completed  => 10
+        // cancelled  => 5, 17
+        $grouped = array(
+            'pending'    => array(),
+            'inprogress' => array(),
+            'shipped'    => array(),
+            'completed'  => array(),
+            'cancelled'  => array(),
+        );
+
+        if ($order_list) {
+            foreach ($order_list as $row_wise) {
+                // Date format
+                $d_date = isset($row_wise->date_added) ? $row_wise->date_added : date('Y-m-d H:i:s');
+                $row_wise->date_created_modify = date('d-M-Y H:i', strtotime($d_date));
+
+                // Currency conversion for display
+                $item_rate  = (float)($row_wise->currency_rate ?? 1.0) ?: 1.0;
+                $base_amount = (float)($row_wise->total_amount ?? 0) / $item_rate;
+                $row_wise->total_amount    = round($base_amount * $display_rate, 2);
+                $row_wise->total           = $row_wise->total_amount;
+                $row_wise->currency_symbol = $display_symbol;
+
+                // Ensure order_uid is populated
+                if (!isset($row_wise->order_uid) || empty($row_wise->order_uid)) {
+                    $row_wise->order_uid = isset($row_wise->order_id) ? $row_wise->order_id : $row_wise->id;
+                }
+
+                // Always ensure order_id (ec_orders.id) is explicitly set and an integer
+                if (!isset($row_wise->order_id) || !$row_wise->order_id) {
+                    $row_wise->order_id = (int)$row_wise->id;
+                } else {
+                    $row_wise->order_id = (int)$row_wise->order_id;
+                }
+
+                $row_wise->order_item_uid = $row_wise->id;
+
+                // product_obj
+                $product_data = new stdClass();
+                $product_data->post_title = (isset($row_wise->product_name) && $row_wise->product_name)
+                    ? $row_wise->product_name
+                    : 'Order #' . $row_wise->order_uid;
+
+                $row_wise->product_obj  = $product_data;
+                $row_wise->orderstatus  = $row_wise->status;
+
+                // Bucket by numeric status
+                $st = (int)($row_wise->status ?? 0);
+                if ($st === 1) {
+                    $grouped['pending'][]    = $row_wise;
+                } elseif ($st === 2) {
+                    $grouped['inprogress'][] = $row_wise;
+                } elseif ($st === 3) {
+                    $grouped['shipped'][]    = $row_wise;
+                } elseif ($st === 10) {
+                    $grouped['completed'][]  = $row_wise;
+                } elseif ($st === 5 || $st === 17) {
+                    $grouped['cancelled'][]  = $row_wise;
+                } else {
+                    // Fallback: treat unknown statuses as pending
+                    $grouped['pending'][]    = $row_wise;
+                }
+            }
+        }
+
+        return $this->output
+            ->set_status_header(200)
+            ->set_output(json_encode([
+                "status"  => 1,
+                "message" => "Success",
+                "data"    => $grouped
+            ]));
+    }
+
+
+
+    public function update_order_item_status()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $item_id = isset($payload['item_id']) ? (int)$payload['item_id'] : 0;
+        $order_type = isset($payload['order_type']) ? (string)$payload['order_type'] : '';
+
+        if (!$item_id) {
+            return $this->output
+                ->set_status_header(400)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Invalid item ID",
+                    "data" => null
+                ]));
+        }
+
+        // Ensure item belongs to this vendor
+        $item = $this->db->from('ec_order_items')
+            ->where('id', $item_id)
+            ->where('login_id', $vendor_id)
+            ->limit(1)->get()->row();
+        if (!$item) {
+            return $this->output
+                ->set_status_header(404)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Item not found or access denied",
+                    "data" => null
+                ]));
+        }
+
+        $status = null;
+        $msg = 'Updated';
+        if ($order_type === 'in_process') {
+            $status = 2;
+            $msg = 'Updated and now move in In Process Tab';
+        } elseif ($order_type === 'shipped') {
+            $status = 3;
+            $msg = 'Updated and now move in Shipped Tab';
+        } elseif ($order_type === 'delivered') {
+            $status = 10;
+            $msg = 'Updated and now move in In Completed Tab';
+        }
+
+        if ($status === null) {
+            return $this->output
+                ->set_status_header(400)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Invalid action type",
+                    "data" => null
+                ]));
+        }
+
+        $updated = $this->Query_model->update_data('ec_order_items', array('status' => (string)$status), array('id' => $item_id, 'login_id' => $vendor_id));
+        if ($updated) {
+            $this->_sync_parent_order_status((int)($item->order_id ?? 0));
+            return $this->output
+                ->set_status_header(200)
+                ->set_output(json_encode([
+                    "status" => 1,
+                    "message" => $msg,
+                    "data" => array('item_id' => $item_id)
+                ]));
+        }
+
+        return $this->output
+            ->set_status_header(200)
+            ->set_output(json_encode([
+                "status" => 0,
+                "message" => "There is no update",
+                "data" => null
+            ]));
+    }
+
+    public function cancel_order()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $order_id = isset($payload['order_id']) ? (int)$payload['order_id'] : 0;
+        $item_id = isset($payload['item_id']) ? (int)$payload['item_id'] : 0;
+        $reason = isset($payload['reason']) ? (string)$payload['reason'] : '';
+        $comment = isset($payload['comment']) ? (string)$payload['comment'] : '';
+
+        if (!$order_id) {
+            return $this->output
+                ->set_status_header(400)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Invalid order ID",
+                    "data" => null
+                ]));
+        }
+        if (empty($reason)) {
+            return $this->output
+                ->set_status_header(400)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Reason is required",
+                    "data" => null
+                ]));
+        }
+
+        $this->db->trans_begin();
+        $updated_items = 0;
+        if ($item_id > 0) {
+            $item = $this->db->from('ec_order_items')
+                ->where('id', $item_id)
+                ->where('order_id', $order_id)
+                ->where('login_id', $vendor_id)
+                ->limit(1)->get()->row();
+            if (!$item) {
+                $this->db->trans_rollback();
+                return $this->output
+                    ->set_status_header(404)
+                    ->set_output(json_encode([
+                        "status" => 0,
+                        "message" => "Item not found or access denied",
+                        "data" => null
+                    ]));
+            }
+            if ((int)($item->status ?? 0) !== 1) {
+                $this->db->trans_rollback();
+                return $this->output
+                    ->set_status_header(400)
+                    ->set_output(json_encode([
+                        "status" => 0,
+                        "message" => "Vendor can only cancel pending items",
+                        "data" => null
+                    ]));
+            }
+
+            $itemUpdate = array('status' => 17);
+            if ($this->db->field_exists('cancelled_by', 'ec_order_items')) {
+                $itemUpdate['cancelled_by'] = 'vendor';
+            }
+            $updated_items = $this->Query_model->update_data('ec_order_items', $itemUpdate, array('id' => $item_id, 'login_id' => $vendor_id));
+        } else {
+            $vendor_items = $this->db->from('ec_order_items')
+                ->where('order_id', $order_id)
+                ->where('login_id', $vendor_id)
+                ->get()->result();
+            foreach ($vendor_items as $vi) {
+                $vi_st = (int)($vi->status ?? 0);
+                if ($vi_st !== 5 && $vi_st !== 17 && $vi_st !== 1) {
+                    $this->db->trans_rollback();
+                    return $this->output
+                        ->set_status_header(400)
+                        ->set_output(json_encode([
+                            "status" => 0,
+                            "message" => "Vendor can only cancel pending items",
+                            "data" => null
+                        ]));
+                }
+            }
+
+            $itemUpdate = array('status' => 17);
+            if ($this->db->field_exists('cancelled_by', 'ec_order_items')) {
+                $itemUpdate['cancelled_by'] = 'vendor';
+            }
+            $updated_items = $this->Query_model->update_data('ec_order_items', $itemUpdate, array('order_id' => $order_id, 'login_id' => $vendor_id));
+        }
+
+        // Persist comment
+        $reason = trim($reason);
+        $comment = trim($comment);
+        if ($reason !== '' || $comment !== '') {
+            $existing = $this->db->select('comment')->from('ec_orders')->where('id', $order_id)->get()->row();
+            $prev = $existing && isset($existing->comment) ? (string)$existing->comment : '';
+            $stamp = date('Y-m-d H:i:s');
+            $line = "[Vendor #".$vendor_id." Cancel @ ".$stamp."] Reason: ".$reason;
+            if ($comment !== '') {
+                $line .= " | Comment: ".$comment;
+            }
+            $new_comment = $prev ? ($prev."\n".$line) : $line;
+            $this->Query_model->update_data('ec_orders', array('comment' => $new_comment), array('id' => $order_id));
+        }
+
+        // Sync parent order status after cancellation
+        $this->db->from('ec_order_items');
+        $this->db->where('order_id', $order_id);
+        $items = $this->db->get()->result();
+        if ($items) {
+            $all_cancelled = true;
+            foreach ($items as $it) {
+                $st = (int)($it->status ?? 0);
+                if (!in_array($st, array(5,17), true)) {
+                    $all_cancelled = false;
+                    break;
+                }
+            }
+            if ($all_cancelled) {
+                $updateOrder = array('status' => 'cancelled');
+                if ($this->db->field_exists('cancelled_by', 'ec_orders')) {
+                    $updateOrder['cancelled_by'] = 'vendor';
+                }
+                $this->Query_model->update_data('ec_orders', $updateOrder, array('id' => $order_id));
+            } else {
+                $this->_sync_parent_order_status($order_id);
+            }
+        }
+
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            return $this->output
+                ->set_status_header(500)
+                ->set_output(json_encode([
+                    "status" => 0,
+                    "message" => "Cancel failed",
+                    "data" => null
+                ]));
+        } else {
+            $this->db->trans_commit();
+            return $this->output
+                ->set_status_header(200)
+                ->set_output(json_encode([
+                    "status" => 1,
+                    "message" => "Cancelled",
+                    "data" => array('updated_items' => $updated_items)
+                ]));
+        }
+    }
+
+    private function _sync_parent_order_status($order_id)
+    {
+        $order_id = (int)$order_id;
+        if (!$order_id) {
+            return;
+        }
+
+        $this->db->from('ec_order_items');
+        $this->db->where('order_id', $order_id);
+        $items = $this->db->get()->result();
+        if (!$items) {
+            return;
+        }
+
+        $active_items = [];
+        $total_items = 0;
+        foreach ($items as $it) {
+            $st = (int)($it->status ?? 0);
+            $total_items++;
+            if ($st !== 5 && $st !== 17) {
+                $active_items[] = $st;
+            }
+        }
+
+        if ($total_items > 0 && empty($active_items)) {
+            $new_status = 'cancelled';
+        } else {
+            $has_pending = false;
+            $has_in_process = false;
+            $has_shipped = false;
+            $all_delivered = true;
+
+            foreach ($active_items as $st) {
+                if ($st === 10) {
+                    // delivered
+                } elseif ($st === 3) {
+                    $has_shipped = true;
+                    $all_delivered = false;
+                } elseif ($st === 2) {
+                    $has_in_process = true;
+                    $all_delivered = false;
+                } else {
+                    $has_pending = true;
+                    $all_delivered = false;
+                }
+            }
+
+            if ($has_pending) {
+                $new_status = 'pending';
+            } elseif ($has_in_process) {
+                $new_status = 'confirmed';
+            } elseif ($has_shipped) {
+                $new_status = 'shipped';
+            } elseif ($all_delivered) {
+                $new_status = 'delivered';
+            } else {
+                $new_status = 'pending';
+            }
+        }
+
+        $this->Query_model->update_data('ec_orders', ['status' => $new_status], ['id' => $order_id]);
+    }
+
+
+    public function cancel_reasons()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        $reasons = [
+            "Product is not available",
+            "Product is out of stock",
+            "Incorrect pricing",
+            "Unable to ship to customer location",
+            "Customer requested cancellation",
+            "Other"
+        ];
+
+        return $this->output
+            ->set_status_header(200)
+            ->set_output(json_encode([
+                "status" => 1,
+                "message" => "Success",
+                "data" => $reasons
+            ]));
+    }
+
+    // ── Vendor Order Detail API ───────────────────────────────────────────
+    public function order_detail()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        $order_id  = trim((string)$this->input->post('order_id'));
+        $order_uid = trim((string)$this->input->post('order_uid'));
+        if (!$order_id && !$order_uid) {
+            return $this->output->set_status_header(400)->set_output(json_encode([
+                'status' => 0, 'message' => 'order_id or order_uid is required', 'data' => null
+            ]));
+        }
+
+        // Fetch order header
+        $this->db->from('ec_orders');
+        if ($order_id !== '') {
+            $this->db->where('id', (int)$order_id);
+        } else {
+            if (is_numeric($order_uid)) {
+                $this->db->group_start()
+                    ->where('id', (int)$order_uid)
+                    ->or_where('order_number', $order_uid)
+                    ->group_end();
+            } else {
+                $this->db->where('order_number', $order_uid);
+            }
+        }
+        $order = $this->db->limit(1)->get()->row();
+        if (!$order) {
+            return $this->output->set_status_header(404)->set_output(json_encode([
+                'status' => 0, 'message' => 'Order not found', 'data' => null
+            ]));
+        }
+
+        // Fetch vendor's items for this order only
+        $items = $this->db
+            ->select('eop.*, eop.id as order_item_id, eop.qty as quantity')
+            ->from('ec_order_items as eop')
+            ->where('eop.order_id', (int)$order->id)
+            ->where('eop.login_id', $vendor_id)
+            ->order_by('eop.id', 'ASC')
+            ->get()->result();
+        if (!$items) {
+            return $this->output->set_status_header(200)->set_output(json_encode([
+                'status' => 0, 'message' => 'No items found for this vendor in this order', 'data' => null
+            ]));
+        }
+
+        $status_labels = [
+            1 => 'Pending', 2 => 'In Process', 3 => 'Shipped',
+            10 => 'Delivered', 5 => 'Cancelled by Customer', 17 => 'Cancelled by Vendor'
+        ];
+
+        list($display_rate, $display_symbol) = $this->_get_display_currency();
+
+        // Build items array
+        $items_data = [];
+        foreach ($items as $item) {
+            $product_img  = '';
+            $product_name = !empty($item->product_name) ? $item->product_name : ('Item #' . $item->id);
+            $product_url  = '';
+            $attributes   = [];
+
+            if (!empty($item->product_id)) {
+                $product = $this->db->from('products')
+                    ->where('id', (int)$item->product_id)
+                    ->limit(1)->get()->row();
+                if ($product) {
+                    if (!empty($product->name))      $product_name = $product->name;
+                    $slug = !empty($product->slug) ? $product->slug : (!empty($product->post_slug) ? $product->post_slug : '');
+                    if ($slug) $product_url = base_url('product/' . $slug);
+
+                    // Primary: images JSON array
+                    if (!empty($product->images)) {
+                        $imgs = json_decode($product->images, true);
+                        if (is_array($imgs) && !empty($imgs[0])) {
+                            $product_img = (string)$imgs[0];
+                        }
+                    }
+                }
+
+                // Variation image fallback
+                if (!$product_img) {
+                    $variation_id = 0;
+                    if (!empty($item->options)) {
+                        $opt = json_decode($item->options, true);
+                        if (is_array($opt)) {
+                            $variation_id = (int)($opt['variation_id'] ?? $opt['variationId'] ?? 0);
+                        }
+                    }
+                    $img_row = null;
+                    if ($variation_id > 0) {
+                        $img_row = $this->db->select('image_path')
+                            ->from('product_variation_images')
+                            ->where('variation_id', $variation_id)
+                            ->order_by('id', 'ASC')->limit(1)->get()->row();
+                    }
+                    if (!$img_row) {
+                        $img_row = $this->db->select('img.image_path')
+                            ->from('product_variations v')
+                            ->join('product_variation_images img', 'img.variation_id = v.id', 'inner')
+                            ->where('v.product_id', (int)$item->product_id)
+                            ->order_by('img.id', 'ASC')->limit(1)->get()->row();
+                    }
+                    if ($img_row && !empty($img_row->image_path)) {
+                        $p = ltrim($img_row->image_path, '/\\');
+                        $product_img = preg_match('#^https?://#i', $p) ? $p : base_url('uploads/products/' . $p);
+                    }
+                }
+
+                // Normalize image URL
+                if ($product_img && !preg_match('#^https?://#i', $product_img)) {
+                    $p = ltrim($product_img, '/\\');
+                    $product_img = (strpos($p, 'uploads/') === 0 || strpos($p, 'assets/') === 0)
+                        ? base_url($p) : base_url('uploads/products/' . $p);
+                }
+            }
+
+            // Attributes from options
+            if (!empty($item->options)) {
+                $opt = json_decode($item->options, true);
+                if (is_array($opt)) {
+                    $skip = ['variation_id', 'variationid', 'qty', 'price', 'product_id'];
+                    foreach ($opt as $k => $v) {
+                        if (in_array(strtolower($k), $skip) || !is_scalar($v)) continue;
+                        $attributes[] = ucfirst($k) . ': ' . $v;
+                    }
+                }
+            }
+
+            // Currency
+            $item_rate       = (float)($item->currency_rate ?? 1.0) ?: 1.0;
+            $unit_price_base = (float)($item->unit_price ?? $item->price ?? 0) / $item_rate;
+            $subtotal_base   = (float)($item->subtotal ?? 0) / $item_rate;
+
+            $items_data[] = [
+                'id'              => (int)$item->id,
+                'product_name'    => $product_name,
+                'product_img'     => $product_img ?: base_url('assets/images/default_images/product.jpg'),
+                'product_url'     => $product_url,
+                'attributes'      => $attributes,
+                'status'          => (int)($item->status ?? 1),
+                'status_label'    => $status_labels[(int)($item->status ?? 1)] ?? 'Pending',
+                'unit_price'      => round($unit_price_base * $display_rate, 2),
+                'quantity'        => (int)($item->quantity ?? $item->qty ?? 1),
+                'subtotal'        => round($subtotal_base * $display_rate, 2),
+                'currency_symbol' => $display_symbol,
+            ];
+        }
+
+        // Shipping address
+        $shipping_data = null;
+        if (!empty($order->address_id)) {
+            $ship = $this->db->from('ec_shipping_address')
+                ->where('shipping_address_id', (int)$order->address_id)
+                ->limit(1)->get()->row();
+            if ($ship) {
+                $shipping_data = [
+                    'fullname' => $ship->fullname ?? '',
+                    'mobile'   => $ship->mobile   ?? '',
+                    'address'  => $ship->address_1 ?? $ship->address ?? '',
+                    'city'     => $ship->city      ?? $ship->street  ?? '',
+                    'postcode' => $ship->postcode  ?? '',
+                    'country'  => $ship->country   ?? '',
+                ];
+            }
+        }
+
+        // Order totals
+        $order_data = [
+            'order_id'       => (int)($order->id ?? 0),
+            'order_uid'      => $order->order_number ?? $order_uid,
+            'date'           => !empty($order->date_added) ? date('d M Y, h:i A', strtotime($order->date_added)) : '',
+            'payment_method' => $order->payment_method ?? '',
+            'payment_status' => $order->payment_status ?? '',
+            'status'         => $order->status         ?? '',
+            'subtotal'       => round((float)($order->total_amount   ?? 0) * $display_rate, 2),
+            'shipping'       => round((float)($order->shipping_amount ?? 0) * $display_rate, 2),
+            'tax'            => round((float)($order->tax_amount      ?? 0) * $display_rate, 2),
+            'discount'       => round((float)($order->discount_amount ?? 0) * $display_rate, 2),
+            'total'          => round((float)($order->final_amount    ?? 0) * $display_rate, 2),
+            'coupon_code'    => $order->coupon_code    ?? '',
+            'currency_symbol' => $display_symbol,
+        ];
+
+        return $this->output->set_status_header(200)->set_output(json_encode([
+            'status'  => 1,
+            'message' => 'Success',
+            'data'    => [
+                'order'    => $order_data,
+                'items'    => $items_data,
+                'shipping' => $shipping_data,
+            ]
+        ]));
+    }
+}
+
+
+

@@ -1,0 +1,267 @@
+<div class="page-wrapper">
+    <div class="container-fluid p-0">
+        <div class="row m-0">
+            
+            <div class="col-12 col-lg-5 col-xl-5 p-0 auth-left-banner d-none d-lg-block">
+                <div class="banner-overlay">
+                    <div class="brand-center">
+                        <img src="/assets/vendor/images/cheru-removebg-preview.png" alt="Logo" class="login-logo mb-4">
+                        <h3 class="text-white font-weight-bold">Join Our Marketplace</h3>
+                        <p class="text-white-50">Create your vendor account and start selling today.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-7 col-xl-7 p-0 auth-right-form">
+                <div class="login-card-wrapper">
+                    
+                    <div class="text-center d-lg-none mb-4">
+                        <img src="/assets/vendor/images/logo-full.png" alt="Logo" class="login-logo-mobile">
+                    </div>
+
+                    
+
+                    <div class="alert alert-danger custom-alert" style="display:none;" id="loginForm_error"></div>
+                    <div class="alert alert-success custom-alert" style="display:none;" id="loginForm_success"></div>
+                    
+                    <?php if ((isset($message) && $message['error']!='') || validation_errors()!='') { ?>
+                    <div class="alert alert-danger custom-alert">
+                        <?= validation_errors(); if($message['error']!='') echo $message['error']; ?>
+                    </div>
+                    <?php } ?>
+
+                    <?php echo form_open_multipart("api/v1/vendor/register", array('id' => 'loginForm1', 'autocomplete' => 'off', 'method' => 'POST', 'class' => 'theme-form')) ?>
+                        
+                        <div class="row">
+                            <div class="col-12 mb-3">
+                                <h3 class="font-weight-bold text-dark" style="margin:0;">Vendor Registration</h3>
+                                <p class="text-muted" style="margin:0;">Please fill the form below to create your vendor account.</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                                <input type="text" name="name" id="name" class="form-control" placeholder="Enter full name" required>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Mobile No <span class="text-danger">*</span></label>
+                                <input type="text" name="mobile" id="mobile" class="form-control" placeholder="Mobile Number" maxlength="10" onkeypress="return isNumberKey(event);" required>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email <span class="text-danger">*</span></label>
+                                <input type="email" name="email" id="email" class="form-control" placeholder="Enter Email" required>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Password <span class="text-danger">*</span></label>
+                                <input type="password" name="password" class="form-control" placeholder="Enter Password" minlength="3" required>
+                            </div>
+                            
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Store Name <span class="text-danger">*</span></label>
+                                <input type="text" name="store_name" id="store_name" class="form-control" placeholder="Enter Store Name" required>
+                            </div>
+
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Address <span class="text-danger">*</span></label>
+                                <input type="text" name="address" id="locality" class="form-control" placeholder="Enter Address" required>
+                                <input type="hidden" name="latitude" id="latitude">
+                                <input type="hidden" name="longitude" id="longitude">
+                                <input type="hidden" name="place_id" id="location_id">
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Flat No.</label>
+                                <input type="text" name="location" class="form-control" placeholder="Flat No" required>
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">City</label>
+                                <input type="text" name="city" id="city" class="form-control" placeholder="City" required>
+                            </div>
+
+                            <div class="col-md-3 mb-4">
+                                <label class="form-label">Zip Code</label>
+                                <input type="text" name="zip" id="zip" class="form-control" placeholder="Zip" maxlength="6" required>
+                            </div>
+
+                            <div class="col-md-3 mb-4">
+                                <label class="form-label">Country <span class="text-danger">*</span></label>
+                                <input type="text" name="country" id="country" class="form-control" placeholder="Country" required>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Upload Document Front <span class="text-danger">*</span></label>
+                                <input type="file" name="document_front" id="document_front" class="form-control" required>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Upload Document Back <span class="text-danger">*</span></label>
+                                <input type="file" name="document_back" id="document_back" class="form-control" required>
+                            </div>
+                            
+                            <input type="hidden" name="api" value="1">
+                            <input type="hidden" name="role" value="2">
+
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary btn-block btn-login">
+                                    Sign Up <i class="fa fa-user-plus ml-2"></i>
+                                </button>
+                            </div>
+
+                            <div class="col-12 mt-3 text-center signin-link-wrap">
+                                <p class="text-muted mb-0">Already have an account? <a href="/vendor/auth/login" class="text-primary font-weight-bold">Sign in</a></p>
+                            </div>
+                        </div>
+
+                    <?php echo form_close() ?>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #6366f1;
+        --dark: #1e293b;
+        --border-color: #e2e8f0;
+    }
+
+    body, html { height: 100%; font-family: 'Poppins', sans-serif; background: #fff; margin: 0; }
+    
+    .page-wrapper { min-height: 100vh; display: flex; align-items: stretch; }
+    .container-fluid { width: 100%; padding: 0; }
+    .row { height: 100vh; width: 100%; margin: 0; }
+
+    /* --- LEFT BANNER --- */
+    .auth-left-banner {
+        background: url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80') center center/cover no-repeat;
+        position: relative;
+        height: 100vh; /* Ensure full height */
+    }
+    
+    .banner-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(135deg, rgba(25, 28, 77, 0.9), rgba(99, 102, 241, 0.8));
+        display: flex; justify-content: center; align-items: center;
+    }
+
+    .brand-center { text-align: center; color: #fff; }
+    
+    .login-logo {
+        height: 170px; width: auto;
+        filter: brightness(0) invert(1);
+        animation: bounceIn 1s ease-out;
+        display: block; margin: 0 auto 20px;
+    }
+    
+    .login-logo-mobile { height: 60px; width: auto; }
+
+    @keyframes bounceIn {
+        0% { opacity: 0; transform: scale(0.3); }
+        50% { opacity: 1; transform: scale(1.05); }
+        70% { transform: scale(0.9); }
+        100% { transform: scale(1); }
+    }
+
+    /* --- RIGHT FORM SECTION --- */
+    .auth-right-form {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        height: 100vh;
+        overflow-y: auto; /* Enable scroll for long form */
+    }
+
+    .login-card-wrapper {
+        width: 100%;
+        max-width: 600px; /* Wider for two columns */
+        padding: 40px;
+    }
+
+    .login-header h2 { font-size: 28px; margin-bottom: 10px; color: var(--dark); }
+    .login-header p { font-size: 14px; }
+
+    /* --- INPUT FIELDS --- */
+    .form-label { font-weight: 600; color: #475569; font-size: 13px; margin-bottom: 8px; }
+    
+    .form-control {
+        height: 45px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 14px;
+        padding-left: 15px;
+    }
+    
+    .form-control:focus {
+        border-color: var(--primary);
+        box-shadow: none;
+    }
+
+    /* --- BUTTON --- */
+    .btn-login {
+        background-color: var(--primary);
+        border: none;
+        height: 48px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        transition: all 0.3s;
+    }
+    .btn-login:hover {
+        background-color: #4f46e5;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(99, 102, 241, 0.4);
+    }
+    
+    .custom-alert { border-radius: 8px; font-size: 13px; margin-bottom: 20px; }
+    .signin-link-wrap { position: relative; z-index: 5; }
+    .signin-link-wrap a { position: relative; z-index: 6; }
+</style>
+
+<script>
+// AJAX Submit Logic
+$("#loginForm1").on('submit', function(e) {
+    e.preventDefault();
+    if(typeof $(this).parsley === "function" && !$(this).parsley().isValid()) {
+        return false;
+    }
+    var loginForm = $(this);
+	var formData = new FormData(this);
+    $.ajax({
+        url: loginForm.attr('action'),
+        type: 'post',
+        data: formData,
+		contentType: false,
+		processData: false,
+        success: function(response){
+            var res = (typeof response === 'string') ? JSON.parse(response) : response;
+            if(res.status == '1') {
+                $('#loginForm_error').hide();
+                $('#loginForm_success').show().html('<i class="fa fa-check-circle mr-2"></i>' + res.message);
+                
+                // Add a visual scroll to the message or highlight it
+                $('html, body').animate({ scrollTop: $(".login-card-wrapper").offset().top }, 500);
+
+				var redirectUrl = res.redirect_url ? res.redirect_url : '/vendor/profile';
+                setTimeout(function(){ window.location.href = redirectUrl; }, 3000); // Increased delay
+            } else {
+                $('#loginForm_success').hide();
+                var errMsg = (res.errors && res.errors.length > 0) ? res.errors[0] : res.message;
+                $('#loginForm_error').show().html('<i class="fa fa-exclamation-triangle mr-2"></i>' + errMsg);
+                $('html, body').animate({ scrollTop: $(".login-card-wrapper").offset().top }, 500);
+            }
+        }
+    });
+});
+
+function isNumberKey(evt) {
+    var charCode = (evt.which) ? evt.which : event.keyCode;
+    if (charCode > 31 && (charCode < 48 || charCode > 57)) return false;
+    return true;
+}
+</script>

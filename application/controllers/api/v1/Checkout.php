@@ -1,0 +1,1035 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Checkout extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Cart_model');
+        $this->load->model('Payment_model');
+        $this->load->library('session');
+    }
+
+	public function step()
+	{
+		if (!$this->require_post()) {
+			return;
+		}
+
+		$customer_id = $this->_require_customer();
+		if (!$customer_id) {
+			return;
+		}
+
+		$payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+		$step = trim((string)($payload['step'] ?? ''));
+		$allowed = ['address', 'payment', 'confirm'];
+		if (!in_array($step, $allowed, true)) {
+			return $this->fail('validation_error', ['Invalid step'], 422);
+		}
+
+		$this->session->set_userdata('checkout_step', $step);
+		return $this->ok(['step' => $step], 'Step updated');
+	}
+
+	public function select_address()
+	{
+		if (!$this->require_post()) {
+			return;
+		}
+
+		$customer_id = $this->_require_customer();
+		if (!$customer_id) {
+			return;
+		}
+
+		$payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+		$address_id = (int)($payload['address_id'] ?? ($payload['shipping_address_id'] ?? 0));
+		if ($address_id <= 0) {
+			return $this->fail('validation_error', ['address_id is required'], 422);
+		}
+
+		$address = $this->Query_model->get_data_obj('ec_shipping_address', [
+			'shipping_address_id' => $address_id,
+			'customer_id' => (int)$customer_id,
+			'status' => '1'
+		]);
+		if (!$address) {
+			return $this->fail('not_found', ['Address not found'], 404);
+		}
+
+		$this->session->set_userdata('selected_address', $address_id);
+		return $this->ok(['address_id' => $address_id], 'Address selected');
+	}
+
+	private function _respond_simple($ok, $message, $extra = [], $http_code = 200)
+	{
+		$payload = array_merge([
+			'status' => (bool)$ok,
+			'message' => (string)$message,
+		], is_array($extra) ? $extra : []);
+		return $this->output
+			->set_status_header((int)$http_code)
+			->set_output(json_encode($payload));
+	}
+
+	public function index()
+	{
+		if (strtoupper((string)$this->input->method()) !== 'GET') {
+			return $this->fail('method_not_allowed', ['Only GET is allowed'], 405);
+		}
+
+		$customer_id = $this->_require_customer();
+		if (!$customer_id) {
+			return;
+		}
+
+		$cart_info = $this->Cart_model->checkout_items();
+		$items = $cart_info['cart_items'] ?? [];
+		$summary = $cart_info['cart_summary'] ?? (object)[];
+
+		$cur_rate = 1.0;
+		$cc_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+		if ($cc_id > 0) {
+			$cur = $this->db
+				->select('currency_id, symbol, rate')
+				->from('ec_currency')
+				->where('currency_id', $cc_id)
+				->where('status', '1')
+				->get()->row();
+			if ($cur && (float)$cur->rate > 0) {
+				$cur_rate = (float)$cur->rate;
+			}
+		}
+
+		$out_items = [];
+		if (is_array($items)) {
+			foreach ($items as $it) {
+				if (!is_object($it) && !is_array($it)) {
+					continue;
+				}
+				$row = (array)$it;
+				$qty = (int)($row['quantity'] ?? 0);
+				$price = (float)($row['sale_price'] ?? $row['regular_price'] ?? 0);
+				$subtotal = (float)($row['total'] ?? ($qty * $price));
+				$out_items[] = [
+					'product_id' => (int)($row['product_id'] ?? $row['id'] ?? 0),
+					'variation_id' => (int)($row['variation_id'] ?? 0),
+					'product_name' => (string)($row['post_title'] ?? ''),
+					'image_url' => (string)($row['image_url'] ?? ''),
+					'quantity' => $qty,
+					'price' => $price * $cur_rate,
+					'subtotal' => $subtotal * $cur_rate,
+					'attributes' => isset($row['attributes']) ? (string)$row['attributes'] : '',
+					'attribute_item_id' => isset($row['attribute_item_id']) ? (string)$row['attribute_item_id'] : '',
+				];
+			}
+		}
+
+		$subtotal = (float)($summary->subtotal ?? 0);
+		$shipping = (float)($summary->shipping ?? 0);
+		$grand_total = (float)($summary->grand_total ?? ($subtotal + $shipping));
+
+		$coupon = $this->session->userdata('api_coupon');
+		$coupon_discount = 0;
+		$coupon_code = null;
+		if (is_array($coupon) && !empty($coupon['code'])) {
+			$coupon_code = (string)$coupon['code'];
+			$calc_discount = $this->_calculate_coupon_discount($coupon_code, $grand_total, $items);
+			if ($calc_discount !== null) {
+				$coupon_discount = (float)$calc_discount;
+				$this->session->set_userdata('api_coupon', [
+					'code' => $coupon_code,
+					'discount' => $coupon_discount,
+				]);
+			} else {
+				$this->session->unset_userdata('api_coupon');
+				$coupon_code = null;
+				$coupon_discount = 0;
+			}
+		}
+		$final_total = max(0, $grand_total - $coupon_discount);
+
+		return $this->ok([
+			'customer_id' => (int)$customer_id,
+			'cart_items' => $out_items,
+			'cart_summary' => [
+				'subtotal' => $subtotal * $cur_rate,
+				'shipping' => $shipping * $cur_rate,
+				'grand_total' => $grand_total * $cur_rate,
+				'total_qty' => (int)($summary->total_qty ?? 0),
+				'coupon' => $coupon_code ? [
+					'coupon_code' => $coupon_code,
+					'discount' => $coupon_discount * $cur_rate,
+					'final_total' => $final_total * $cur_rate,
+				] : null,
+				'final_total' => $final_total * $cur_rate,
+			],
+		], 'success');
+	}
+
+    private function _get_bearer_token()
+    {
+        $header = $this->input->get_request_header('Authorization', true);
+        if (!$header) {
+            $header = $this->input->server('HTTP_AUTHORIZATION');
+        }
+        $header = trim((string)$header);
+        if ($header === '') {
+            return '';
+        }
+        if (stripos($header, 'Bearer ') === 0) {
+            return trim(substr($header, 7));
+        }
+        return '';
+    }
+
+    private function _require_customer()
+    {
+        $token = $this->_get_bearer_token();
+        if ($token === '') {
+            $customer = $this->session->userdata('customer');
+            $customer_id = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+            if ($customer_id > 0) {
+                $cust = $this->session->userdata('customer');
+                $cust = is_array($cust) ? $cust : [];
+                $cust['login_id'] = $customer_id;
+                $cust['customer_id'] = $cust['customer_id'] ?? $customer_id;
+                $cust['logged_in'] = $cust['logged_in'] ?? 1;
+                $this->session->set_userdata('customer', $cust);
+                $this->session->set_userdata('type', 'customer');
+                $_SESSION['type'] = 'customer';
+                return $customer_id;
+            }
+            $this->fail('unauthorized', ['Please login to continue shopping'], 401);
+            return 0;
+        }
+
+        $claims = $this->verify_token($token);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'access' || ($claims['role'] ?? '') !== 'customer') {
+            $this->fail('unauthorized', ['Invalid or expired access token'], 401);
+            return 0;
+        }
+
+        $customer_id = (int)$claims['sub'];
+        if ($customer_id <= 0) {
+            $this->fail('unauthorized', ['Invalid token subject'], 401);
+            return 0;
+        }
+
+        $cust = $this->session->userdata('customer');
+        $cust = is_array($cust) ? $cust : [];
+        $cust['login_id'] = $customer_id;
+        $cust['customer_id'] = $cust['customer_id'] ?? $customer_id;
+        $cust['logged_in'] = $cust['logged_in'] ?? 1;
+        $this->session->set_userdata('customer', $cust);
+        $this->session->set_userdata('type', 'customer');
+        $_SESSION['type'] = 'customer';
+        return $customer_id;
+    }
+
+    private function _get_product_row($product_id)
+    {
+		$product = $this->db->get_where('products', ['id' => (int)$product_id])->row();
+		if ($product) {
+			$product->_source = 'products';
+			return $product;
+		}
+		return null;
+    }
+
+	private function _get_variation_row($variation_id)
+	{
+		$variation_id = (int)$variation_id;
+		if ($variation_id <= 0) {
+			return null;
+		}
+		return $this->db->get_where('product_variations', ['id' => $variation_id], 1)->row();
+	}
+
+    private function _validate_stock($product, $qty)
+    {
+        $qty = (int)$qty;
+        if ($qty <= 0) {
+            return 'Quantity must be greater than 0';
+        }
+
+        $src = isset($product->_source) ? (string)$product->_source : '';
+        if ($src === 'products') {
+            if (isset($product->status) && (string)$product->status !== '1') {
+                return 'Product is not available';
+            }
+        } else {
+            if (isset($product->enabled) && (string)$product->enabled !== '1') {
+                return 'Product is not available';
+            }
+        }
+
+        if (isset($product->stock)) {
+            $stock = (int)$product->stock;
+            if ($stock <= 0) {
+                return 'OUT OF STOCK';
+            }
+            if ($qty > $stock) {
+                return 'You can not buy more then ' . $stock . ' quantity';
+            }
+        }
+
+        return null;
+    }
+
+    private function _calculate_coupon_discount($coupon_code, $cart_total, $items = null)
+    {
+        $coupon_code = trim((string)$coupon_code);
+        if ($coupon_code === '') {
+            return 0;
+        }
+
+        $coupon_code_lower = strtolower(trim($coupon_code));
+        $q = $this->db->query(
+            "SELECT * FROM ec_coupon WHERE LOWER(name) = ? AND status = '1' LIMIT 1",
+            [$coupon_code_lower]
+        );
+        $coupon = $q->num_rows() ? $q->row() : null;
+        if (!$coupon) {
+            return null;
+        }
+
+        // Use Asia/Kolkata timezone to match the date used when admin creates coupons
+        $tz = new DateTimeZone('Asia/Kolkata');
+        $today = (new DateTime('now', $tz))->format('Y-m-d');
+        $start = !empty($coupon->start_date) ? (new DateTime($coupon->start_date, $tz))->format('Y-m-d') : null;
+        $end   = !empty($coupon->end_date)   ? (new DateTime($coupon->end_date,   $tz))->format('Y-m-d') : null;
+
+        if ($start && $today < $start) {
+            return null;
+        }
+        if ($end && $today > $end) {
+            return null;
+        }
+
+        // Validate brand, category, and product applicability if items are provided
+        if ($items !== null && !$this->_is_coupon_applicable($coupon, $items)) {
+            return null;
+        }
+
+        $min = isset($coupon->minimum_order_value) ? (float)$coupon->minimum_order_value : 0;
+        if ($min > 0 && (float)$cart_total < $min) {
+            return null;
+        }
+
+        $matching_subtotal = ($items !== null) ? $this->_get_matching_items_subtotal($coupon, $items) : (float)$cart_total;
+        $discount_val = (float)($coupon->discount ?? 0);
+        $discount = 0;
+        $type = (int)($coupon->type ?? 1);
+        if ($type === 2) {
+            $discount = ($matching_subtotal * $discount_val / 100);
+        } else {
+            $discount = $discount_val;
+        }
+
+        $discount = max(0, min($discount, $matching_subtotal));
+        return $discount;
+    }
+
+    private function _parse_coupon_ids($raw)
+    {
+        if (empty($raw)) {
+            return [];
+        }
+        if (is_array($raw)) {
+            $vals = $raw;
+        } else {
+            $s = trim((string)$raw);
+            if ($s === '') {
+                return [];
+            }
+            $decoded = json_decode($s, true);
+            if (is_array($decoded)) {
+                $vals = $decoded;
+            } else {
+                $vals = preg_split('/\s*,\s*/', $s, -1, PREG_SPLIT_NO_EMPTY);
+            }
+        }
+        $out = [];
+        foreach ($vals as $v) {
+            $v_str = trim((string)$v);
+            if ($v_str !== '' && $v_str !== '0' && strtolower($v_str) !== 'all') {
+                $out[] = $v_str;
+            }
+        }
+        return array_values(array_unique($out));
+    }
+
+    private function _get_matching_items_subtotal($coupon, $cart_items)
+    {
+        if (empty($cart_items)) {
+            return 0;
+        }
+        $ctype = (int)($coupon->ctype ?? 1);
+        $subtotal = 0;
+
+        if ($ctype === 1) { // Category coupon
+            $allowed_categories = $this->_parse_coupon_ids($coupon->category_id);
+            if (empty($allowed_categories)) {
+                foreach ($cart_items as $item) {
+                    $item_arr = (array)$item;
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+                return $subtotal;
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $cats = [];
+                if (isset($item_arr['category']) && (string)$item_arr['category'] !== '') {
+                    $cats[] = (string)$item_arr['category'];
+                }
+                if (isset($item_arr['sub_category']) && (string)$item_arr['sub_category'] !== '') {
+                    $cats[] = (string)$item_arr['sub_category'];
+                }
+                if (isset($item_arr['sub_sub_category']) && (string)$item_arr['sub_sub_category'] !== '') {
+                    $cats[] = (string)$item_arr['sub_sub_category'];
+                }
+
+                $matched = false;
+                foreach ($cats as $cat) {
+                    if (in_array($cat, $allowed_categories, true)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($matched) {
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+            }
+            return $subtotal;
+        }
+
+        if ($ctype === 2) { // Brand coupon
+            $allowed_brands = $this->_parse_coupon_ids($coupon->brand_id);
+            if (empty($allowed_brands)) {
+                foreach ($cart_items as $item) {
+                    $item_arr = (array)$item;
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+                return $subtotal;
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $item_brand = isset($item_arr['brand_id']) ? (string)$item_arr['brand_id'] : '';
+                if ($item_brand !== '' && in_array($item_brand, $allowed_brands, true)) {
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+            }
+            return $subtotal;
+        }
+
+        if ($ctype === 3) { // Product coupon
+            $allowed_products = $this->_parse_coupon_ids($coupon->product_id);
+            if (empty($allowed_products)) {
+                foreach ($cart_items as $item) {
+                    $item_arr = (array)$item;
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+                return $subtotal;
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $item_product = isset($item_arr['product_id']) ? (string)$item_arr['product_id'] : (isset($item_arr['id']) ? (string)$item_arr['id'] : '');
+                if ($item_product !== '' && in_array($item_product, $allowed_products, true)) {
+                    $subtotal += (float)($item_arr['total'] ?? 0);
+                }
+            }
+            return $subtotal;
+        }
+
+        foreach ($cart_items as $item) {
+            $item_arr = (array)$item;
+            $subtotal += (float)($item_arr['total'] ?? 0);
+        }
+        return $subtotal;
+    }
+
+    private function _is_coupon_applicable($coupon, $cart_items)
+    {
+        if (empty($cart_items)) {
+            return false;
+        }
+
+        $ctype = (int)($coupon->ctype ?? 1);
+
+
+        if ($ctype === 1) { // Category coupon
+            $allowed_categories = $this->_parse_coupon_ids($coupon->category_id);
+            if (empty($allowed_categories)) {
+                return true; // Applicable to all categories
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $cats = [];
+                if (isset($item_arr['category']) && (string)$item_arr['category'] !== '') {
+                    $cats[] = (string)$item_arr['category'];
+                }
+                if (isset($item_arr['sub_category']) && (string)$item_arr['sub_category'] !== '') {
+                    $cats[] = (string)$item_arr['sub_category'];
+                }
+                if (isset($item_arr['sub_sub_category']) && (string)$item_arr['sub_sub_category'] !== '') {
+                    $cats[] = (string)$item_arr['sub_sub_category'];
+                }
+
+                $item_matched = false;
+                foreach ($cats as $cat) {
+                    if (in_array($cat, $allowed_categories, true)) {
+                        $item_matched = true;
+                        break;
+                    }
+                }
+                if (!$item_matched) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if ($ctype === 2) { // Brand coupon
+            $allowed_brands = $this->_parse_coupon_ids($coupon->brand_id);
+            if (empty($allowed_brands)) {
+                return true; // Applicable to all brands
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $item_brand = isset($item_arr['brand_id']) ? (string)$item_arr['brand_id'] : '';
+                if ($item_brand === '' || !in_array($item_brand, $allowed_brands, true)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if ($ctype === 3) { // Product coupon
+            $allowed_products = $this->_parse_coupon_ids($coupon->product_id);
+            if (empty($allowed_products)) {
+                return true; // Applicable to all products
+            }
+
+            foreach ($cart_items as $item) {
+                $item_arr = (array)$item;
+                $item_product = isset($item_arr['product_id']) ? (string)$item_arr['product_id'] : (isset($item_arr['id']) ? (string)$item_arr['id'] : '');
+                if ($item_product === '' || !in_array($item_product, $allowed_products, true)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return true;
+    }
+
+    public function shipping_methods()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'GET') {
+            return $this->fail('method_not_allowed', ['Only GET is allowed'], 405);
+        }
+
+        if (!$this->_require_customer()) {
+            return;
+        }
+
+        $methods = [
+            [
+                'code' => 'standard',
+                'name' => 'Standard Delivery',
+                'charge' => 0,
+                'eta' => '3-5 days'
+            ],
+            [
+                'code' => 'express',
+                'name' => 'Express Delivery',
+                'charge' => 0,
+                'eta' => '1-2 days'
+            ]
+        ];
+
+        return $this->ok(['shipping_methods' => $methods], 'success');
+    }
+
+    public function payment_methods()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'GET') {
+            return $this->fail('method_not_allowed', ['Only GET is allowed'], 405);
+        }
+
+        if (!$this->_require_customer()) {
+            return;
+        }
+
+        $methods = [];
+
+        // Prefer DB-configured payment methods if available.
+        if (isset($this->db) && $this->db->table_exists('ec_payment')) {
+            $rows = $this->db->where('status', '1')->get('ec_payment')->result();
+            foreach ($rows as $r) {
+                $methods[] = [
+                    'payment_id' => (int)($r->payment_id ?? 0),
+                    'title' => (string)($r->title ?? ''),
+                    'description' => (string)($r->description ?? ''),
+                    'type' => (string)($r->type ?? ''),
+                ];
+            }
+        }
+
+        if (empty($methods)) {
+            $methods = [
+                [
+                    'code' => 'COD',
+                    'name' => 'Cash on Delivery',
+                    'type' => 'cod'
+                ],
+                [
+                    'code' => 'ONLINE',
+                    'name' => 'Online Payment',
+                    'type' => 'online'
+                ]
+            ];
+        }
+
+        return $this->ok(['payment_methods' => $methods], 'success');
+    }
+
+    public function place_order()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $customer_id = $this->_require_customer();
+        if (!$customer_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+
+        $address_id = (int)($payload['address_id'] ?? 0);
+        $payment_method = strtoupper(trim((string)($payload['payment_method'] ?? '')));
+        $shipping_method = isset($payload['shipping_method']) ? trim((string)$payload['shipping_method']) : null;
+        $coupon_code = isset($payload['coupon_code']) ? trim((string)$payload['coupon_code']) : null;
+
+        if ($coupon_code === null || $coupon_code === '') {
+            $sess_coupon = $this->session->userdata('api_coupon');
+            if (is_array($sess_coupon) && !empty($sess_coupon['code'])) {
+                $coupon_code = (string)$sess_coupon['code'];
+            }
+        }
+
+        if ($address_id <= 0 || $payment_method === '') {
+            return $this->fail('validation_error', ['address_id and payment_method are required'], 422);
+        }
+
+        $address = $this->Query_model->get_data_obj('ec_shipping_address', [
+            'shipping_address_id' => $address_id,
+            'customer_id' => $customer_id,
+            'status' => '1'
+        ]);
+        if (!$address) {
+            return $this->fail('validation_error', ['Invalid address_id'], 422);
+        }
+
+        $cart_info = $this->Cart_model->checkout_items();
+        $items = $cart_info['cart_items'] ?? [];
+        $summary = $cart_info['cart_summary'] ?? (object)[];
+
+        if (empty($items)) {
+            return $this->fail('cart_empty', ['Cart is empty'], 409);
+        }
+
+        // Server-side totals (never trust client).
+        $subtotal = (float)($summary->subtotal ?? 0);
+        $shipping = (float)($summary->shipping ?? 0);
+        $tax = 0;
+        $cart_total = (float)($summary->grand_total ?? ($subtotal + $shipping));
+
+        // Validate stock for each item (variation-first)
+        foreach ($items as $item) {
+            $product_id = (int)($item->product_id ?? 0);
+            $qty = (int)($item->quantity ?? 0);
+			$variation_id = (int)($item->variation_id ?? 0);
+			if ($variation_id > 0) {
+				$vrow = $this->_get_variation_row($variation_id);
+				if (!$vrow) {
+					return $this->fail('validation_error', ['Variation not found in cart: ' . $variation_id], 409);
+				}
+				$stock = isset($vrow->stock) ? (int)$vrow->stock : 0;
+				if ($stock <= 0) {
+					return $this->fail('out_of_stock', ['OUT OF STOCK'], 409);
+				}
+				if ($qty > $stock) {
+					return $this->fail('out_of_stock', ['You can not buy more then ' . $stock . ' quantity'], 409);
+				}
+				$product_id = (int)($vrow->product_id ?? $product_id);
+			}
+
+            $product = $this->_get_product_row($product_id);
+            if (!$product) {
+                return $this->fail('validation_error', ['Product not found in cart: ' . $product_id], 409);
+            }
+
+            $stock_error = $this->_validate_stock($product, $qty);
+            if ($stock_error) {
+                return $this->fail('out_of_stock', [$stock_error], 409);
+            }
+        }
+
+        $discount = 0;
+        if ($coupon_code !== null && $coupon_code !== '') {
+            $discount_or_null = $this->_calculate_coupon_discount($coupon_code, $cart_total, $items);
+            if ($discount_or_null === null) {
+                return $this->fail('invalid_coupon', ['Invalid coupon'], 200);
+            }
+            $discount = (float)$discount_or_null;
+        }
+
+        $final_amount = max(0, $cart_total - $discount + $tax);
+
+        $is_cod = in_array($payment_method, ['COD', 'CASH_ON_DELIVERY'], true);
+        $is_online = in_array($payment_method, ['ONLINE', 'RAZORPAY', 'STRIPE'], true);
+        if (!$is_cod && !$is_online) {
+            return $this->fail('validation_error', ['Unsupported payment_method'], 422);
+        }
+
+        $order_status = $is_cod ? 'placed' : 'pending_payment';
+        $payment_status = $is_cod ? 'pending' : 'pending';
+
+        $this->db->trans_begin();
+        try {
+            // Get active currency ID and rate
+            $cc_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+            $cur_rate = 1.0;
+            if ($cc_id <= 0) {
+                // Fallback to default/basic currency
+                $cur = $this->db->select('currency_id, rate')->from('ec_currency')->where('status', '1')->where('basic', '1')->get()->row();
+                if ($cur) {
+                    $cc_id = (int)$cur->currency_id;
+                    $cur_rate = (float)$cur->rate;
+                } else {
+                    $cc_id = 1;
+                    $cur_rate = 1.0;
+                }
+            } else {
+                $cur = $this->db->select('currency_id, rate')->from('ec_currency')->where('currency_id', $cc_id)->where('status', '1')->get()->row();
+                if ($cur && (float)$cur->rate > 0) {
+                    $cur_rate = (float)$cur->rate;
+                }
+            }
+
+            $order_data = [
+                'order_number' => 'ORD' . date('Ymd') . strtoupper(substr(md5(uniqid((string)$customer_id, true)), 0, 6)),
+                'user_id' => $customer_id,
+                'address_id' => $address_id,
+                'payment_method' => $payment_method,
+                'payment_status' => $payment_status,
+                'total_amount' => $subtotal,
+                'discount_amount' => $discount,
+                'tax_amount' => $tax,
+                'shipping_amount' => $shipping,
+                'final_amount' => $final_amount,
+                'status' => 'pending',
+                'order_status' => 1,
+                'currency_id' => $cc_id,
+                'currency_rate' => $cur_rate,
+            ];
+
+            if ($shipping_method !== null) {
+                $order_data['shipping_method'] = $shipping_method;
+            }
+            if ($coupon_code !== null && $coupon_code !== '') {
+                $order_data['coupon_code'] = $coupon_code;
+            }
+
+            $this->db->insert('ec_orders', $order_data);
+            $order_id = (int)$this->db->insert_id();
+            if (!$order_id) {
+                throw new Exception('Failed to create order.');
+			}
+
+            foreach ($items as $item) {
+                $product_id = (int)($item->product_id ?? 0);
+                $qty = (int)($item->quantity ?? 0);
+                if ($product_id <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $variation_id = (int)($item->variation_id ?? 0);
+                $attribute_item_id = isset($item->attribute_item_id) ? (string)$item->attribute_item_id : '';
+
+                // For variation items, ensure we use base product_id for vendor/name lookup
+                if ($variation_id > 0) {
+                    $vrow = $this->_get_variation_row($variation_id);
+                    if ($vrow && isset($vrow->product_id)) {
+                        $product_id = (int)$vrow->product_id;
+                    }
+                }
+
+                $product_row = $this->_get_product_row($product_id);
+
+                // Prefer Cart_model computed tier price; fallback to Cart_model if missing
+                $unit_price = (float)($item->sale_price ?? $item->regular_price ?? 0);
+                if ($unit_price <= 0 && $variation_id > 0) {
+                    $unit_price = (float)$this->Cart_model->resolve_variation_unit_price($variation_id, $qty);
+                }
+                if ($unit_price <= 0) {
+                    $unit_price = 0;
+                }
+
+                $row_subtotal = $unit_price * $qty;
+
+                $vendor_login_id = 0;
+                if ($product_row) {
+                    $src = isset($product_row->_source) ? (string)$product_row->_source : '';
+                    if ($src === 'products' && isset($product_row->vendor_id)) {
+                        $vendor_login_id = (int)$product_row->vendor_id;
+                    } elseif (isset($product_row->login_id)) {
+                        $vendor_login_id = (int)$product_row->login_id;
+                    }
+                }
+
+                $options = [];
+                if ($variation_id > 0) {
+                    $options['variation_id'] = $variation_id;
+                }
+                if ($attribute_item_id !== '') {
+                    $options['attribute_item_id'] = $attribute_item_id;
+                }
+
+                $this->db->insert('ec_order_items', [
+                    'login_id' => $vendor_login_id,
+                    'status' => 1,
+                    'order_id' => $order_id,
+                    'product_id' => $product_id,
+                    'product_name' => (string)($product_row->name ?? $product_row->post_title ?? $item->post_title ?? ''),
+                    'price' => $unit_price,
+                    'qty' => $qty,
+                    'subtotal' => $row_subtotal,
+                    'options' => !empty($options) ? json_encode($options) : null,
+                    'currency_id' => $cc_id,
+                    'currency_rate' => $cur_rate,
+                ]);
+            }
+
+            $this->db->trans_commit();
+
+            // Clear cart only for COD. For online payments, clear after payment verification.
+            if ($is_cod) {
+                $this->session->unset_userdata('selected_address');
+                $this->session->unset_userdata('cart');
+                $this->session->unset_userdata('api_coupon');
+                $this->db->where('user_id', $customer_id)->delete('ec_cart');
+            }
+
+            return $this->ok([
+                'order_id' => $order_id,
+                'order_number' => $order_data['order_number'],
+                'final_amount' => $final_amount,
+                'payment_status' => $payment_status,
+                'order_status' => $order_status,
+            ], 'success');
+
+        } catch (Exception $e) {
+            $this->db->trans_rollback();
+            return $this->fail('server_error', [$e->getMessage()], 500);
+        }
+    }
+
+    public function payment_verify()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $customer_id = $this->_require_customer();
+        if (!$customer_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+
+        $order_id = (int)($payload['order_id'] ?? 0);
+        $payment_id = isset($payload['payment_id']) ? trim((string)$payload['payment_id']) : '';
+        $signature = isset($payload['signature']) ? trim((string)$payload['signature']) : '';
+
+        if ($order_id <= 0 || $payment_id === '' || $signature === '') {
+            return $this->fail('validation_error', ['order_id, payment_id and signature are required'], 422);
+        }
+
+        $order = $this->db
+            ->from('ec_orders')
+            ->where('id', $order_id)
+            ->where('user_id', $customer_id)
+            ->get()->row();
+
+        if (!$order) {
+            return $this->fail('not_found', ['Order not found'], 404);
+        }
+
+        $secret = (string)$this->config->item('razorpay_key_secret');
+        if ($secret === '') {
+            return $this->fail('not_configured', ['Payment verification not configured on server'], 501);
+        }
+
+        $expected = hash_hmac('sha256', $order_id . '|' . $payment_id, $secret);
+        if (!hash_equals($expected, $signature)) {
+            $this->db->where('id', $order_id)->update('ec_orders', [
+                'payment_status' => 'failed',
+                'status' => 'cancelled',
+            ]);
+
+            return $this->fail('payment_failed', ['Invalid payment signature'], 402);
+        }
+
+        $this->db->where('id', $order_id)->update('ec_orders', [
+            'payment_status' => 'paid',
+            'status' => 'pending',
+        ]);
+
+        // Clear cart after successful payment.
+        $this->session->unset_userdata('selected_address');
+        $this->session->unset_userdata('cart');
+        $this->session->unset_userdata('api_coupon');
+        $this->db->where('user_id', $customer_id)->delete('ec_cart');
+
+        return $this->ok([
+            'order_id' => $order_id,
+            'payment_status' => 'paid',
+            'order_status' => 'paid',
+        ], 'success');
+    }
+
+	public function place_order_simple()
+	{
+		if (!$this->require_post()) {
+			return;
+		}
+
+		$this->place_order();
+		$raw = $this->output->get_output();
+		$decoded = null;
+		if (is_string($raw) && $raw !== '') {
+			$decoded = json_decode($raw, true);
+		}
+
+		if (!is_array($decoded)) {
+			return $this->_respond_simple(false, 'Failed to place order', [], 500);
+		}
+
+		$ok = (isset($decoded['status']) && (int)$decoded['status'] === 1);
+		$data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+		$order_id = (int)($data['order_id'] ?? 0);
+
+		if ($ok && $order_id > 0) {
+			$customer = $this->session->userdata('customer');
+			$customer_id = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+
+			$order_row = $this->db
+				->from('ec_orders')
+				->where('id', $order_id)
+				->where('user_id', $customer_id)
+				->limit(1)
+				->get()->row_array();
+
+			$address = null;
+			$address_id = (int)($order_row['address_id'] ?? 0);
+			if ($address_id > 0) {
+				$addr_row = $this->Query_model->get_data_obj('ec_shipping_address', [
+					'shipping_address_id' => $address_id,
+					'customer_id' => $customer_id,
+					'status' => '1'
+				]);
+				if ($addr_row) {
+					$address = (array)$addr_row;
+				}
+			}
+
+			$item_rows = $this->db
+				->from('ec_order_items')
+				->where('order_id', $order_id)
+				->order_by('id', 'ASC')
+				->get()->result_array();
+
+			$cur_rate = 1.0;
+			$cc_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+			if ($cc_id > 0) {
+				$cur = $this->db
+					->select('currency_id, symbol, rate')
+					->from('ec_currency')
+					->where('currency_id', $cc_id)
+					->where('status', '1')
+					->get()->row();
+				if ($cur && (float)$cur->rate > 0) {
+					$cur_rate = (float)$cur->rate;
+				}
+			}
+
+			$cart_items = [];
+			if (is_array($item_rows)) {
+				foreach ($item_rows as $r) {
+					$cart_items[] = [
+						'product_id' => (int)($r['product_id'] ?? 0),
+						'post_title' => (string)($r['product_name'] ?? ''),
+						'product_name' => (string)($r['product_name'] ?? ''),
+						'qty' => (int)($r['qty'] ?? 0),
+						'quantity' => (int)($r['qty'] ?? 0),
+						'price' => (float)($r['price'] ?? 0) * $cur_rate,
+						'subtotal' => (float)($r['subtotal'] ?? 0) * $cur_rate,
+						'total' => (float)($r['subtotal'] ?? 0) * $cur_rate,
+					];
+				}
+			}
+
+			$order_date = $order_row['date_added'] ?? null;
+			$payment_method = $order_row['payment_method'] ?? ($data['payment_method'] ?? null);
+			$order_number = $order_row['order_number'] ?? ($data['order_number'] ?? null);
+
+			$out_data = [
+				'order_id' => $order_id,
+				'order_number' => $order_number,
+				'order_date' => $order_date,
+				'payment_method' => $payment_method,
+				'address' => $address,
+				'cart_items' => $cart_items,
+				'discount_amount' => (float)($order_row['discount_amount'] ?? 0) * $cur_rate,
+				'coupon_code' => (string)($order_row['coupon_code'] ?? ''),
+				'shipping_amount' => (float)($order_row['shipping_amount'] ?? 0) * $cur_rate,
+				'final_amount' => (float)($order_row['final_amount'] ?? 0) * $cur_rate,
+				'total_amount' => (float)($order_row['total_amount'] ?? 0) * $cur_rate,
+			];
+
+			return $this->_respond_simple(true, 'Order placed successfully', [
+				'order_id' => $order_id,
+				'data' => $out_data,
+			], 200);
+		}
+
+		$msg = '';
+		if (isset($decoded['errors']) && is_array($decoded['errors']) && !empty($decoded['errors'])) {
+			$msg = (string)$decoded['errors'][0];
+		}
+		if ($msg === '' && isset($decoded['message'])) {
+			$msg = (string)$decoded['message'];
+		}
+		if ($msg === '') {
+			$msg = 'Cart is empty';
+		}
+
+		return $this->_respond_simple(false, $msg, [], 400);
+	}
+}

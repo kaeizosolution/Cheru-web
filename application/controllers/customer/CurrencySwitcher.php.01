@@ -1,0 +1,58 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+/**
+ * CurrencySwitcher - Customer Panel
+ *
+ * Switches the active currency for the current session.
+ * - Sets $_SESSION['cur'] = $currency_id
+ * - For logged-in customers, also persists preferred_currency_id to ec_customer table
+ *
+ * URL pattern: /switch-currency/{currency_id}
+ */
+class CurrencySwitcher extends CI_Controller {
+
+    public function __construct() {
+        parent::__construct();
+        $this->load->library('session');
+        $this->load->helper('url');
+        $this->load->database();
+    }
+
+    /**
+     * Switch the active currency by ID.
+     *
+     * @param int|string $currency_id  The ID of the currency to switch to.
+     */
+    public function switchCurrency($currency_id = '') {
+
+        // Validate: must be a positive integer
+        $currency_id = (int)$currency_id;
+        if ($currency_id <= 0) {
+            // Fallback: use the default (base) currency
+            $currency_id = 1;
+        }
+
+        // Optional: verify the currency exists and is active
+        $row = $this->db
+            ->select('currency_id')
+            ->from('ec_currency')
+            ->where('currency_id', $currency_id)
+            ->where('status', '1')
+            ->get()->row();
+
+        if (!$row) {
+            // Currency not found or inactive — silently ignore and redirect back
+            redirect(isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : base_url());
+            return;
+        }
+
+        // 1. Update session
+        $this->session->set_userdata('cur', $currency_id);
+        $_SESSION['cur'] = $currency_id;
+
+        // 2. Redirect back to the referrer (or home if referrer not set)
+        redirect(isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : base_url());
+    }
+}
+?>

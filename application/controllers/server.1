@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, shrink-to-fit=9">
+<meta name="description" content="Imosys">
+<meta name="author" content="Imosys">
+<title>Imosys</title>
+<link rel="icon" type="image/png" href="/assets/images/fav.png">
+<link href="/assets/vendor/unicons-2.0.1/css/unicons.css" rel="stylesheet">
+<link href="/assets/css/style.css?r=1" rel="stylesheet">
+<link href="/assets/css/step-wizard.css" rel="stylesheet">
+<link href="/assets/css/responsive.css" rel="stylesheet">
+<link href="/assets/vendor/fontawesome-free/css/all.min.css" rel="stylesheet">
+<link href="/assets/vendor/OwlCarousel/assets/owl.carousel.css" rel="stylesheet">
+<link href="/assets/vendor/OwlCarousel/assets/owl.theme.default.min.css" rel="stylesheet">
+<link href="/assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="/assets/vendor/semantic/semantic.min.css">
+<link rel="stylesheet" href="/assets/plugins/parsley/parsley.css" />
+
+<script src="/assets/js/jquery-3.3.1.min.js"></script>
+<script src="/assets/plugins/typeahead/bootstrap3-typeahead.min.js"></script>
+<script src="/assets/plugins/parsley/parsley.min.js"></script>
+<script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
+</head>
+
+<body class="body-bg">
+
+<header class="header clearfix">
+<div class="for_detect_loc"></div>
+  <div class="top-header-group">
+    <div class="top-header">
+      <div class="res_main_logo"> <a href="/"><img src="/assets/images/mini-logo.png" alt=""></a> </div>
+      <div class="main_logo" id="logo"> <a href="/"><img src="/assets/images/logo.png" alt=""></a></div>
+      <div class="select_location b-lr">
+        <div class="ui inline dropdown loc-title">
+          <div class="text location-address">
+			  <div class="map-icon"><i class="fa fa-map-marker-alt text-orange"></i></div>
+			  <div class="home-address preview_address">
+				<h3></h3>
+			  <p class="text-black d-flex align-items-end"><span class="is_loc_filled" >Select Location</span> <i class="uil uil-angle-down icon__14"></i></p>
+			 </div>
+			  
+			</div>
+          
+		<div class="menu dropdown_loc">
+			<div class="location-body">
+				<div class="item channel_item location-wrap change_loc_div" style="display:none;"> 
+					<div><i class="uil uil-location-point location-icon"></i></div>
+  					<div class="">
+    					<div class="delivery-location">Delivery Location</div>
+    					<div class="prev-address">
+      						<div class="ellipsis delivery_loc"></div>
+    					</div>
+  					</div>
+  				<div class="location-address-btn">
+    				<div class="location-box">
+      					<button class="btn change-button change_address_btn">Change</button>
+    				</div>
+  				</div>
+ 			</div>
+			<!--Detect Location start here-->	  
+		<div class="item channel_item detect_loc_div" style="display:none;">		  
+				<div class="welcome-to-imosys">Welcome to <span class="text-orange">Imosys</span></div>  
+			<div class="default-location-text">
+			<div><i class="uil uil-location-point location-icon"></i></div>
+			<div class="provide-your-location">Please provide your delivery location to see products at nearby store</div>
+			</div>
+			
+			<div class="detect-location">
+			<button class="btn detect-button detect_my_loc">Detect my location</button>
+			<button class="btn detect-button detect_my_loc_wait" style="display:none;">Please wait...</button>
+  			<div class="oval-container"><div class="oval"><span class="separator-text"><div class="or">OR</div></span></div></div>
+				<div class="detect-location-input">
+				<!--<input type="text" class="form-control search_loc" id="search_loc" name="search_loc" placeholder="Type your city Society/Colony/Area">-->
+                <input type="text" class="form-control search_loc" placeholder="Type your city Society/Colony/Area" name="address" onFocus="initializeAutocomplete()" id="locality" autocomplete="nope">
+				<span class="search_loading" style="display:none;"><img src="/assets/images/productloading.gif"></span>	
+				</div>
+			</div>
+			</div>
+				<!--Detect Location end here-->	  
+				  
+			  </div>
+             </div>
+        </div>
+      </div>
+      <div class="search120">
+        <div class="ui search">
+          <div class="ui left icon input swdh10">
+            <input class="prompt srch10 searchButton" type="text" id="fts" name="fts" placeholder="Search products & categories">
+            <i class='fab fa-search icon icon1'></i> </div>
+        </div>
+      </div>
+      <div class="header_right">
+		<ul>
+         <li class="b-lr pl-3 pr-4"> <a href="/cart" class="option_links" title=""><img src="/assets/images/shopping-cart.svg" class="w-20"><span class="noti_count1">0</span></a> </li>
+	<li>
+	<a href="/customer/auth/login" class="opts_account post-btn hover-btn"><i class="fa fa-user pr-2"></i>Sign In</a></li>
+	</ul>	
+	      </div>
+    </div>
+  </div>
+</header>
+	
+<!--Header Area End Here-->
+
+<script>
+var csrf = {"name":"csrf_im_token","hash":"fca3e01d16e2827b8170fe567cff424e"};
+var get_geo_loc = "";
+
+$('.searchButton').click(function(){
+   //document.location.href = make_url();
+});
+
+$(document).ready(function() {
+  $('#fts').keypress(function(event) {    
+    if (event.which === 13) {       
+      event.preventDefault();
+      document.location.href = make_url();
+    }
+  });
+});
+
+function make_url()
+{
+    var url = ftsStr = ftsStr = lmyStr = '';
+    ftsStr = $('#fts').val();
+    $('#fts_hidden').val(ftsStr);
+    localStorage.setItem('fts',ftsStr);
+    ftsStr = ftsStr.replace(/\bin\b/g, '');
+    ftsStr  = ftsStr.replace(/\W/g, '-');
+    ftsStr = ftsStr.replace(/(-)+/g, '-');
+    ftsStr = ftsStr.replace(/^-|-$/g, '');
+    ftsStr = ftsStr.toLowerCase();
+    if(ftsStr)
+    {
+        url = '/shop/'+ftsStr+"";
+    }
+    return url;
+}
+
+
+
+</script>
+
+
+<div class="wrapper">
+ 
+  <!--Login Title Area Start Here-->
+  <div class="default-dt login-bg">
+<div class="container-fluid">
+<div class="row">
+<div class="col-lg-12 col-md-12">
+<div class="logindefault-title">
+<h2>Secured. Easy.</h2>
+<h5>Verify your credential in <span class="text-uppercase">ONE</span> simple step.</h5>
+</div>
+</div>
+</div>
+</div>
+</div>
+  <!--Login Title Area End Here--> 
+	
+	
+	<div class="sign-inup">
+<div class="container">
+<div class="row justify-content-center">
+	<div class="col-lg-7">
+		<div class="verifies-img">
+		<img src="/assets/images/login-verified.svg" class="img-fluid">
+		</div>
+	</div>
+<div class="col-lg-5">
+<div class="sign-form">
+<div class="sign-inner">
+
+<div class="form-dt">
+<div class="form-inpts checout-address-step">
+<form id="login-form" name="login-form">
+<div class="fill_mobile">
+<div class="form-title">
+	<h6>Login</h6>
+	<p class="mt-5">To sign in, please enter your mobile number</p>
+	</div>
+<div class="form-group pos_rel remveerror">
+	<!--<label class="lable-text">Phone Number</label>-->
+<input id="mobile" name="mobile" type="text" placeholder="Enter Phone Number" onkeypress="return isNumberKey(event);" class="form-control lgn_input" required maxlength="10" data-parsley-pattern="^((6|7|8|9)[0-9]{9})$" data-parsley-error-message="Please enter valid mobile number." />
+<i class="uil uil-mobile-android-alt lgn_icon"></i>
+</div>
+
+<button class="login-btn hover-btn send_otp_btn mb-4" type="button">Verify</button>
+	<!--<div class="divider text-center">
+		<span class="divider-content">OR</span>
+	</div>-->
+	
+	<!--<div class="other-login-links">
+	<a href="#"><i class="uil-facebook-f"></i>Facebook</a>
+	<a href="#"><i class="fab fa-google"></i>Google</a>
+	</div>-->
+</div>
+</form>
+<form id="otp-form" name="otp-form">
+<!-- START CHK OTP-->
+<div class="fill_otp" style="display:none">
+	<div id="msg"></div>	
+	<div class="form-title">
+		<h6>Please enter 4 digit OTP sent on <span class="user_mobile"></span></h6>
+		<p class="mt-5 change-num-text text-left"><a href="javascript:void(0);" class="text-orange change_number">Change Number</a></p>
+	</div>
+  <!--<div class="timeleft">
+    <p>(45 Seconds Left)</p>
+  </div>-->
+ 
+	<div class="form-group pos_rel">
+  		<label class="lable-text">Enter OTP</label>
+  		<input id="otp" name="otp" onkeypress="return isNumberKey(event);" type="text" maxlength="4"placeholder="OTP" class="form-control sgn_input mb-0" required>
+		<i class="uil uil-mobile-android-alt lgn_icon"></i>
+	</div>
+
+	<div class="resend">
+  		<p class="change-num-text"><a href="javascript:void(0);" class="text-orange send_otp_btn">Resend OTP</a></p>
+	</div>
+
+	<button class="signup-btn hover-btn confirm_otp" type="button">Confirm OTP</button>
+</div>	
+
+
+
+<!-- END CHK OTP-->
+
+
+
+	
+</form>
+	
+	<!--<div class="signup-link">
+<p>Don't have an Account? <a href="sign_up.html">Sign Up Here</a></p>
+</div>-->
+</div>
+
+
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+	
+  
+</div>
+<script>
+var csrf = {"name":"csrf_im_token","hash":"fca3e01d16e2827b8170fe567cff424e"};
+</script>
+<script src="/assets/js/pages/login.js"></script>
+</div>
+<footer class="footer">
+<div class="footer-first-row"><div class="container-fluid">
+<div class="row"><div class="col-md-6 col-sm-6">
+<ul class="call-email-alt">
+	<li>
+		<img src="/assets/default_images/truck.svg">
+		<h3 class="text-orange mt-2 mb-0">Free Shipping</h3>
+		<p class="text-grey">order over MWK 200</p>
+	</li>
+	<li>
+		<img src="/assets/default_images/cash.svg">
+		<h3 class="text-orange mt-2 mb-0">Quick Payment</h3>
+		<p class="text-grey">100% Secure Payment</p>
+	</li>
+	<li>
+		<img src="/assets/default_images/gift.svg">
+		<h3 class="text-orange mt-2 mb-0">Gift certificate</h3>
+		<p class="text-grey">Buy Now MWK 500 to MWK 1000</p>
+	</li>
+</ul>
+</div>
+<div class="col-md-6 col-sm-6">
+<div class="Subscribe-withus">
+	<h2 class="secondbanneroffer-title mb-0">Subscribe with us!</h2>
+	<p class="subs-mini-text">Stay up to dated with latest offers and schemes</p>
+	<div class="input-news-area">
+
+        <div id="subThank"></div>
+
+	 <div id="subform">
+	 
+	<form id="sub_form" method="post">	
+		<input type="email" name="email" value="" class="form-control news-field" placeholder="Enter your email id" required>
+		<img src="/assets/images/ionic-md-send.svg" class="news-send" id="sub_form_btn" style="cursor: pointer;" />
+		<input type="hidden" name="csrf_im_token" value="fca3e01d16e2827b8170fe567cff424e" />
+	</form>
+		<div class="error"></div>	
+	</div></div>
+	</div>
+</div>
+</div>
+</div>
+</div>
+<div class="footer-second-row">
+<div class="container-fluid">
+<div class="row">
+<div class="col-lg-3 col-md-6 col-sm-6 br-foot">          
+<div class="second-row-item categories-list-footer">
+<h4>Categories</h4>
+<ul class="clearfix pb-40">
+    	<li><a href="/category/mobile">Mobile</a></li>
+    	<li><a href="/category/vegetables-fruits">Vegetables & Fruits</a></li>
+    	<li><a href="/category/personal-care">Personal Care</a></li>
+    	<li><a href="/category/electronics">Electronics</a></li>
+    	<li><a href="/category/clothing">Clothing</a></li>
+    	<li><a href="/category/pet-care">Pet Care</a></li>
+    	<li><a href="/category/home">Home</a></li>
+    	<li><a href="/category/sb-test">SB TEST</a></li>
+    </ul>
+</div>
+</div>
+<div class="col-lg-3 col-md-6 col-sm-6">
+<div class="second-row-item pl-5">
+<h4>Useful Links</h4>
+<ul>
+	<li><a href="/page/about-us">About Us</a></li>
+	<li><a href="/customer/coupon">Offers</a></li>
+	<li><a href="/page/careers">Careers</a></li>
+</ul>
+</div>
+</div>
+<div class="col-lg-3 col-md-6 col-sm-6">    
+<div class="second-row-item">
+<h4>For Consumer</h4>
+<ul>
+	<li><a href="/page/privacy-policy">Privacy</a></li>
+	<li><a href="/page/term-and-conditions">Terms</a></li>
+	<li><a href="/page/frequently-asked-questions">FAQs</a></li>
+	<li><a href="/page/security">Security</a></li>
+	<li><a href="/customer/contact">Contact</a></li>
+</ul>
+</div>
+</div>   
+<div class="col-lg-3 col-md-6 col-sm-6">    
+<div class="second-row-item">
+<h4>For Partners</h4>
+<ul>
+	<li><a href="/page/partners">Partners</a></li>
+	<li><a href="/page/local">Local</a></li>
+	<li><a href="/page/warehouse">Warehouse</a></li>
+	<li><a href="/page/deliver">Deliver</a></li>
+</ul>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+<div class="footer-last-row">
+<div class="container-fluid">
+<div class="row">
+
+<div class="col-md-6">
+<div class="social-links-footer">
+<ul>
+	<li class="font-weight-bold app-svg-text">Follow Us On</li>
+	<li><a href="#"><i class="fab fa-facebook-square"></i></a></li>
+	<li><a href="#"><i class="fab fa-twitter-square"></i></a></li>
+	<li><a href="#"><i class="fab fa-instagram"></i></a></li>
+</ul>
+</div>		
+	</div>
+<div class="col-md-6">
+<div class="footer-bottom-links">
+<ul>
+	<li class="font-weight-bold app-svg-text">Download the app on:</li>
+	<li><a href="#"><img class="download-btn"  src="/assets/images/download-1.svg" alt=""></a></li>
+	<li><a href="#"><img class="download-btn" src="/assets/images/download-2.svg" alt=""></a></li>
+</ul>
+</div></div>
+</div></div></div>
+</footer>	
+<!--Footer Area End Here-->	
+	
+<!--<script src="/assets/js/jquery-3.3.1.min.js"></script>-->
+<script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/OwlCarousel/owl.carousel.js"></script>
+<script src="/assets/vendor/semantic/semantic.min.js"></script>
+<script src="/assets/js/product.thumbnail.slider.js"></script>
+<script src="/assets/js/custom.js"></script>
+<script src="/assets/js/offset_overlay.js"></script>
+
+<script>
+$(document).ready(function(){
+
+    $(document).click(function(event){
+            var allow = ['location-body', 'search_loc', 'change_address_btn', 'is_loc_filled', 'select_location', 'dropdown', 'uil-angle-down','channel_item', 'delivery_loc', 'delivery-location','default-location-text'];
+            var cls = event.target.classList.toString();
+            var flag = false;
+            allow.map(c=>{
+                if(cls.search(c)> -1)
+                {
+                    flag = true;
+                }
+            })
+            if(!flag)
+            {
+                if($('.is_loc_filled').text() != 'Select Location')
+                {
+                    $('.dropdown_loc').hide();
+                    $('.for_detect_loc').removeClass('overlay_location');
+                }
+            }
+        
+     })
+
+	$('.preview_address').click(function(){
+		$('.change_loc_div').show();
+		$('.dropdown_loc').show(); $('.detect_loc_div').hide();
+        $('.for_detect_loc').removeClass('overlay_location').addClass('overlay_location');	
+	});
+
+	$('.change_address_btn').click(function(){
+        $('.change_loc_div').hide(); $('.detect_loc_div').show();
+        $('.dropdown_loc').show();  
+    });	
+			
+	if(get_geo_loc.display_address)
+	{
+		$('.is_loc_filled').html(get_geo_loc.display_address);
+		$('.delivery_loc').html(get_geo_loc.display_address);	
+	}
+	if($('.is_loc_filled').text() == 'Select Location')
+	{
+		$('.dropdown_loc').show();
+		$('.detect_loc_div').show();
+        $('.for_detect_loc').removeClass('overlay_location').addClass('overlay_location');
+	}else
+    {
+        $('.dropdown_loc').hide();
+    }
+
+search_loc_func();
+    
+});
+
+$('.detect_my_loc').click(function(){
+	get_geoloc();
+});
+
+function get_geoloc()
+{
+	if(navigator.geolocation)
+	{
+        navigator.geolocation.getCurrentPosition(showLocation);
+    }
+	else
+	{ 
+        //$('#location').html('Geolocation is not supported by this browser.');
+    }
+}
+
+function showLocation(position){
+	$('.detect_my_loc_wait').show(); $('.detect_my_loc').hide();
+	var postData = {};
+	postData[csrf.name] 	= csrf.hash;
+	postData['latitude'] 	= position.coords.latitude;
+	postData['longitude']	= position.coords.longitude;
+	postData['place_id']	= position.coords.place_id;
+
+	var request = $.ajax({
+      url: "/welcome/getLocation",
+      type: "POST",
+      data: postData,
+      dataType: "json"
+    });
+
+	request.done(function(resp) {
+		$('.detect_my_loc_wait').hide(); $('.detect_my_loc').show();
+		if(resp.STATUS)
+		{
+			$('.is_loc_filled').html(resp.DATA.display_address);
+			$('.delivery_loc').html(resp.DATA.display_address);
+			$('.dropdown_loc').hide();
+			window.location.reload();	
+				
+		}
+	});
+
+	request.fail(function(jqXHR, textStatus) {
+		$('.detect_my_loc_wait').hide(); $('.detect_my_loc').show();
+    });
+
+}
+
+function search_loc_func() {
+
+$('#search_loc').typeahead(
+{
+	autoSelect:false,
+	source: function(query, process) {
+            return $.ajax({
+                url: '/welcome/search_loc',
+                type: 'get',
+                data: {query: query},
+                dataType: 'json',
+				beforeSend: function(){
+        			$('.search_loading').show();
+    			},
+    			complete: function(){
+        			$('.search_loading').hide();
+    			},
+                success: function(json) {
+				$('.search_loading').hide();			
+				return typeof json == 'undefined' ? false : process(json);
+                }
+            });
+        },
+        highlight: true,
+        minLength: 3,
+        afterSelect: function(item){
+		get_add(item);
+        }
+    }
+);
+
+}
+
+
+function get_add(item)
+{
+	var argsData = {};
+    var place_id = item.place_id ? item.place_id : '';
+	argsData['coords'] = {'latitude':item.lat, 'longitude':item.long, 'place_id':place_id};
+	
+	showLocation(argsData);
+	$('#search_loc').val('');
+}
+
+
+
+//this function use for the add to cart 
+$(document).on("click", ".add_to_cart", function(e) {
+    e.preventDefault();
+        var variation_id = $(this).attr('data-variation-id');
+    var quantity = $(this).attr('data-quantity');
+    var product_id = $(this).attr('data-product-id');
+    var postData = {"csrf_im_token" : "fca3e01d16e2827b8170fe567cff424e"};
+    postData.variation_id = variation_id;
+    postData.product_qty = quantity;
+    postData.product_id = product_id;
+    $.ajax({
+        url: '/customer/basket/ajaxaddtocart',
+        type: 'post',
+        data: postData,
+        dataType: "json",
+        success: function(response){
+            if(response.success){
+                $('#cart_count').html(response.data.cart_count);
+                swal('Added!');
+            }else{
+            }
+        }
+    });
+});
+
+
+
+init=()=>{
+const css='.toaster{align-items:center;border-radius:7px;min-width:300px;bottom:0;display:flex;min-height:50px;max-height:50px;justify-content:space-between;left:50%;padding:0 20px;position:fixed;transform:translateX(-50%) translateY(150%);transition:transform .35s ease;background-color:#323232}.toaster.visible{transform:translateX(-50%) translateY(-50%)!important;opacity:1!important; z-index:99}.success{background-color:#16a085!important}.danger{background-color:#c0392b!important}.warning{background-color:#f38211!important}.toaster span{color:#fff!important;font-size:13px;white-space:nowrap;letter-spacing:1.2px;font-family:Roboto,Helvetica,Arial,sans-serif}';
+const toaster_style = document.createElement("style");
+toaster_style.innerHTML = css;
+document.head.appendChild(toaster_style);
+
+const toaster = document.createElement("div");
+const toaster_message = document.createElement("span");
+toaster_message.id = 'toaster_message';
+toaster.classList.add('toaster');
+toaster.appendChild(toaster_message);
+document.body.appendChild(toaster);
+}
+
+init()
+
+showToast = (msg='default msg',level='default',time=5000)=>{
+  let toaster_message = document.getElementById('toaster_message');
+    toaster_message.innerHTML=msg;
+    let toaster = document.querySelector('.toaster');
+    toaster.className = '';
+    toaster.classList.add(level);
+    toaster.classList.add('visible');
+    toaster.classList.add('toaster');
+    setTimeout(()=>{toaster.classList.remove('visible'); toaster.classList.remove('visible')},time);
+};
+
+
+$(document).ready(function(){
+        $('#subThank').hide();
+        $('.error').hide();
+	$('#sub_form_btn').on('click', function (e) {
+         e.preventDefault();
+          $.ajax({
+                type: 'POST',
+                url: '/customer/subscribe/ajax_subsform',
+                data: $('#sub_form').serialize(),
+                dataType:"json",
+                success: function (data) {
+                   if(data.success){
+                     $('#subThank').html('<div class="alert alert-success">'+data.msg+'</div>');
+                     $('#subform').hide();
+                     $("#sub_form").trigger("reset");
+                     $('#subThank').show();
+                 }else{
+			$('.error').html('<div class="alert alert-danger">'+data.msg+'</div>');
+			$('.error').show();
+
+                 }
+			
+           }
+          });
+        });
+
+});
+
+
+</script>
+
+<script type="text/javascript">
+  function initializeAutocomplete(){
+    var input = document.getElementById('locality');
+    var options = {}
+	/*var options = {
+		types: ['address'],
+		componentRestrictions: {
+		  country: 'in'
+		}
+	};*/
+	  
+    var autocomplete = new google.maps.places.Autocomplete(input, options);
+
+    google.maps.event.addListener(autocomplete, 'place_changed', function() {
+      var place = autocomplete.getPlace();
+      var lat = place.geometry.location.lat();
+      var lng = place.geometry.location.lng();
+      var placeId = place.place_id;
+      // to set city name, using the locality param
+      var componentForm = {
+        locality: 'short_name',
+		
+      };
+
+    
+        //console.log("lat== "+ lat + "lng== "+ lng + "plceid== "+ placeId);
+        var args = {'lat':lat, 'long':lng, 'place_id':placeId};
+        get_add(args);
+    });
+  }
+</script>
+<script src="//maps.googleapis.com/maps/api/js?libraries=places&key=AIzaSyDkYJmQ8bD4bQBd16J3eNnkXZAaipg5a6c"></script>
+</body>
+</html>

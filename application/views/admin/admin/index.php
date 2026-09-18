@@ -1,0 +1,451 @@
+<?php $page_lang = get_page_language_data('admin_page_lang'); ?>
+
+<style>
+    :root {
+        --primary: #6366f1;
+        --secondary: #ec4899;
+        --success: #10b981;
+        --danger: #ef4444;
+        --dark: #1e293b;
+        --sidebar-color: #191c4d;
+        --light-gray: #f8fafc;
+        --border-color: #e2e8f0;
+    }
+
+    .card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-header-custom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 25px;
+        background: #fff;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0;
+    }
+
+    .card-title-custom {
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        color: var(--dark);
+        font-size: 18px;
+        margin: 0;
+    }
+
+    .btn-custom {
+        color: #fff !important;
+        border-radius: 8px;
+        padding: 8px 20px;
+        font-weight: 500;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .btn-add, .btn-filter { background-color: var(--primary); }
+    .btn-add:hover, .btn-filter:hover {
+        background-color: #4f46e5;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(99, 102, 241, 0.3);
+        color: #fff !important;
+    }
+
+    #table {
+        width: 100% !important;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 0 !important;
+    }
+
+    #table thead th {
+        background-color: var(--light-gray);
+        color: #64748b;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 12px;
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-color);
+        white-space: nowrap;
+    }
+
+    #table tbody td {
+        padding: 15px 20px;
+        vertical-align: middle;
+        color: #334155;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 14px;
+    }
+
+    .badge-custom {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        display: inline-block;
+    }
+    .badge-active { background-color: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .badge-inactive { background-color: rgba(239, 68, 68, 0.1); color: var(--danger); }
+
+    .btn-premium-action {
+        background-color: var(--sidebar-color) !important;
+        color: #fff !important;
+        width: 35px;
+        height: 35px;
+        border-radius: 50%;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 6px rgba(25, 28, 77, 0.3);
+        transition: all 0.3s ease;
+        outline: none !important;
+        padding: 0;
+        cursor: pointer;
+    }
+    .btn-premium-action:hover {
+        background-color: #2a2e65 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(25, 28, 77, 0.4);
+    }
+    .btn-premium-action:focus { box-shadow: none !important; outline: none !important; }
+
+    .custom-popover-btn {
+        margin: 2px;
+        border-radius: 4px;
+        color: #fff;
+        border: none;
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .custom-popover-btn:hover { color: #fff; opacity: 0.9; }
+    .btn-edit-action  { background: #6366f1; }
+    .btn-status-action { background: #10b981; }
+    .btn-view-action  { background: #3b82f6; }
+
+    .dataTables_paginate { padding: 15px 25px; }
+    .page-item.active .page-link {
+        background-color: var(--primary) !important;
+        border-color: var(--primary) !important;
+    }
+    .modal-content { border-radius: 12px; border: none; }
+    .modal-header { border-bottom: 1px solid var(--border-color); padding: 15px 20px; }
+    .modal-body { padding: 20px; }
+    .form-control { border-radius: 6px; }
+</style>
+
+<div class="page-body">
+    <div class="container-fluid">
+        <div class="page-header">
+            <div class="row">
+                <div class="col-lg-6">
+                    <h3 style="font-family: 'Poppins', sans-serif; font-weight: 700; color: #1e293b;"><?= $page_lang->admin; ?></h3>
+                </div>
+                <?= $breadcrumbs ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card">
+                    <?php if ($this->session->flashdata('error')) { ?>
+                    <div class="alert alert-danger m-3 rounded">
+                        <?= $this->session->flashdata('error')?>
+                        <?php $this->session->unset_userdata('error');?>
+                    </div>
+                    <?php } ?>
+                    <?php if($this->session->flashdata('success')){?>
+                    <div class="alert alert-success m-3 rounded">
+                        <?= $this->session->flashdata('success')?>
+                        <?php $this->session->unset_userdata('success');?>
+                    </div>
+                    <?php } ?>
+
+                    <!-- Sub-tabs navigation (Drupal-style) -->
+                    <div style="padding: 0 25px; border-bottom: 2px solid #e2e8f0; background:#fff;">
+                        <ul class="nav" style="gap: 4px; margin:0; padding: 0;">
+                            <li class="nav-item">
+                                <a href="/<?= $TYPE ?>/admin" class="nav-link active" style="font-weight:600; font-size:13px; color:#6366f1; border-bottom:3px solid #6366f1; padding:12px 18px; border-radius:0;">
+                                    <i class="fa fa-users mr-1"></i> Manage Admins
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="/<?= $TYPE ?>/admin/roles" class="nav-link" style="font-weight:500; font-size:13px; color:#64748b; padding:12px 18px; border-radius:0; border-bottom:3px solid transparent;">
+                                    <i class="fa fa-shield-alt mr-1"></i> Manage Roles
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="card-header-custom">
+                        <h5 class="card-title-custom">Sub Admin List</h5>
+                        <div style="display:flex; gap:10px;">
+                            <a href="/<?= $TYPE?>/admin/add" class="btn-custom btn-add" title="Add New">
+                                <i class="fa fa-plus"></i> Add New
+                            </a>
+                            <a href="javascript:void(0)" data-toggle="modal" data-target="#myModal" class="btn-custom btn-filter" title="Filter">
+                                <i class="fa fa-filter"></i> Filter
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="card-body p-0">
+                        <div class="dt-ext table-responsive">
+                            <table id="table" class="display dataTable custom-table">
+                                <thead>
+                                    <tr>
+                                        <th><?= $page_lang->full_name; ?></th>
+                                        <th><?= $page_lang->email; ?></th>
+                                        <th><?= $page_lang->mobile; ?></th>
+                                        <th><?= $page_lang->user_role; ?></th>
+                                        <th><?= $page_lang->date_added; ?></th>
+                                        <th><?= $page_lang->status; ?></th>
+                                        <th class="text-center" width="80px"><?= $page_lang->action; ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Modal -->
+<div id="myModal" class="modal fade customModel" role="dialog">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title font-weight-bold">Filter Sub Admin</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="filter_data" method="post">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="font-weight-bold text-muted small"><?= $page_lang->name; ?></label>
+                            <input type="text" id="fname" name="fname" class="form-control" />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="font-weight-bold text-muted small"><?= $page_lang->email; ?></label>
+                            <input type="text" id="email" name="email" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="font-weight-bold text-muted small"><?= $page_lang->date; ?></label>
+                            <input type="text" id="last_updated" name="last_updated" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="font-weight-bold text-muted small"><?= $page_lang->status; ?></label>
+                            <select class="form-control" id="status" name="status">
+                                <option value=""><?= $page_lang->status; ?></option>
+                                <option value="1"><?= $page_lang->active; ?></option>
+                                <option value="0"><?= $page_lang->inactive; ?></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-12 d-flex justify-content-end">
+                            <button class="btn btn-light mr-2 rounded reset-btn" type="button"><?= $page_lang->clear; ?></button>
+                            <button class="btn btn-primary rounded btn-Submit" type="button"><?= $page_lang->submit; ?></button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+$('#last_updated').daterangepicker({
+    autoUpdateInput: false,
+    "singleDatePicker": true,
+    "showDropdowns": true,
+    locale: { cancelLabel: 'Clear', format: 'YYYY-MM-DD' }
+}, function(start, end, label) {
+    $('#last_updated').val(start.format('YYYY-MM-DD'));
+});
+$(document).on('apply.daterangepicker', '#last_updated', function(ev, Picker) {
+    $('#last_updated').val(Picker.startDate.format('YYYY-MM-DD'));
+});
+$('#last_updated').on('cancel.daterangepicker', function(ev, picker) {
+    $('#last_updated').val('');
+});
+
+$('.btn-Submit').on('click', function (e){
+    dataTable();
+    $("#myModal .close").click();
+});
+
+$(".reset-btn").click(function(){
+    $("#filter_data").trigger("reset");
+});
+
+var table;
+$(document).ready(function() {
+    dataTable();
+
+    // Close popover when clicking outside
+    $('body').on('click', function (e) {
+        if ($(e.target).data('toggle') !== 'popover' &&
+            $(e.target).parents('.popover.show').length === 0 &&
+            !$(e.target).hasClass('btn-premium-action')) {
+            $('[data-toggle="popover"]').popover('hide');
+        }
+    });
+});
+
+function dataTable()
+{
+    var postData = {"<?= $csrf->name;?>" : "<?= $csrf->hash; ?>"};
+    var filterData = {};
+
+    if($('#fname').val().trim())  { filterData.fname = $('#fname').val(); }
+    if($('#email').val().trim())  { filterData.email = $('#email').val(); }
+    if($('#last_updated').val().trim()) { filterData.last_updated = $('#last_updated').val(); }
+    if($('#status').val().trim()) { filterData.status = $('#status').val(); }
+
+    postData.filter = filterData;
+
+    table = $('#table').DataTable({
+        "processing": true,
+        "serverSide": true,
+        "responsive": true,
+        "searching": false,
+        "ordering": false,
+        "lengthChange": false,
+        "orderCellsTop": true,
+        "destroy": true,
+        "pageLength": <?= $page_count ?>,
+        "ajax": {
+            "url": "/<?= $TYPE; ?>/admin/index_ajax_post",
+            "data": postData,
+            "type": "POST",
+            "dataType": 'json',
+            "complete": function () {
+               $('[data-toggle="tooltip"]').tooltip();
+            },
+        },
+        "language": {
+           "paginate": {
+               "next": '<i class="fa fa-chevron-right"></i>',
+               "previous": '<i class="fa fa-chevron-left"></i>'
+           }
+        },
+        "dom": '<"top"i>t<"bottom"flp><"clear">',
+        "columnDefs": [
+            {
+                "targets": 5, // Status Column
+                "data": "status",
+                "render": function ( data, type, row ) {
+                    if(row.status === 'active') {
+                        return '<span class="badge-custom badge-active">Active</span>';
+                    } else {
+                        return '<span class="badge-custom badge-inactive">Inactive</span>';
+                    }
+                }
+            },
+            {
+                "targets": -1, // Action Column
+                "data": null,
+                "className": "text-center",
+                "render": function ( data, type, row ) {
+                    var statusLabel = (row.status === 'active') ? 'Toggle Inactive' : 'Toggle Active';
+                    var statusIcon  = (row.status === 'active') ? 'fa-toggle-on' : 'fa-toggle-off';
+                    var actionTemplate =
+                        '<button type="button" class="btn btn-premium-action" data-toggle="popover" data-placement="bottom" data-html="true" data-content=\'' +
+                        '<button title="Edit" class="btn custom-popover-btn btn-edit-action btn-edit" type="button" data-id="' + row.admin_id + '"><i class="fa fa-pencil-square-o"></i> Edit</button>' +
+                        '<button title="' + statusLabel + '" class="btn custom-popover-btn btn-status-action btn-status" type="button" data-status="' + row.status + '" data-id="' + row.admin_id + '"><i class="fa ' + statusIcon + '"></i> Toggle</button>' +
+                        '<button title="View" class="btn custom-popover-btn btn-view-action btn-view" type="button" data-id="' + row.admin_id + '"><i class="fa fa-eye"></i> View</button>' +
+                        '\'>' +
+                        '<i class="fa fa-cog"></i></button>';
+                    return actionTemplate;
+                },
+                "defaultContent": ''
+            }
+        ],
+        "columns": [
+            {"data": "fname"},
+            {"data": "email"},
+            {"data": "mobile"},
+            {"data": "superadmin"},
+            {"data": "last_updated"},
+            {"data": "status"},
+            {"data": ""}
+        ]
+    });
+}
+
+// Premium Toggle Popover Logic
+$(document).on('click', '.btn-premium-action', function(e){
+    $('[data-toggle="popover"]').not(this).popover('hide');
+    $(this).popover('toggle');
+    $('[data-toggle="tooltip"]').tooltip();
+});
+
+// Edit
+$(document).on('click', '.btn-edit', function(e){
+    var uid = $(this).attr('data-id');
+    var url = "/<?php echo $TYPE ?>/admin/update/" + uid;
+    url_new_tab(e, url);
+});
+
+function url_new_tab(e, url)
+{
+    if(e.ctrlKey){ window.open(url); } else { $(location).attr('href', url); }
+}
+
+// Status Toggle
+$(document).on('click', '.btn-status', function(e){
+    var uid    = $(this).attr('data-id');
+    var status = $(this).attr('data-status');
+    status_change(uid, status);
+});
+
+function status_change(id, status)
+{
+    var postData = {};
+    var csrf_name  = "<?= $csrf->name; ?>";
+    var csrf_value = "<?= $csrf->hash; ?>";
+    postData[csrf_name] = csrf_value;
+    postData.id     = id;
+    postData.status = status;
+
+    $.ajax({
+        url      : '<?php echo base_url();?>admin/admin/status_change',
+        type     : 'post',
+        dataType : "json",
+        data     : postData,
+        success  : function(data){
+            if(data.success){
+                swal('Status changed successfully.');
+                location.reload(true);
+            }
+        }
+    });
+}
+
+// View
+$(document).on('click', '.btn-view', function(e){
+    var uid = $(this).attr('data-id');
+    window.location.href = "/admin/admin/view/" + uid;
+});
+
+</script>

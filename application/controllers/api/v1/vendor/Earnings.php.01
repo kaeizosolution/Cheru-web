@@ -1,0 +1,182 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+/**
+ * Earnings
+ *
+ * POST /api/v1/vendor/earnings
+ *
+ * Returns vendor earnings in DataTables-compatible format.
+ */
+class Earnings extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->library('session');
+    }
+
+    // ─── Auth Helpers (inlined to avoid VendorBase dependency) ────────────────
+
+    protected function _get_bearer_token()
+    {
+        $header = $this->input->get_request_header('Authorization', true);
+        if (!$header) {
+            $header = $this->input->server('HTTP_AUTHORIZATION');
+        }
+        $header = trim((string)$header);
+        if ($header === '') {
+            return '';
+        }
+        if (stripos($header, 'Bearer ') === 0) {
+            return trim(substr($header, 7));
+        }
+        return '';
+    }
+
+    protected function _require_vendor()
+    {
+        $token = $this->_get_bearer_token();
+        if ($token === '') {
+            $this->fail('unauthorized', ['Missing Authorization Bearer token'], 401);
+            return 0;
+        }
+
+        $claims = $this->verify_token($token);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'access' || ($claims['role'] ?? '') !== 'vendor') {
+            $this->fail('unauthorized', ['Invalid or expired vendor access token'], 401);
+            return 0;
+        }
+
+        $vendor_id = (int)$claims['sub'];
+        if ($vendor_id <= 0) {
+            $this->fail('unauthorized', ['Invalid token subject'], 401);
+            return 0;
+        }
+
+        $vend = $this->session->userdata('vendor');
+        $vend = is_array($vend) ? $vend : [];
+        $vend['login_id']  = $vendor_id;
+        $vend['vendor_id'] = $vendor_id;
+        $vend['logged_in'] = $vend['logged_in'] ?? TRUE;
+        $this->session->set_userdata('vendor', $vend);
+        $this->session->set_userdata('type', 'vendor');
+
+        return $vendor_id;
+    }
+
+    public function index()
+    {
+        $vendor_id = $this->_require_vendor();
+        if (!$vendor_id) {
+            return;
+        }
+
+        // Determine which currency the vendor has selected and its rate.
+        $display_cur_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+        $all_currencies = $this->db
+            ->select('currency_id, symbol, iso_code, rate, basic')
+            ->from('ec_currency')
+            ->where('status', '1')
+            ->get()->result();
+
+        $display_rate   = 1.0;
+        $display_symbol = '$';
+        foreach ($all_currencies as $c) {
+            if ((int)$c->basic === 1) {
+                $display_rate   = (float)$c->rate ?: 1.0;
+                $display_symbol = html_entity_decode($c->symbol);
+                break;
+            }
+        }
+        if ($display_cur_id > 0) {
+            foreach ($all_currencies as $c) {
+                if ((int)$c->currency_id === $display_cur_id) {
+                    $display_rate   = (float)$c->rate ?: 1.0;
+                    $display_symbol = html_entity_decode($c->symbol);
+                    break;
+                }
+            }
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $length  = isset($payload['length']) ? (int)$payload['length'] : 10;
+        $start   = isset($payload['start'])  ? (int)$payload['start']  : 0;
+        $draw    = isset($payload['draw'])   ? $payload['draw']         : '';
+
+        // Vendor commission rate
+        $vendor_obj      = $this->Query_model->get_data_obj('ec_vendor', ['vendor_id' => $vendor_id]);
+        $global_commission = isset($vendor_obj->commission) ? $vendor_obj->commission : 0;
+
+        $this->db->select('eoi.*, eo.order_number, eo.payment_method, eo.payment_status, eo.date_added as order_date_added, eo.last_updated as order_last_updated');
+        $this->db->from('ec_order_items as eoi');
+        $this->db->join('ec_orders as eo', 'eo.id = eoi.order_id', 'left');
+        $this->db->where('eoi.login_id', $vendor_id);
+        $this->db->limit($length, $start);
+        $this->db->order_by('eoi.id', 'DESC');
+        $list = $this->db->get()->result();
+
+        $this->db->from('ec_order_items');
+        $this->db->where('login_id', $vendor_id);
+        $total_records = $this->db->count_all_results();
+
+        $data = [];
+        foreach ($list as $obj) {
+            $commission_pct = $global_commission;
+            $raw_subtotal   = isset($obj->subtotal) ? (float)$obj->subtotal : 0;
+
+            // Convert to base amount first
+            $item_rate = (float)($obj->currency_rate ?? 1.0) ?: 1.0;
+            $base_subtotal = $raw_subtotal / $item_rate;
+
+            // Convert to display currency
+            $total_earning = $base_subtotal * $display_rate;
+
+            $admin_share    = ($total_earning * $commission_pct) / 100;
+            $vendor_share   = $total_earning - $admin_share;
+
+            $row = [];
+            $row['order_uid']      = isset($obj->order_number) && $obj->order_number
+                ? $obj->order_number
+                : (isset($obj->order_id) ? $obj->order_id : (isset($obj->id) ? $obj->id : ''));
+
+            $row['total_earning']  = $display_symbol . number_format($total_earning, 2);
+            $row['commission_val'] = $display_symbol . number_format($admin_share, 2);
+            $row['vendor_earning'] = $display_symbol . number_format($vendor_share, 2);
+            $row['commission_pct'] = $commission_pct . '%';
+            $row['payment_mode']   = isset($obj->payment_method) && $obj->payment_method ? $obj->payment_method : '-';
+
+            $is_paid = isset($obj->payment_status) && strtolower((string)$obj->payment_status) === 'paid';
+
+            $db_date = '';
+            if (isset($obj->order_last_updated) && $obj->order_last_updated && $obj->order_last_updated != '0000-00-00 00:00:00') {
+                $db_date = $obj->order_last_updated;
+            } elseif (isset($obj->order_date_added) && $obj->order_date_added && $obj->order_date_added != '0000-00-00 00:00:00') {
+                $db_date = $obj->order_date_added;
+            }
+
+            $row['paid_date']    = ($is_paid && $db_date) ? date('d-M-Y', strtotime($db_date)) : '-';
+            $row['status']       = $is_paid ? 'Paid' : 'Unpaid';
+            $row['status_badge'] = $is_paid ? 'badge-success' : 'badge-warning';
+            $row['status_html']  = $row['status'];
+
+            $data[] = $row;
+        }
+
+        $output = [
+            'draw'            => $draw,
+            'recordsTotal'    => (int)$total_records,
+            'recordsFiltered' => (int)$total_records,
+            'data'            => $data,
+        ];
+
+        return $this->output
+            ->set_status_header(200)
+            ->set_output(json_encode($output));
+    }
+}

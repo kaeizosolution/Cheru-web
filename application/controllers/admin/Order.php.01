@@ -1,0 +1,1014 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Order extends MY_Controller {
+
+    function __construct() 
+    {
+        parent::__construct();
+        $this->load->model('Order_model');
+        $this->load->model('Query_model');	
+        $this->TYPE = $this->session->userdata('type');
+        $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+    }
+
+    public function index($customer_uid = NULL)
+    {				
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->order => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+        $data['csrf'] = csrf_token(); 
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count();	
+        $data['customer_uid'] = $customer_uid;
+
+        $this->load->template("$this->TYPE/order/index_order",$data);
+
+    }
+
+
+public function ajax_get_customer_order()
+{
+    // Basic security check
+    if (!$this->input->is_ajax_request()) {
+        exit('No direct script access allowed');
+    }
+
+    // UPDATED: Receiving 'user_id' from our new JavaScript
+    $user_id = $this->input->post('user_id');
+
+    // Fetch the data from the model, passing the user_id and all POST data
+    $orderlist = $this->Order_model->get_order_backend_data($user_id, $_POST);
+
+    $data = array();
+    foreach ($orderlist as $orderlistdata) {
+        $row = array();
+        
+        // --- UPDATED: This section now uses your correct column names ---
+
+        // NOTE: Your table list did not include 'currency_id'.
+        $symbol = ''; // Using a default empty symbol. You can change this.
+
+        // Customer name: prefer ec_customer by order user_id (authoritative), fallback to shipping address name.
+        $name = 'N/A';
+        if(isset($orderlistdata->user_id) && $orderlistdata->user_id){
+            $custObj = $this->db
+                ->select('fname, lname, email, mobile')
+                ->from('ec_customer')
+                ->where('customer_id', (int)$orderlistdata->user_id)
+                ->get()->row();
+            if($custObj){
+                $nm = trim((string)($custObj->fname ?? '').' '.(string)($custObj->lname ?? ''));
+                if($nm !== ''){
+                    $name = $nm;
+                }
+            }
+        }
+        if(($name === 'N/A' || $name === '') && isset($orderlistdata->address_id) && $orderlistdata->address_id){
+            $customer_ifo = get_shipping_info($orderlistdata->address_id);
+            if($customer_ifo && isset($customer_ifo->fullname) && $customer_ifo->fullname){
+                $name = $customer_ifo->fullname;
+            }
+        }
+
+        // Vendor name: derive from items (multi-vendor safe)
+        $vendor_label = 'N/A';
+        $vendorRows = $this->db
+            ->select('DISTINCT ev.vendor_id, ev.store_name, ev.name', false)
+            ->from('ec_order_items eop')
+            ->join('ec_vendor ev', 'ev.vendor_id = eop.login_id', 'left')
+            ->where('eop.order_id', (int)$orderlistdata->order_id)
+            ->get()->result();
+        if ($vendorRows) {
+            $names = [];
+            foreach ($vendorRows as $vr) {
+                $nm = '';
+                if (isset($vr->store_name) && $vr->store_name !== '') {
+                    $nm = $vr->store_name;
+                } elseif (isset($vr->name) && $vr->name !== '') {
+                    $nm = $vr->name;
+                }
+                if ($nm !== '') {
+                    $names[] = $nm;
+                }
+            }
+            $names = array_values(array_unique($names));
+            if (count($names) === 1) {
+                $vendor_label = $names[0];
+            } elseif (count($names) > 1) {
+                $vendor_label = 'Multiple Vendors';
+            }
+        }
+
+        $quantity = isset($orderlistdata->quantity) ? $orderlistdata->quantity : 0;
+
+        // Corrected to build the link and text with 'order_number'.
+        $row['order_uid_view']  = "<a href='/admin/order/order_detail/" . $orderlistdata->order_number . "'>" . $orderlistdata->order_number . '</a>';
+        $row['customer_name']   = $name;
+        $row['vendor_name']     = $vendor_label;
+        $row['quantity']        = $quantity; // Placeholder value
+
+        // Corrected to use 'final_amount' for the total.
+        $row['total']           = $symbol . ' ' . $orderlistdata->final_amount;
+
+        // Corrected to use 'date_added' and 'last_updated'.
+        $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_added));
+        $st = isset($orderlistdata->status) ? strtolower((string)$orderlistdata->status) : 'pending';
+        $row['delivery_date']   = ($st === 'delivered') ? date("Y-m-d", strtotime($orderlistdata->last_updated)) : date("Y-m-d", strtotime($orderlistdata->date_added . "+7 day"));
+
+        $label = ucfirst($st);
+        if($st === 'cancelled' && isset($orderlistdata->cancelled_by) && $orderlistdata->cancelled_by){
+            $by = strtolower((string)$orderlistdata->cancelled_by);
+            if($by === 'customer'){
+                $label = 'Cancelled (Customer)';
+            }elseif($by === 'vendor'){
+                $label = 'Cancelled (Vendor)';
+            }elseif($by === 'admin'){
+                $label = 'Cancelled (Admin)';
+            }
+        }
+        $badgeClass = 'badge badge-secondary';
+        if($st === 'pending') { $badgeClass = 'badge badge-warning'; }
+        if($st === 'confirmed') { $badgeClass = 'badge badge-info'; }
+        if($st === 'shipped') { $badgeClass = 'badge badge-primary'; }
+        if($st === 'delivered') { $badgeClass = 'badge badge-success'; }
+        if($st === 'cancelled') { $badgeClass = 'badge badge-danger'; }
+        $row['status'] = '<span class="'.$badgeClass.'">'.$label.'</span>';
+        
+        $data[] = $row;
+    }
+
+    $output = array(
+        "draw"            => isset($_POST['draw']) ? intval($_POST['draw']) : 0,
+        // UPDATED: Passing the correct variable $user_id
+        "recordsTotal"    => $this->Order_model->count_all($user_id),
+        "recordsFiltered" => $this->Order_model->count_filtered($user_id, $_POST),
+        "data"            => $data,
+    );
+    
+    // Send the response back as JSON
+    $this->output->set_content_type('application/json')->set_output(json_encode($output));
+}
+
+    public function update_ajax_status()
+    {
+        $order_id = $this->input->post('orderid');
+        $statusval = $this->input->post('statusval');
+        $post_data = array('status' => $statusval);
+        
+        $this->db->trans_begin();
+        
+        if ($statusval === 'cancelled') {
+            if ($this->db->field_exists('cancelled_by', 'ec_orders')) {
+                $post_data['cancelled_by'] = 'admin';
+            }
+            
+            $itemUpdate = array('status' => 5);
+            if ($this->db->field_exists('cancelled_by', 'ec_order_items')) {
+                $itemUpdate['cancelled_by'] = 'admin';
+            }
+            $this->Query_model->update_data('ec_order_items', $itemUpdate, array('order_id' => $order_id));
+        }
+        
+        $condition = array('id' => $order_id);
+        $this->Query_model->update_data('ec_orders', $post_data, $condition);
+        
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            $data['message'] = 'Failed to Change Status';
+        } else {
+            $this->db->trans_commit();
+            $data['message'] = 'Status Changed Successfully';
+        }
+        echo json_encode($data);
+        die();
+    }
+
+
+    public function order_detail($order_uid = NULL)
+    {
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", 'Order List' => "/$this->TYPE/order", "Order Details"=>'');
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+        $data['csrf'] = csrf_token(); 
+        $data['TYPE'] = $this->TYPE;
+        $data['order_uid'] = $order_uid;
+        $data['page_count'] = page_count();
+
+        // New order system uses ec_orders + ec_order_items
+        $order = $this->Query_model->get_data_obj('ec_orders', array('order_number' => $order_uid));
+        if(!$order){
+            show_error('Invalid order.');
+            return;
+        }
+        $data['order_detail'] = $order;
+
+        $data['customer_detail'] = null;
+        if(isset($order->user_id) && $order->user_id){
+            $data['customer_detail'] = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $order->user_id));
+        }
+        $data['country_name'] = '';
+        if(isset($data['customer_detail']->country) && $data['customer_detail']->country){
+            $country_obj = get_country($data['customer_detail']->country);
+            $data['country_name'] = ($country_obj && isset($country_obj->name)) ? $country_obj->name : '';
+        }
+
+        $data['shipping_address'] = null;
+        if(isset($order->address_id) && $order->address_id){
+            $data['shipping_address'] = $this->Query_model->get_data_obj('ec_shipping_address', array('shipping_address_id' => $order->address_id));
+        }
+        $data['shipping_country_name'] = '';
+        if(isset($data['shipping_address']->country) && $data['shipping_address']->country){
+            $ship_country_obj = get_country($data['shipping_address']->country);
+            $data['shipping_country_name'] = ($ship_country_obj && isset($ship_country_obj->name)) ? $ship_country_obj->name : '';
+        }
+        $this->load->template("$this->TYPE/order/index_order_detail", $data);
+    }
+
+
+    public function ajax_order_detail()
+    {
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+        $order_uid = $this->input->post('order_uid');
+
+        $order = $this->Query_model->get_data_obj('ec_orders', array('order_number' => $order_uid));
+        if(!$order){
+            echo json_encode(array(
+                'draw' => isset($_POST['draw'])?$_POST['draw']:'',
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => array(),
+                'tax' => 0,
+                'currency_symbol' => '',
+                'iso_code' => '',
+                'shipping' => 0,
+                'unit_gross_price' => 0,
+                'order_item_status' => array(),
+            ));
+            return;
+        }
+
+        $items = $this->db
+            ->select('eop.*, eop.id as order_item_id', false)
+            ->from('ec_order_items as eop')
+            ->where('eop.order_id', (int)$order->id)
+            ->order_by('eop.id', 'ASC')
+            ->get()->result();
+
+        $currency_symbol = '';
+        $iso_code = '';
+
+        $order_item_status = array(
+            1  => 'Pending',
+            2  => 'In Process',
+            3  => 'Shipped',
+            10 => 'Delivered',
+            5  => 'Cancelled',
+            17 => 'Cancelled'
+        );
+
+        $ln = current_language();
+        $unit_gross_price = isset($order->final_amount) ? $order->final_amount : 0;
+        $shipping = isset($order->shipping_amount) ? $order->shipping_amount : 0;
+        $tax = isset($order->tax_amount) ? $order->tax_amount : 0;
+
+        $order_id_arr = array();
+        foreach ($items as $row) {
+
+            $product_id  = isset($row->product_id) ? $row->product_id :'';
+
+            // Variation-aware: try read variation_id from order item options
+            $variation_id = 0;
+            if(isset($row->options) && $row->options){
+                $opt = json_decode((string)$row->options, true);
+                if(is_array($opt)){
+                    if(isset($opt['variation_id'])){
+                        $variation_id = (int)$opt['variation_id'];
+                    }elseif(isset($opt['variationId'])){
+                        $variation_id = (int)$opt['variationId'];
+                    }
+                }
+            }
+
+            // New products table
+            $product_obj = $this->db
+                ->select('*')
+                ->from('products')
+                ->where('id', (int)$row->product_id)
+                ->get()->row();
+            if($product_obj){
+                // Normalize to legacy properties expected by existing UI code
+                if(!isset($product_obj->post_title)){
+                    $product_obj->post_title = isset($product_obj->name) ? $product_obj->name : '';
+                }
+                if(!isset($product_obj->type)){
+                    $product_obj->type = isset($product_obj->product_type) ? $product_obj->product_type : 'simple';
+                }
+                if(!isset($product_obj->post_content)){
+                    $product_obj->post_content = isset($product_obj->description) ? $product_obj->description : '';
+                }
+                if(!isset($product_obj->post_slug)){
+                    $product_obj->post_slug = isset($product_obj->slug) ? $product_obj->slug : '';
+                }
+            } else {
+                // Product not found – skip this order item row
+                continue;
+            }
+            if($ln == 12){
+                $product_obj->post_title = ($product_obj->post_title_es) ? $product_obj->post_title_es : $product_obj->post_title;
+                $product_obj->post_content = ($product_obj->post_content_es) ? $product_obj->post_content_es : $product_obj->post_content;
+                $product_obj->post_slug = ($product_obj->post_slug) ? $product_obj->post_slug : '';
+            }
+
+            $productimg = '';
+			// Variation images first (new system)
+			if($variation_id > 0){
+				$imgRow = $this->db
+					->select('image_path')
+					->from('product_variation_images')
+					->where('variation_id', (int)$variation_id)
+					->order_by('id', 'ASC')
+					->limit(1)
+					->get()->row();
+				if($imgRow && isset($imgRow->image_path) && $imgRow->image_path){
+					$productimg = base_url('uploads/products/'.(string)$imgRow->image_path);
+				}
+			}
+            if(isset($product_obj->images) && $product_obj->images){
+                $imgs = json_decode($product_obj->images, true);
+                if(is_array($imgs) && isset($imgs[0]) && $imgs[0]){
+                    $productimg = (string)$imgs[0];
+                }
+            }
+            if(!$productimg && isset($product_obj->prices) && $product_obj->prices){
+                $prices_obj = json_decode($product_obj->prices);
+                if(is_array($prices_obj) && isset($prices_obj[0]) && is_object($prices_obj[0]) && isset($prices_obj[0]->images[0]) && $prices_obj[0]->images[0]){
+                    $productimg = (string)$prices_obj[0]->images[0];
+                }
+            }
+
+            // New product system fallback: if no variation_id in options and product has no direct images,
+            // pick the first variation image for this product.
+            if(!$productimg && (!isset($variation_id) || (int)$variation_id <= 0) && isset($row->product_id) && $row->product_id){
+                $imgRow2 = $this->db
+                    ->select('img.image_path')
+                    ->from('product_variations v')
+                    ->join('product_variation_images img', 'img.variation_id = v.id', 'inner')
+                    ->where('v.product_id', (int)$row->product_id)
+                    ->order_by('img.id', 'ASC')
+                    ->limit(1)
+                    ->get()->row();
+                if($imgRow2 && isset($imgRow2->image_path) && $imgRow2->image_path){
+                    $p = ltrim((string)$imgRow2->image_path, '/\\');
+                    if(preg_match('#^https?://#i', $p)){
+                        $productimg = $p;
+                    }elseif(strpos($p, 'uploads/') === 0 || strpos($p, 'assets/') === 0){
+                        $productimg = base_url($p);
+                    }else{
+                        $productimg = base_url('uploads/products/'.$p);
+                    }
+                }
+            }
+
+            if($productimg){
+                if(preg_match('#^https?://#i', $productimg)){
+                    // keep as-is
+                }else{
+                    $fn = ltrim($productimg, '/\\');
+                    $is_prefixed_path = (strpos($fn, 'uploads/') === 0 || strpos($fn, 'assets/') === 0);
+                    $sku_dir = '';
+                    if(isset($product_obj->sku) && $product_obj->sku){
+                        $sku_dir = trim((string)$product_obj->sku, '/\\');
+                    }
+                    $try_fns = array($fn);
+                    if(strpos($fn, '_thumb.') !== false){
+                        $try_fns[] = preg_replace('/_thumb(\.[a-z0-9]+)$/i', '$1', $fn);
+                    }
+                    $resolved = '';
+                    foreach($try_fns as $tfn){
+                        $tfn_norm = ltrim((string)$tfn, '/\\');
+                        $tfn_is_prefixed = (strpos($tfn_norm, 'uploads/') === 0 || strpos($tfn_norm, 'assets/') === 0);
+                        $candidates = array(
+                            // If stored path already includes uploads/... or assets/... use it directly
+                            ($tfn_is_prefixed ? array('url' => base_url($tfn_norm), 'path' => FCPATH.$tfn_norm) : null),
+                            // Common legacy locations
+                            array('url' => base_url().'uploads/products/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$tfn_norm),
+                            ($sku_dir ? array('url' => base_url().'uploads/products/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$sku_dir.'/'.$tfn_norm) : null),
+                            array('url' => base_url().'assets/uploads/files/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$tfn_norm),
+                            ($sku_dir ? array('url' => base_url().'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm) : null),
+                            array('url' => base_url().'assets/uploads/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/'.$tfn_norm),
+                        );
+                        foreach($candidates as $cand){
+                            if(!$cand){
+                                continue;
+                            }
+                            if(isset($cand['path']) && @file_exists($cand['path'])){
+                                $resolved = $cand['url'];
+                                break 2;
+                            }
+                        }
+                    }
+                    if($resolved){
+                        $productimg = $resolved;
+                    }else{
+                        // Avoid double-prefix when DB already stores uploads/... or assets/...
+                        $productimg = $is_prefixed_path ? base_url($fn) : (base_url().'uploads/products/'.$fn);
+                    }
+                }
+            }
+
+            if(!$productimg && isset($product_obj->type) && $product_obj->type == 'simple'){
+                $product_gallery = $this->db
+                    ->select('*')
+                    ->from('ec_gallery')
+                    ->where('product_id', (int)$row->product_id)
+                    ->order_by('id', 'ASC')
+                    ->limit(1)
+                    ->get()->row();
+                if($product_gallery && isset($product_gallery->file_name) && $product_gallery->file_name){
+                    if(preg_match('#^https?://#i', $product_gallery->file_name)){
+                        $productimg = $product_gallery->file_name;
+                    }else{
+                        $fn = ltrim($product_gallery->file_name, '/\\');
+                        $is_prefixed_path = (strpos($fn, 'uploads/') === 0 || strpos($fn, 'assets/') === 0);
+                        $sku_dir = '';
+                        if(isset($product_obj->sku) && $product_obj->sku){
+                            $sku_dir = trim((string)$product_obj->sku, '/\\');
+                        }
+                        $try_fns = array($fn);
+                        if(strpos($fn, '_thumb.') !== false){
+                            $try_fns[] = preg_replace('/_thumb(\.[a-z0-9]+)$/i', '$1', $fn);
+                        }
+
+                        $productimg = $is_prefixed_path ? base_url($fn) : (base_url().'uploads/products/'.$fn);
+                        foreach($try_fns as $tfn){
+                            $tfn_norm = ltrim((string)$tfn, '/\\');
+                            $tfn_is_prefixed = (strpos($tfn_norm, 'uploads/') === 0 || strpos($tfn_norm, 'assets/') === 0);
+                            $candidates = array(
+                                ($tfn_is_prefixed ? array('url' => base_url($tfn_norm), 'path' => FCPATH.$tfn_norm) : null),
+                                array('url' => base_url().'uploads/products/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$tfn_norm),
+                                ($sku_dir ? array('url' => base_url().'uploads/products/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$sku_dir.'/'.$tfn_norm) : null),
+                                array('url' => base_url().'assets/uploads/files/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$tfn_norm),
+                                ($sku_dir ? array('url' => base_url().'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm) : null),
+                                array('url' => base_url().'assets/uploads/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/'.$tfn_norm),
+                            );
+                            foreach($candidates as $cand){
+                                if(!$cand){
+                                    continue;
+                                }
+                                if(isset($cand['path']) && @file_exists($cand['path'])){
+                                    $productimg = $cand['url'];
+                                    break 2;
+                                }
+                            }
+                        }
+                    }
+                }else{
+                    $productimg = base_url().'assets/default_images/product.jpg';
+                }
+            }else if(!$productimg){
+                $attr_item_id = isset($row->attribute_item_id) ? $row->attribute_item_id : null;
+                if($attr_item_id){
+                    $variation = $this->db
+                        ->select('*')
+                        ->from('ec_product_variation')
+                        ->where('product_id', (int)$row->product_id)
+                        ->where('attribute_item_id', $attr_item_id)
+                        ->limit(1)
+                        ->get()->row();
+                    if($variation && isset($variation->_thumbnail_id) && $variation->_thumbnail_id){
+                        if(preg_match('#^https?://#i', $variation->_thumbnail_id)){
+                            $productimg = $variation->_thumbnail_id;
+                        }else{
+                            $fn = ltrim($variation->_thumbnail_id, '/\\');
+                            $is_prefixed_path = (strpos($fn, 'uploads/') === 0 || strpos($fn, 'assets/') === 0);
+                            $sku_dir = '';
+                            if(isset($product_obj->sku) && $product_obj->sku){
+                                $sku_dir = trim((string)$product_obj->sku, '/\\');
+                            }
+                            $try_fns = array($fn);
+                            if(strpos($fn, '_thumb.') !== false){
+                                $try_fns[] = preg_replace('/_thumb(\.[a-z0-9]+)$/i', '$1', $fn);
+                            }
+
+                            $productimg = $is_prefixed_path ? base_url($fn) : (base_url().'uploads/products/'.$fn);
+                            foreach($try_fns as $tfn){
+                                $tfn_norm = ltrim((string)$tfn, '/\\');
+                                $tfn_is_prefixed = (strpos($tfn_norm, 'uploads/') === 0 || strpos($tfn_norm, 'assets/') === 0);
+                                $candidates = array(
+                                    ($tfn_is_prefixed ? array('url' => base_url($tfn_norm), 'path' => FCPATH.$tfn_norm) : null),
+                                    array('url' => base_url().'uploads/products/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$tfn_norm),
+                                    ($sku_dir ? array('url' => base_url().'uploads/products/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'uploads/products/'.$sku_dir.'/'.$tfn_norm) : null),
+                                    array('url' => base_url().'assets/uploads/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/'.$tfn_norm),
+                                    array('url' => base_url().'assets/uploads/files/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$tfn_norm),
+                                    ($sku_dir ? array('url' => base_url().'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm, 'path' => FCPATH.'assets/uploads/files/'.$sku_dir.'/'.$tfn_norm) : null),
+                                );
+                                foreach($candidates as $cand){
+                                    if(!$cand){
+                                        continue;
+                                    }
+                                    if(isset($cand['path']) && @file_exists($cand['path'])){
+                                        $productimg = $cand['url'];
+                                        break 2;
+                                    }
+                                }
+                            }
+                        }
+                    }else{
+                        $productimg = base_url().'assets/default_images/product.jpg';
+                    }
+                }else{
+                    $productimg = base_url().'assets/default_images/product.jpg';
+                }
+            }
+
+            if($productimg && strpos($productimg, 'assets/uploads/files/') !== false){
+                $productimg_alt = str_replace('assets/uploads/files/', 'assets/uploads/', $productimg);
+                $row->image_alt = $productimg_alt;
+            }
+
+            $attribute_item = array();
+            if(isset($row->attribute_item_id) && $row->attribute_item_id){
+                $att_array = explode(',',$row->attribute_item_id);
+                if($att_array){
+                    $attribute_item_obj = $this->Query_model->get_data('ec_attribute_item',array('attribute_item_id' => $att_array));
+                    if($attribute_item_obj){
+                        foreach($attribute_item_obj as $at){
+                            $attribute_item[] = $at->name;
+                        }
+                    }
+                }
+            }
+
+            $category_id        = get_categories_id($row->product_id);
+            $category_name      = null;
+            if($category_id && isset($category_id->category_id)){
+                $category_name = get_categories($category_id->category_id);
+            }
+            $unit_price = (isset($row->subtotal, $row->qty) && (float)$row->qty > 0) ? ($row->subtotal / $row->qty) : 0;
+            $unit_price = sprintf('%.02f',$unit_price);
+
+            $slug = isset($product_obj->post_slug) ? trim((string)$product_obj->post_slug) : '';
+            if($slug !== ''){
+                $row->url = get_permalink($slug);
+            }else{
+                $row->url = '/product/details/'.(int)$row->product_id;
+            }
+            $row->order_id      = $row->order_id;
+            $row->product_id    = $row->product_id;
+            $row->category_name = ($category_name && isset($category_name->name)) ? $category_name->name : '';
+            $row->productname   = $product_obj->post_title;
+            $row->quantity      = $row->qty;
+            $row->subtotal      = $row->subtotal;
+            $row->currency_symbol = '';
+            $row->unit_price    = $unit_price;
+            $row->iso_code       = '';
+            $row->image         = $productimg;
+            $row->attribute_item = $attribute_item;
+            $row->orderstatus   = isset($order_item_status[$row->status]) ? $order_item_status[$row->status] : (string)$row->status;
+            if (in_array((int)$row->status, [5, 17], true)) {
+                if (isset($row->cancelled_by) && $row->cancelled_by !== null && $row->cancelled_by !== '') {
+                    $row->orderstatus .= ' (' . ucfirst($row->cancelled_by) . ')';
+                } else {
+                    $row->orderstatus .= ((int)$row->status === 5) ? ' (Customer)' : ' (Vendor)';
+                }
+            }
+            $row->order_detail_status = $row->status;
+            $row->delivery_date = date("d-M-Y", strtotime($order->date_added."+7 day"));
+            $row->order_date    = date("d-M-Y", strtotime($order->date_added));
+            if($slug !== ''){
+                $row->product_link  = '/product/detail/'.$slug;
+            }else{
+                $row->product_link  = '/product/details/'.(int)$row->product_id;
+            }
+
+            // Keep response format compatible with existing JS loop (nested array)
+            $order_id_arr[0][] = $row;
+        }
+
+        $response = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsTotal"      => isset($order_id_arr[0]) ? count($order_id_arr[0]) : 0,
+                "recordsFiltered"   => isset($order_id_arr[0]) ? count($order_id_arr[0]) : 0,
+                "data"              => $order_id_arr,
+                "tax"               => $tax,
+                "currency_symbol"   => $currency_symbol,
+                "iso_code"          => $iso_code,
+                "shipping"          => $shipping,
+                "unit_gross_price"  => $unit_gross_price,
+                "order_item_status" => $order_item_status,
+                );
+
+        echo json_encode($response);
+
+    }
+
+
+    public function update_ajax_item_status()
+    {
+        $status        = $this->input->post('status');
+        $order_item_id = $this->input->post('order_item_id');
+        $post_data     = array('status' => $status);
+        if (in_array((int)$status, [5, 17], true)) {
+            if ($this->db->field_exists('cancelled_by', 'ec_order_items')) {
+                $post_data['cancelled_by'] = 'admin';
+            }
+        }
+        $condition     = array('id' => $order_item_id);
+        $this->Query_model->update_data('ec_order_items', $post_data, $condition);
+
+        // Sync parent order status after item status change
+        $item = $this->db->get_where('ec_order_items', array('id' => $order_item_id))->row();
+        if ($item && isset($item->order_id)) {
+            $this->_sync_parent_order_status_admin($item->order_id);
+        }
+
+        $data['message'] = 'Item status changed successfully';
+        echo json_encode($data);
+        die();
+    }
+
+    public function checkall_status_change()
+    {
+        $id = $this->input->post('id');
+        $status = $this->input->post('status');		
+        $ids = json_decode($id);
+        if($status == 'active'){
+            $status_val = 0;
+        }elseif($status == 'inactive'){
+            $status_val = 1;
+        }		
+        $data = array();
+        //$update = $this->User_model->checkall_supplier_status_change($id,$status);
+        if($ids && $this->LOGIN_ID && $this->TYPE == 'admin'){
+            $update = $this->Query_model->update_data('ec_orders',array('status' => $status),array('id' => $ids));
+        }
+
+        echo json_encode(array('success' => $update));
+
+    }
+
+
+#THIS FUNCTION USE FOR THE CANCEL ORDER START
+    public function cancel_order($customer_uid = NULL)
+    {               
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->cancel_order => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token(); 
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count(); 
+        $data['customer_uid'] = $customer_uid;
+
+        $this->load->template("$this->TYPE/order/cancel_order",$data);
+        //$this->load->view('imageUploadForm'); 
+    }
+
+
+
+    public function ajax_get_cancel_order()
+    {
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+        $customer_uid = $this->input->post('customer_uid');
+        $orderlist = $this->Order_model->get_cancel_order_data($customer_uid);
+
+        //echo "<pre>"; print_r($orderlist);echo "</pre>";die;
+
+
+        $data = array();
+
+        foreach ($orderlist as $orderlistdata) {
+
+            $row = array();
+            $currency               = current_currency($orderlistdata->currency_id);
+
+            $iso_code = isset($currency->iso_code) ? $currency->iso_code : '';
+            $symbol = isset($currency->symbol) ? $currency->symbol : '';
+            $customer_ifo =  get_shipping_info(1);
+            $name='';
+            if($customer_ifo){
+                $name = $customer_ifo->fullname;
+            }
+
+            $row['order_id']        = $orderlistdata->order_id;
+            $row['order_uid']       = $orderlistdata->order_uid;
+            $row['customer_name']   =$name;
+            // $row['customer_name']   = get_customer($orderlistdata->customer_id)->fname.' '.get_customer($orderlistdata->customer_id)->lname;
+            $row['order_uid_view']       = "<a href='/admin/order/order_detail/$orderlistdata->order_uid'>".$orderlistdata->order_uid.'</a>';
+
+            $row['quantity']        = $orderlistdata->quantity;
+            $row['total']           = $iso_code.' '.$symbol.' '.$orderlistdata->total;
+            $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_created));
+            //$row['order_date']      = $order_date;
+            $row['delivery_date']   = date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+            $row['status']          = order_status($orderlistdata->status);
+            $data[] = $row;
+        }
+
+        $output = array(
+                "draw" => isset($_POST['draw'])? $_POST['draw']:'',
+                "recordsTotal" => $this->Order_model->count_all_cancel('ec_order'),
+                "recordsFiltered" => $this->Order_model->count_filtered_cancel('ec_order'),
+                "data" => $data,
+                );
+
+#echo "<pre>";print_r( $output); echo "</pre>";
+#die;
+
+        echo json_encode($output);
+
+    }
+
+#THIS FUNCTION USE FOR THE CANCEL ORDER END
+
+
+#THIS FUNCTION USE FOR THE COMPLETE ORDER START
+    public function complete_order($customer_uid = NULL)
+    {               
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->complete_order => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token(); 
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count(); 
+        $data['customer_uid'] = $customer_uid;
+
+        $this->load->template("$this->TYPE/order/complete_order",$data);
+        //$this->load->view('imageUploadForm'); 
+    }
+
+
+
+    public function ajax_get_complete_order()
+    {
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+        $customer_uid = $this->input->post('customer_uid');
+        $orderlist = $this->Order_model->get_complete_order_data($customer_uid);
+        $data = array();
+
+        foreach ($orderlist as $orderlistdata) {
+
+            $row = array();
+            $currency               = current_currency($orderlistdata->currency_id);
+
+            $iso_code = isset($currency->iso_code) ? $currency->iso_code : '';
+            $symbol = isset($currency->symbol) ? $currency->symbol : '';
+
+            $row['order_id']        = $orderlistdata->order_id;
+            $row['order_uid']       = $orderlistdata->order_uid;
+            $row['order_uid_view']       = "<a href='/admin/order/order_detail/$orderlistdata->order_uid'>".$orderlistdata->order_uid.'</a>';
+
+            $row['customer_name']   = get_customer($orderlistdata->customer_id)->fname.' '.get_customer($orderlistdata->customer_id)->lname;
+            $row['quantity']        = $orderlistdata->quantity;
+            $row['total']           = $iso_code.' '.$symbol.' '.$orderlistdata->total;
+            $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_created));
+            //$row['order_date']      = $order_date;
+            $row['delivery_date']   = date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+            $row['status']          = order_status($orderlistdata->status);
+            $data[] = $row;
+        }
+
+        $output = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsTotal" => $this->Order_model->count_all_completed('ec_order'),
+                "recordsFiltered" => $this->Order_model->count_filtered_completed('ec_order'),
+                "data" => $data,
+                );
+
+        //echo "<pre>";print_r( $output); echo "</pre>";
+
+
+        echo json_encode($output);
+
+    }
+
+#THIS FUNCTION USE FOR THE COMPLETE ORDER END
+
+    public function export_pending_csv(){ 
+
+       $filename = 'pending_order_'.date('Ymd').'.csv'; 
+       header("Content-Description: File Transfer"); 
+       header("Content-Disposition: attachment; filename=$filename"); 
+       header("Content-Type: application/csv; ");	
+
+
+        $customer_uid = $this->input->post('customer_uid');
+        $orderlist = $this->Order_model->get_order_backend_data_pending_csv($customer_uid);	
+		//dd($orderlist);	
+        $data = array();
+        foreach ($orderlist as $orderlistdata) {
+
+            $row = array();
+            $currency = current_currency($orderlistdata->currency_id);
+            $iso_code = isset($currency->iso_code) ? $currency->iso_code : '';
+            $symbol = isset($currency->symbol) ? $currency->symbol : '';
+			
+			$customer_ifo =  get_shipping_info($orderlistdata->shipping_address_id);
+			$name='';
+            if($customer_ifo){
+                $name =  get_shipping_info($orderlistdata->shipping_address_id)->fullname;
+            }
+			
+            $row['order_id']        = $orderlistdata->order_id;				
+            $row['order_uid']       = $orderlistdata->order_uid;
+            $row['customer_name']   =  $name;
+            $row['quantity']        = $orderlistdata->quantity;
+            $row['total']           = $symbol.' '.$orderlistdata->ordertotal;
+            $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_created));				
+            //$row['delivery_date']   = date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+			
+			 $row['delivery_date']   = ($orderlistdata->status == 10) ? date("Y-m-d", strtotime($orderlistdata->last_updated."")) : date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+			 
+            $row['status']          = order_status($orderlistdata->status);
+            $data[] = $row;
+        }		
+
+       // echo "<pre>"; print_r($row); echo "</pre>";	die;
+
+
+        // file creation  
+        $file = fopen('php://output', 'w'); 
+            $header = array("order_id","order_uid","customer_name","quantity",'total','order_date','delivery_date','status');   
+
+        fputcsv($file, $header);
+
+        foreach ($data as $key=>$line){ 
+            fputcsv($file,$line); 
+        }
+        fclose($file); 
+        exit; 
+    }
+
+    public function export_cancel_csv(){ 
+
+        $filename = 'cancel_order_'.date('Ymd').'.csv'; 
+        header("Content-Description: File Transfer"); 
+        header("Content-Disposition: attachment; filename=$filename"); 
+        header("Content-Type: application/csv; ");	
+
+
+        $customer_uid = $this->input->post('customer_uid');
+        $orderlist = $this->Order_model->get_cancel_order_data_csv($customer_uid);
+
+        $data = array();
+
+        foreach ($orderlist as $orderlistdata) {
+
+            $row = array();
+            $currency               = current_currency($orderlistdata->currency_id);
+
+            $iso_code = isset($currency->iso_code) ? $currency->iso_code : '';
+            $symbol = isset($currency->symbol) ? $currency->symbol : '';
+
+
+            $row['order_id']        = $orderlistdata->order_id;
+            $row['order_uid']       = $orderlistdata->order_uid;              
+            $row['quantity']        = $orderlistdata->quantity;
+            $row['total']           = $iso_code.' '.$symbol.' '.$orderlistdata->total;
+            $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_created));
+            //$row['order_date']      = $order_date;
+            $row['delivery_date']   = date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+            $row['status']          = order_status($orderlistdata->status);
+            $data[] = $row;
+        }
+
+
+        //echo "<pre>"; print_r($list); echo "</pre>";	die;
+
+
+        // file creation  
+        $file = fopen('php://output', 'w'); 
+            $header = array("order_id","order_uid","customer_name","quantity",'total','order_date','delivery_date','status');   
+
+        fputcsv($file, $header);
+
+        foreach ($data as $key=>$line){ 
+            fputcsv($file,$line); 
+        }
+        fclose($file); 
+        exit; 
+    }
+
+    public function export_comp_csv(){ 
+
+        $filename = 'comp_order_'.date('Ymd').'.csv'; 
+        header("Content-Description: File Transfer"); 
+        header("Content-Disposition: attachment; filename=$filename"); 
+        header("Content-Type: application/csv; ");	
+
+
+        $customer_uid = $this->input->post('customer_uid');
+        $orderlist = $this->Order_model->get_complete_order_data_csv($customer_uid);
+        $data = array();
+
+        foreach ($orderlist as $orderlistdata) {
+
+            $row = array();
+            $currency               = current_currency($orderlistdata->currency_id);
+
+            $iso_code = isset($currency->iso_code) ? $currency->iso_code : '';
+            $symbol = isset($currency->symbol) ? $currency->symbol : '';
+
+            $row['order_id']        = $orderlistdata->order_id;
+            $row['order_uid']       = $orderlistdata->order_uid;
+
+            $row['customer_name']   = get_customer($orderlistdata->customer_id)->fname.' '.get_customer($orderlistdata->customer_id)->lname;
+            $row['quantity']        = $orderlistdata->quantity;
+            $row['total']           = $iso_code.' '.$symbol.' '.$orderlistdata->total;
+            $row['order_date']      = date("Y-m-d", strtotime($orderlistdata->date_created));
+            //$row['order_date']      = $order_date;
+            $row['delivery_date']   = date("Y-m-d", strtotime($orderlistdata->date_created."+7 day"));
+            $row['status']          = order_status($orderlistdata->status);
+            $data[] = $row;
+        }	
+        // file creation  
+        $file = fopen('php://output', 'w'); 
+            $header = array("order_id","order_uid","customer_name","quantity",'total','order_date','delivery_date','status');   
+
+        fputcsv($file, $header);
+
+        foreach ($data as $key=>$line){ 
+            fputcsv($file,$line); 
+        }
+        fclose($file); 
+        exit; 
+    }
+    private function _sync_parent_order_status_admin($order_id)
+    {
+        $order_id = (int)$order_id;
+        if (!$order_id) {
+            return;
+        }
+
+        $this->db->from('ec_order_items');
+        $this->db->where('order_id', $order_id);
+        $items = $this->db->get()->result();
+        if (!$items) {
+            return;
+        }
+
+        $active_items = [];
+        $total_items = 0;
+        foreach ($items as $it) {
+            $st = (int)($it->status ?? 0);
+            $total_items++;
+            if ($st !== 5 && $st !== 17) {
+                $active_items[] = $st;
+            }
+        }
+
+        if ($total_items > 0 && empty($active_items)) {
+            $new_status = 'cancelled';
+        } else {
+            $has_pending = false;
+            $has_in_process = false;
+            $has_shipped = false;
+            $all_delivered = true;
+
+            foreach ($active_items as $st) {
+                if ($st === 10) {
+                    // delivered
+                } elseif ($st === 3) {
+                    $has_shipped = true;
+                    $all_delivered = false;
+                } elseif ($st === 2) {
+                    $has_in_process = true;
+                    $all_delivered = false;
+                } else {
+                    $has_pending = true;
+                    $all_delivered = false;
+                }
+            }
+
+            if ($has_pending) {
+                $new_status = 'pending';
+            } elseif ($has_in_process) {
+                $new_status = 'confirmed';
+            } elseif ($has_shipped) {
+                $new_status = 'shipped';
+            } elseif ($all_delivered) {
+                $new_status = 'delivered';
+            } else {
+                $new_status = 'pending';
+            }
+        }
+
+        $this->Query_model->update_data('ec_orders', array('status' => $new_status), array('id' => $order_id));
+    }
+
+
+}

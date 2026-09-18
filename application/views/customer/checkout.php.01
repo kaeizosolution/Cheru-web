@@ -1,0 +1,1194 @@
+<?php
+$current_step = $checkout_step ?? 'address';
+// Load Language Data
+$page_lang = get_page_language_data('checkout_lang');
+?>    
+
+          	<!-- Shop Checkouts Content -->
+	<!-- Shop Address Selection Content -->
+<section class="shop-checkouts pt30">
+    <div class="container">
+      <!-- Title -->
+      <div class="row">
+        <div class="col-sm-6 col-lg-4 m-auto">
+          <div class="main-title text-center mb50">
+            <h2 class="title" id="checkoutPageTitle">Select Delivery Address</h2>
+            <p class="mb-0 fz14" id="checkoutPageSubtitle">Choose an address or add a new one to continue</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-12">
+          <ul class="list-inline mb30 fz14" id="checkoutSteps">
+            <li class="list-inline-item" data-step="address">1. Address</li>
+            <li class="list-inline-item text-muted">›</li>
+            <li class="list-inline-item" data-step="payment">2. Payment</li>
+            <li class="list-inline-item text-muted">›</li>
+            <li class="list-inline-item" data-step="confirm">3. Order Complete</li>
+          </ul>
+        </div>
+      </div>
+  
+      <div class="row" id="addressSection">
+        <!-- Left: Address selection -->
+        <div class="col-lg-8 col-xl-9">
+          <div class="checkout_form style2">
+            <div class="d-flex justify-content-between align-items-center mb20">
+              <h4 class="title mb0">Saved Addresses</h4>
+              <?php if (!empty($login_id)): ?>
+              <button type="button"
+                      class="btn btn-thm btn-sm"
+                      data-bs-toggle="modal"
+                      data-bs-target="#addAddressModal">
+                + Add New Address
+              </button>
+              <?php endif; ?>
+            </div>
+  
+            <form id="addressForm">
+              <div class="row" id="addressList">
+                <?php if (empty($login_id)): ?>
+                  <div class="col-12 text-center py-5">
+                      <p class="text-muted mb15">Please login to continue</p>
+                      <a class="btn btn-thm" href="https://cheru.kaeizosol.in/customer/login">Login</a>
+                  </div>
+                <?php else: ?>
+                  <!-- Addresses will be loaded dynamically here -->
+                  <div class="col-12 text-center py-5" id="addressLoading">
+                      <div class="spinner-border text-warning" role="status">
+                          <span class="visually-hidden">Loading...</span>
+                      </div>
+                      <p class="mt-2 text-muted">Loading addresses...</p>
+                  </div>
+                <?php endif; ?>
+              </div>
+              <input type="hidden" id="selected_address_id" value="">
+  
+              <!-- Action buttons -->
+              <div class="row mt30">
+                <div class="col-sm-6 mb15-xs">
+                    <a href="<?= base_url('cart') ?>" class="btn w-100 checkout-btn checkout-btn-secondary">← Back to Cart</a>
+                </div>
+                <div class="col-sm-6">
+                    <button type="button" id="continueToPayment" class="btn w-100 checkout-btn checkout-btn-primary" disabled>Continue to Payment →</button>
+                </div>
+              </div>
+            </form>
+  
+          </div>
+        </div>
+  
+        <!-- Right: Order summary (re-use your widget) -->
+        <div class="col-lg-4 col-xl-3">
+          <div class="order_sidebar_widget checkout_page mb30">
+            <h4 class="title">Order Summary</h4>
+            <ul id="checkoutSummaryList"></ul>
+          </div>
+  
+          <div class="ui_kit_checkbox checkout_pm">
+            <input type="checkbox" id="termsCheck" onchange="validateCheckout()">
+            <label for="termsCheck">I agree to the Terms & Conditions</label>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" id="paymentSection" style="display:none;">
+        <div class="col-lg-8 col-xl-9">
+          <div class="checkout_form style2">
+            <div class="mb20" id="selectedAddressBox" style="display:none;">
+              <h5 class="mb10">Delivering to</h5>
+              <div class="p15 bdrs12 border" id="selectedAddressSummary">-</div>
+            </div>
+            <h4 class="title mb20">Select Payment Method</h4>
+            <div class="ui_kit_checkbox mb20">
+              <div class="form-check mb10">
+                <input class="form-check-input" type="radio" name="payment_method" id="payCod" value="COD" checked>
+                <label class="form-check-label" for="payCod">Cash on Delivery (COD)</label>
+              </div>
+              <div class="form-check mb10">
+                <input class="form-check-input" type="radio" name="payment_method" id="payUpi" value="UPI" disabled>
+                <label class="form-check-label" for="payUpi">UPI (Coming soon)</label>
+              </div>
+              <div class="form-check mb10">
+                <input class="form-check-input" type="radio" name="payment_method" id="payCard" value="CARD" disabled>
+                <label class="form-check-label" for="payCard">Credit / Debit Card (Coming soon)</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" id="payOnline" value="ONLINE" disabled>
+                <label class="form-check-label" for="payOnline">Online Payment (Coming soon)</label>
+              </div>
+            </div>
+
+            <div class="row mt30">
+              <div class="col-sm-6 mb15-xs">
+                <button type="button" id="backToAddress" class="btn w-100 checkout-btn checkout-btn-secondary">← Back to Address</button>
+              </div>
+              <div class="col-sm-6">
+                <button type="button" id="placeOrderBtn" class="btn w-100 checkout-btn checkout-btn-primary">Place Order</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-4 col-xl-3">
+          <div class="order_sidebar_widget checkout_page mb30">
+            <h4 class="title">Order Summary</h4>
+            <ul id="checkoutSummaryListPayment"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" id="confirmSection" style="display:none;">
+        <div class="col-lg-8 col-xl-9">
+          <div class="checkout_form style2">
+            <div class="text-center mb30">
+              <div class="d-inline-flex align-items-center justify-content-center" style="width:64px;height:64px;border-radius:50%;background:#e8f5e9;">
+                <span style="font-size:28px;color:#2e7d32;">✓</span>
+              </div>
+              <h3 class="title mt20" id="confirmTitle">Thank you, your order is confirmed!</h3>
+              <p class="text-muted" id="confirmSubtitle">We’ve received your order and will notify you when it ships.</p>
+            </div>
+
+            <div class="row g-3 mb30" id="confirmMeta">
+              <div class="col-md-4">
+                <div class="p15 bdrs12 border">
+                  <div class="text-muted fz13">Order ID</div>
+                  <div class="fw600" id="confirmOrderNumber">-</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="p15 bdrs12 border">
+                  <div class="text-muted fz13">Order Date</div>
+                  <div class="fw600" id="confirmOrderDate">-</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="p15 bdrs12 border">
+                  <div class="text-muted fz13">Payment</div>
+                  <div class="fw600" id="confirmPayment">-</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb20">
+                <h5 class="mb10">Delivery Address</h5>
+                <div class="p15 bdrs12 border" id="confirmAddress">-</div>
+              </div>
+              <div class="col-md-6 mb20">
+                <h5 class="mb10">Order Items</h5>
+                <div class="p15 bdrs12 border" id="confirmItems" style="max-height:220px;overflow:auto;">-</div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt20">
+              <a href="<?= base_url('/'); ?>" class="btn checkout-btn checkout-btn-secondary">← Continue Shopping</a>
+              <a href="<?= base_url('profile?tab=order'); ?>" class="btn checkout-btn checkout-btn-primary">View Order Details →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Add New Address Modal -->
+  <div class="modal fade" id="addAddressModal" tabindex="-1" aria-labelledby="addAddressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="newAddressForm" method="post">
+          <input type="hidden" name="shipping_address_id" value="">
+          <input type="hidden" name="<?= $this->security->get_csrf_token_name(); ?>" value="<?= $this->security->get_csrf_hash(); ?>">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addAddressModalLabel">Add New Address</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group mb15">
+              <label class="form-label">Address Label (Home / Office / Other) *</label>
+              <select class="form-control form_control" name="address_type" required>
+                <option value="Home">Home</option>
+                <option value="Office">Office</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+  
+            <div class="form-group mb15">
+              <label class="form-label">Full Name *</label>
+              <input type="text" class="form-control form_control" name="fullname" required>
+            </div>
+  
+            <div class="form-group mb15">
+              <label class="form-label">Street Address *</label>
+              <input type="text" class="form-control form_control mb10" name="address_1" placeholder="House no, street" required>
+              <input type="text" class="form-control form_control" name="address_2" placeholder="Landmark (optional)">
+            </div>
+  
+            <div class="form-group mb15">
+              <label class="form-label">City *</label>
+              <input type="text" class="form-control form_control" name="city" required>
+            </div>
+  
+            <div class="row">
+              <div class="col-sm-6">
+                <div class="form-group mb15">
+                  <label class="form-label">State *</label>
+                  <input type="text" class="form-control form_control" name="state" required>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="form-group mb15">
+                  <label class="form-label">ZIP / Pincode *</label>
+                  <input type="text" class="form-control form_control" name="postcode" required>
+                </div>
+              </div>
+            </div>
+  
+            <div class="form-group mb0">
+              <label class="form-label">Mobile Number *</label>
+              <input type="text" class="form-control form_control" name="mobile" required>
+            </div>
+  
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-thm">Save Address</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<script>
+var currentStep = '<?=$current_step?>';
+var __checkout_select_address_id = null;
+if (typeof window.currency_symbol === 'undefined') {
+    window.currency_symbol = '$';
+}
+
+function resetCheckoutAddressModal(){
+    var $form = $('#newAddressForm');
+    $form.find('input[name="shipping_address_id"]').val('');
+    if ($('#addAddressModalLabel').length) {
+        $('#addAddressModalLabel').text('Add New Address');
+    }
+    var $btn = $form.find('button[type="submit"]');
+    if ($btn.length) {
+        $btn.text('Save Address');
+    }
+}
+
+function fillCheckoutAddressModal(addr){
+    if (!addr) return;
+    var id = addr.shipping_address_id || addr.id || '';
+    var $form = $('#newAddressForm');
+    $form.find('input[name="shipping_address_id"]').val(id);
+    $form.find('[name="address_type"]').val(addr.address_type || 'Home');
+    $form.find('[name="fullname"]').val(addr.fullname || '');
+    $form.find('[name="address_1"]').val(addr.address_1 || '');
+    $form.find('[name="address_2"]').val(addr.address_2 || '');
+    $form.find('[name="city"]').val(addr.city || '');
+    $form.find('[name="state"]').val(addr.state || '');
+    $form.find('[name="postcode"]').val(addr.postcode || '');
+    $form.find('[name="mobile"]').val(addr.mobile || '');
+
+    if ($('#addAddressModalLabel').length) {
+        $('#addAddressModalLabel').text('Edit Address');
+    }
+    var $btn = $form.find('button[type="submit"]');
+    if ($btn.length) {
+        $btn.text('Update Address');
+    }
+}
+
+function updateCheckoutDefaultBadgeUI(defaultAddressId){
+    $('.address-card').each(function(){
+        var $c = $(this);
+        var id = $c.data('address-id');
+        var isDef = String(id) === String(defaultAddressId);
+        var $tag = $c.find('.address-tag').first();
+        if ($tag.length) {
+            if (isDef) {
+                $tag.addClass('badge-default').text('Default');
+            } else {
+                $tag.removeClass('badge-default').text('Saved');
+            }
+        }
+    });
+}
+
+function updateCheckoutHintUI(selectedAddressId){
+    $('.address-card').each(function(){
+        var $c = $(this);
+        var id = $c.data('address-id');
+        var isSelected = String(id) === String(selectedAddressId);
+        var $hint = $c.find('.address-hint').first();
+        if ($hint.length) {
+            $hint.text(isSelected ? 'Used as your primary delivery address' : 'You can set this as default anytime');
+        }
+    });
+}
+
+function setDefaultAddress(addressId){
+    addressId = parseInt(addressId || 0, 10) || 0;
+    if (!addressId) return;
+
+    var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+
+    $.ajax({
+        url: '/api/v1/addresses/default',
+        type: 'POST',
+        dataType: 'json',
+        headers: (function(){
+            return token ? { 'Authorization': 'Bearer ' + token } : {};
+        })(),
+        data: { address_id: addressId },
+        success: function(resp){
+            var STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+            if (STATUS == 1) {
+                if (typeof window.__checkoutAddressesById !== 'undefined') {
+                    Object.keys(window.__checkoutAddressesById || {}).forEach(function(k){
+                        window.__checkoutAddressesById[k].default_address = 0;
+                    });
+                    if (window.__checkoutAddressesById[String(addressId)]) {
+                        window.__checkoutAddressesById[String(addressId)].default_address = 1;
+                    }
+                }
+
+                updateCheckoutDefaultBadgeUI(addressId);
+            }
+        }
+    });
+}
+
+function loading(targetSelector, isLoading, text) {
+    try {
+        var $btn = $(targetSelector);
+        if (!$btn.length) return;
+        if (isLoading) {
+            if (typeof $btn.data('original-text') === 'undefined') {
+                $btn.data('original-text', $btn.text());
+            }
+            $btn.prop('disabled', true);
+            if (text) $btn.text(text);
+        } else {
+            var originalText = $btn.data('original-text');
+            $btn.prop('disabled', false);
+            if (originalText) $btn.text(originalText);
+        }
+    } catch (e) {
+    }
+}
+
+// --- LANGUAGE BRIDGE for JS ---
+var lang_data = {
+    deliver_here: "<?= $page_lang->deliver_here; ?>",
+    add_new_address: "<?= $page_lang->add_new_address; ?>"
+};
+
+function waitForJQuery(cb) {
+    if (window.jQuery && typeof window.jQuery === 'function') {
+        window.jQuery(cb);
+        return;
+    }
+    setTimeout(function () {
+        waitForJQuery(cb);
+    }, 50);
+}
+
+function get_addresses(){
+    var loginId = parseInt('<?= !empty($login_id) ? $login_id : 0 ?>', 10);
+    if (!loginId) {
+        $('#addressList').html('<div class="col-12 text-center py-5"><p class="text-muted mb15">Please login to continue</p><a class="btn btn-thm" href="https://cheru.kaeizosol.in/customer/login">Login</a></div>');
+        return;
+    }
+
+    var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+
+    $.ajax({
+        url: '/api/v1/addresses',
+        type: 'GET',
+        dataType: 'json',
+        headers: (function(){
+            return token ? { 'Authorization': 'Bearer ' + token } : {};
+        })(),
+        success: function(resp){
+            const STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+            const MSG = resp.message || resp.MSG || resp.msg || '';
+            if (STATUS != 1 && (MSG || '').toLowerCase().indexOf('please login to continue shopping') !== -1) {
+                $('#addressList').html('<div class="col-12 text-center py-5"><p class="text-muted mb10">Please login to continue</p><a class="btn btn-thm" href="https://cheru.kaeizosol.in/customer/login">Login</a></div>');
+                return;
+            }
+            var legacy = {
+                STATUS: STATUS,
+                MSG: MSG,
+                DATA: (resp.data && resp.data.addresses) ? resp.data.addresses : (resp.DATA || resp.data || [])
+            };
+            address_html(legacy);
+        },
+        error: function(xhr){
+            if (xhr.status === 401) {
+                $('#addressList').html('<div class="col-12 text-center py-5"><p class="text-muted mb15">Please login to continue</p><a class="btn btn-thm" href="https://cheru.kaeizosol.in/customer/login">Login</a></div>');
+                return;
+            }
+            $("#addressList").html('<div class="col-12 text-center py-4"><p class="text-muted mb-3">Failed to load addresses.</p></div>');
+            console.error('get_addresses error:', xhr.responseText);
+        }
+    });
+}
+
+waitForJQuery(function(){
+    get_addresses();
+    setCheckoutStep(currentStep);
+    showStep(currentStep);
+    loadCheckoutSummary();
+
+    $(document).on('cheru:cart-updated', function(){
+        loadCheckoutSummary();
+    });
+
+    (function(){
+        var t = null;
+        function schedule(){
+            if (t) clearTimeout(t);
+            t = setTimeout(function(){
+                loadCheckoutSummary();
+            }, 250);
+        }
+        $(document).on('ajaxComplete', function(_e, _xhr, settings){
+            try {
+                var url = (settings && settings.url) ? String(settings.url) : '';
+                if (!url) return;
+                var low = url.toLowerCase();
+                if (low.indexOf('/cart') !== -1 || low.indexOf('customer/cart') !== -1) {
+                    schedule();
+                }
+            } catch (e) {}
+        });
+    })();
+
+    $(document).on('hidden.bs.modal', '#addAddressModal', function(){
+        resetCheckoutAddressModal();
+    });
+
+    // Address card click handler
+    $(document).on('click', '.address-card', function(e) {
+        if ($(e.target).closest('button, a, input, label, .address-actions').length) return;
+        $(this).find('.address-radio').prop('checked', true).trigger('change');
+    });
+
+    // Radio change handler
+    $(document).on('change', '.address-radio', function() {
+        $('.address-card').removeClass('border-warning selected').addClass('border-light');
+        var $card = $(this).closest('.address-card');
+        $card.removeClass('border-light').addClass('border-warning');
+        $card.addClass('selected');
+        var addressId = $(this).val();
+        $('#selected_address_id').val(addressId);
+        updateCheckoutHintUI(addressId);
+        updateCheckoutDefaultBadgeUI(addressId);
+        setDefaultAddress(addressId);
+        validateCheckout();
+    });
+
+    $(document).on('click', '.btn-set-default', function(e){
+        e.preventDefault();
+        var $card = $(this).closest('.address-card');
+        $card.find('.address-radio').prop('checked', true).trigger('change');
+    });
+
+    $(document).on('click', '.btn-edit-address', function(e){
+        e.preventDefault();
+        var $card = $(this).closest('.address-card');
+        var addressId = $card.data('address-id');
+        var addr = null;
+        if (typeof window.__checkoutAddressesById !== 'undefined' && addressId) {
+            addr = window.__checkoutAddressesById[String(addressId)] || null;
+        }
+        if (!addr) return;
+        fillCheckoutAddressModal(addr);
+        var modalEl = document.getElementById('addAddressModal');
+        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            var m = bootstrap.Modal.getOrCreateInstance(modalEl);
+            m.show();
+        }
+    });
+
+    $(document).on('click', '.btn-delete-address', function(e){
+        e.preventDefault();
+        var $card = $(this).closest('.address-card');
+        var addressId = parseInt($card.data('address-id') || 0, 10) || 0;
+        if (!addressId) return;
+        if (!confirm('Delete this address?')) return;
+
+        var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+        $.ajax({
+            url: '/api/v1/addresses/delete',
+            type: 'POST',
+            dataType: 'json',
+            headers: (function(){
+                return token ? { 'Authorization': 'Bearer ' + token } : {};
+            })(),
+            data: { shipping_address_id: addressId },
+            success: function(resp){
+                var STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+                var MSG = resp.message || resp.MSG || resp.msg || '';
+                if (STATUS == 1) {
+                    $card.closest('.address-col').remove();
+                    if (typeof window.__checkoutAddressesById !== 'undefined') {
+                        delete window.__checkoutAddressesById[String(addressId)];
+                    }
+
+                    var $remainingCards = $('.address-card');
+                    if (!$remainingCards.length) {
+                        $('#selected_address_id').val('');
+                        validateCheckout();
+                        return;
+                    }
+
+                    var minId = null;
+                    $remainingCards.each(function(){
+                        var id = parseInt($(this).data('address-id') || 0, 10) || 0;
+                        if (!id) return;
+                        if (minId === null || id < minId) minId = id;
+                    });
+                    if (minId !== null) {
+                        $('.address-radio[value="' + String(minId) + '"]').prop('checked', true).trigger('change');
+                    }
+                } else {
+                    alert(MSG || 'Failed to delete address');
+                }
+            },
+            error: function(){
+                alert('Failed to delete address');
+            }
+        });
+    });
+
+    // Terms checkbox handler
+    $(document).on('change', '#termsCheck', function() {
+        validateCheckout();
+    });
+
+    // Continue to Payment button handler
+    $('#continueToPayment').on('click', function() {
+        let addressId = $('#selected_address_id').val();
+        
+        if (!addressId) {
+            alert('Please select a delivery address');
+            return;
+        }
+        
+        if (!$('#termsCheck').is(':checked')) {
+            alert('Please accept Terms & Conditions');
+            return;
+        }
+        
+        var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+
+        $.ajax({
+            url: '/api/v1/checkout/select-address',
+            type: 'POST',
+            dataType: 'json',
+            headers: (function(){
+                return token ? { 'Authorization': 'Bearer ' + token } : {};
+            })(),
+            data: { address_id: addressId },
+            success: function(resp){
+                const STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+                const MSG = resp.message || resp.MSG || resp.msg || '';
+                if (STATUS == 1) {
+                    showStep('payment');
+                    $.ajax({
+                        url: '/api/v1/checkout/step',
+                        type: 'POST',
+                        dataType: 'json',
+                        headers: (function(){
+                            return token ? { 'Authorization': 'Bearer ' + token } : {};
+                        })(),
+                        data: { step: 'payment' }
+                    });
+                } else {
+                    if ((MSG || '').toLowerCase().indexOf('please login to continue shopping') !== -1) {
+                        alert('Please login to continue shopping');
+                        window.location.href = "<?= site_url('login'); ?>";
+                        return;
+                    }
+                    alert(MSG || 'Failed to select address');
+                }
+            },
+            error: function(xhr){
+                var msg = 'Failed to select address';
+                try {
+                    if (xhr && xhr.responseText) {
+                        var json = JSON.parse(xhr.responseText);
+                        msg = json.message || json.MSG || json.msg || msg;
+                    }
+                } catch(e) {}
+                alert(msg);
+            }
+        });
+    });
+
+    $('#backToAddress').on('click', function() {
+        showStep('address');
+        var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+        $.ajax({
+            url: '/api/v1/checkout/step',
+            type: 'POST',
+            dataType: 'json',
+            headers: (function(){
+                return token ? { 'Authorization': 'Bearer ' + token } : {};
+            })(),
+            data: { step: 'address' }
+        });
+    });
+
+    $('#placeOrderBtn').on('click', function() {
+        let address_id = $('#selected_address_id').val();
+        if (!address_id) {
+            alert('Please select an address before placing the order.');
+            showStep('address');
+            return;
+        }
+        if (!$('#termsCheck').is(':checked')) {
+            alert('Please accept Terms & Conditions to continue.');
+            showStep('address');
+            return;
+        }
+
+        let payment_method = $('input[name="payment_method"]:checked').val();
+        if (!payment_method || payment_method !== 'COD') {
+            alert('Please select Cash on Delivery (COD).');
+            return;
+        }
+
+        var postData = {
+            address_id: address_id,
+            payment_method: payment_method,
+            terms_accepted: 1
+        };
+        if (window.checkoutCouponCode) {
+            postData.coupon_code = window.checkoutCouponCode;
+        }
+
+        $.ajax({
+            url: '/api/v1/place-order',
+            type: 'POST',
+            dataType: 'json',
+            data: postData,
+            headers: (function(){
+                var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+                return token ? { 'Authorization': 'Bearer ' + token } : {};
+            })(),
+            beforeSend: function() {
+                loading('#placeOrderBtn', true, 'Processing...');
+            },
+            success: function(resp) {
+                const OK = (typeof resp.status !== 'undefined') ? !!resp.status : ((typeof resp.STATUS !== 'undefined') ? (resp.STATUS == 1) : false);
+                const MSG = resp.message || resp.MSG || resp.msg || '';
+                const orderId = resp.order_id || (resp.data ? resp.data.order_id : 0);
+
+                if (OK) {
+                    var DATA = resp.data || {};
+                    if (!DATA.order_id && orderId) {
+                        DATA.order_id = orderId;
+                    }
+                    if (DATA) {
+                        $('#confirmOrderNumber').text(DATA.order_number || DATA.order_id || '-');
+                        $('#confirmOrderDate').text(DATA.order_date || '-');
+                        $('#confirmPayment').text(DATA.payment_method ? ('Paid via ' + DATA.payment_method) : 'COD');
+
+                        if (DATA.address) {
+                            const a = DATA.address;
+                            let addrHtml = '';
+                            addrHtml += `<div class="fw600 mb5">${a.fullname || ''}</div>`;
+                            addrHtml += `<div class="fz13">${a.address_1 || ''}${a.address_2 ? (', ' + a.address_2) : ''}</div>`;
+                            addrHtml += `<div class="fz13">${a.city || ''}${a.postcode ? (' - ' + a.postcode) : ''}</div>`;
+                            if (a.state) addrHtml += `<div class="fz13">${a.state}</div>`;
+                            if (a.mobile) addrHtml += `<div class="fz13">Phone: ${a.mobile}</div>`;
+                            $('#confirmAddress').html(addrHtml);
+                        }
+
+                        if (Array.isArray(DATA.cart_items)) {
+                            let itemsHtml = '';
+                            DATA.cart_items.forEach(function(it){
+                                const title = it.post_title || it.product_name || 'Item';
+                                const qty = it.quantity || it.qty || 0;
+                                const total = parseFloat(it.total || it.subtotal || 0);
+                                itemsHtml += `
+                                    <div class="d-flex justify-content-between align-items-start mb10">
+                                        <div class="me-2">
+                                            <div class="fw600">${title}</div>
+                                            <div class="text-muted fz13">Qty: ${qty}</div>
+                                        </div>
+                                        <div class="fw600">${currency_symbol}${total.toFixed(2)}</div>
+                                    </div>
+                                `;
+                            });
+
+                            var subtotalVal = parseFloat(DATA.total_amount || 0);
+                            var shippingVal = parseFloat(DATA.shipping_amount || 0);
+                            var discountVal = parseFloat(DATA.discount_amount || 0);
+                            var finalVal = parseFloat(DATA.final_amount || (subtotalVal + shippingVal - discountVal));
+                            
+                            itemsHtml += `
+                                <hr style="margin: 12px 0; border-top: 1px dashed #ddd; opacity: 0.8;"/>
+                                <div class="d-flex justify-content-between align-items-center mb5 fz13 text-muted">
+                                    <div>Subtotal</div>
+                                    <div>${currency_symbol}${subtotalVal.toFixed(2)}</div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb5 fz13 text-muted">
+                                    <div>Shipping</div>
+                                    <div>${shippingVal <= 0 ? 'Free' : (currency_symbol + shippingVal.toFixed(2))}</div>
+                                </div>
+                            `;
+                            
+                            if (discountVal > 0) {
+                                itemsHtml += `
+                                    <div class="d-flex justify-content-between align-items-center mb5 fz13 text-success">
+                                        <div>Coupon Discount (${DATA.coupon_code || ''})</div>
+                                        <div>-${currency_symbol}${discountVal.toFixed(2)}</div>
+                                    </div>
+                                `;
+                            }
+                            
+                            itemsHtml += `
+                                <div class="d-flex justify-content-between align-items-center mt10 pt10 border-top" style="font-weight: 700; font-size: 15px; color: #111;">
+                                    <div>Total Amount</div>
+                                    <div class="text-thm">${currency_symbol}${finalVal.toFixed(2)}</div>
+                                </div>
+                            `;
+
+                            $('#confirmItems').html(itemsHtml || '-');
+                        }
+                    }
+
+                    showStep('confirm');
+                    var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+                    $.ajax({
+                        url: '/api/v1/checkout/step',
+                        type: 'POST',
+                        dataType: 'json',
+                        headers: (function(){
+                            return token ? { 'Authorization': 'Bearer ' + token } : {};
+                        })(),
+                        data: { step: 'confirm' }
+                    });
+                } else {
+				var m = MSG || 'Unknown error';
+				var low = String(m || '').toLowerCase();
+				if (low.indexOf('cart is empty') !== -1) {
+					m = 'Cart is empty, please add some products to place order';
+				}
+				alert('Failed to place order: ' + m);
+                }
+            },
+            error: function(xhr) {
+				var msg = 'An error occurred. Please try again.';
+				try {
+					var json = null;
+					if (xhr && xhr.responseText) {
+						json = JSON.parse(xhr.responseText);
+					}
+					if (json) {
+						var m2 = json.message || json.MSG || json.msg || '';
+						if (String(m2).toLowerCase().indexOf('cart is empty') !== -1) {
+							msg = 'Cart is empty, please add some products to place order';
+						}
+					}
+				} catch(e) {}
+				alert(msg);
+            },
+            complete: function() {
+                loading('#placeOrderBtn', false, 'Place Order');
+            }
+        });
+    });
+
+    // Add New Address Form Submission
+    $(document).on('submit', '#newAddressForm', function(e){
+        e.preventDefault();
+        var $btn = $(this).find('button[type="submit"]');
+        var originalText = $btn.text();
+        $btn.prop('disabled', true).text('Saving...');
+
+        var addressId = parseInt($(this).find('input[name="shipping_address_id"]').val() || 0, 10) || 0;
+        var isEdit = addressId > 0;
+        var url = isEdit ? '/api/v1/addresses/update' : '/api/v1/addresses/add';
+        
+        $.ajax({
+            url: url,
+            type: "POST",
+            dataType: "json",
+            headers: (function(){
+                var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+                return token ? { 'Authorization': 'Bearer ' + token } : {};
+            })(),
+            data: $(this).serialize(),
+            success: function(resp) {
+                $btn.prop('disabled', false).text(originalText);
+                const STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+                const MSG = resp.message || resp.MSG || resp.msg || '';
+                const DATA = (typeof resp.data !== 'undefined') ? resp.data : resp.DATA;
+                if(STATUS == 1) {
+                    var modalEl = document.getElementById('addAddressModal');
+                    var modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                    if (!isEdit) {
+                        $("#newAddressForm")[0].reset();
+                        resetCheckoutAddressModal();
+                        if (DATA && (DATA.shipping_address_id || DATA.address_id)) {
+                            __checkout_select_address_id = DATA.shipping_address_id || DATA.address_id;
+                        }
+                        get_addresses();
+                    } else {
+                        var payload = $('#newAddressForm').serializeArray();
+                        var updated = { shipping_address_id: addressId };
+                        payload.forEach(function(p){
+                            updated[p.name] = p.value;
+                        });
+                        if (typeof window.__checkoutAddressesById !== 'undefined') {
+                            window.__checkoutAddressesById[String(addressId)] = Object.assign(window.__checkoutAddressesById[String(addressId)] || {}, updated);
+                        }
+                        var $card = $('.address-card[data-address-id="' + String(addressId) + '"]');
+                        if ($card.length) {
+                            $card.find('.address-label').text(updated.address_type || 'Address');
+                            $card.find('.address-name').text(updated.fullname || '');
+                            var line1 = [updated.address_1, updated.address_2].filter(Boolean).join(', ');
+                            var line2 = [updated.city].filter(Boolean).join(', ');
+                            var pc = updated.postcode ? (' - ' + updated.postcode) : '';
+                            $card.find('.address-line1').text(line1);
+                            $card.find('.address-line2').text(String(line2) + String(pc));
+                            $card.find('.address-phone').text('Phone: ' + (updated.mobile || ''));
+                        }
+                        $("#newAddressForm")[0].reset();
+                        resetCheckoutAddressModal();
+                    }
+                    if (typeof showSnackBar === 'function') {
+                        showSnackBar({ message: MSG || 'Address added successfully' });
+                    } else {
+                        alert(MSG || 'Address added successfully');
+                    }
+                } else {
+                    if ((MSG || '').toLowerCase().indexOf('please login to continue shopping') !== -1) {
+                        alert('Please login to continue shopping');
+                        window.location.href = "<?= site_url('login'); ?>";
+                        return;
+                    }
+                    alert(MSG || 'Failed to add address. Please check your input.');
+                }
+            },
+            error: function(xhr) {
+                $btn.prop('disabled', false).text(originalText);
+                console.error('Add address error:', xhr.responseText);
+                alert('An error occurred while adding address. Please try again.');
+            }
+        });
+    });
+});
+
+function loadCheckoutSummary(){
+    var loginId = parseInt('<?= !empty($login_id) ? $login_id : 0 ?>', 10);
+    if (!loginId) {
+        // If guest, fetch summary from guest-friendly /api/v1/cart endpoint
+        $.ajax({
+            url: '/api/v1/cart',
+            type: 'GET',
+            dataType: 'json',
+            success: function(resp){
+                const STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+                const DATA = (typeof resp.data !== 'undefined') ? resp.data : resp.DATA;
+                if (STATUS == 1 && DATA) {
+                    var legacy = {
+                        cart_items: [],
+                        cart_summary: {
+                            subtotal: DATA.subtotal || 0,
+                            shipping: DATA.shipping || 0,
+                            grand_total: DATA.final_total || DATA.grand_total || DATA.cart_total || 0,
+                            coupon: DATA.coupon || null
+                        }
+                    };
+                    if (Array.isArray(DATA.items)) {
+                        legacy.cart_items = DATA.items.map(function(it){
+                            return {
+                                post_title: it.product_name || it.post_title || '',
+                                image_url: it.image_url || it.thumbnail || it.image || it.product_image || '',
+                                quantity: (typeof it.quantity !== 'undefined' && it.quantity !== null) ? it.quantity : (it.qty || 0),
+                                total: it.subtotal || (parseFloat(it.price || 0) * parseInt(it.quantity || 0, 10))
+                            };
+                        });
+                    }
+                    renderCheckoutSummary(legacy);
+                }
+            }
+        });
+        return;
+    }
+
+    $.ajax({
+        url: '/api/v1/checkout',
+        type: 'GET',
+        dataType: 'json',
+        headers: (function(){
+            var token = (typeof window.customer_access_token !== 'undefined') ? String(window.customer_access_token || '') : '';
+            return token ? { 'Authorization': 'Bearer ' + token } : {};
+        })(),
+        success: function(resp){
+            const STATUS = (typeof resp.status !== 'undefined') ? resp.status : resp.STATUS;
+            const DATA = (typeof resp.data !== 'undefined') ? resp.data : resp.DATA;
+            if (STATUS == 1 && DATA) {
+                var legacy = {
+                    cart_items: [],
+                    cart_summary: DATA.cart_summary || {}
+                };
+                if (Array.isArray(DATA.cart_items)) {
+                    legacy.cart_items = DATA.cart_items.map(function(it){
+                        return {
+                            post_title: it.product_name || it.post_title || '',
+                            image_url: it.image_url || it.thumbnail || it.image || it.product_image || '',
+                            quantity: (typeof it.quantity !== 'undefined' && it.quantity !== null) ? it.quantity : (it.qty || 0),
+                            total: it.subtotal || (parseFloat(it.price || 0) * parseInt(it.quantity || 0, 10))
+                        };
+                    });
+                }
+                renderCheckoutSummary(legacy);
+            }
+        }
+    });
+}
+
+function renderCheckoutSummary(payload){
+    var cart_items = payload.cart_items || [];
+    var summary = payload.cart_summary || {};
+    var subtotal = parseFloat(summary.subtotal || 0);
+    var shipping = parseFloat(summary.shipping || 0);
+    var grandTotal = parseFloat(summary.grand_total || summary.total || 0);
+    window.checkoutCouponCode = (summary.coupon && summary.coupon.coupon_code) ? summary.coupon.coupon_code : null;
+
+    var html = '';
+    if (!cart_items.length) {
+        html += '<li><p class="text-muted mb0">Your cart is empty.</p></li>';
+    } else {
+        cart_items.forEach(function(item){
+            var title = item.post_title || 'Item';
+            var img = item.image_url || item.thumbnail || item.image || '';
+            var qty = parseInt(item.quantity || item.qty || 0, 10);
+            if (!qty || qty < 1) qty = 1;
+            var total = parseFloat(item.total || 0);
+            html += `
+                <li style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <p class="product_name_qnt" style="display:flex;align-items:center;gap:10px;min-width:0;margin:0;">
+                        <span class="checkout-item-thumb" style="position:relative;display:inline-block;overflow:visible;">
+                            <span style="display:inline-block;width:44px;height:44px;flex:0 0 44px;border-radius:10px;overflow:hidden;border:1px solid #eee;background:#f8f9fb;">
+                                ${img ? `<img src="${img}" alt="${title}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none'"/>` : ''}
+                            </span>
+                            <span class="checkout-item-qty" style="position:absolute;top:-6px;right:-6px;background:#111827;color:#fff;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 5px;border-radius:999px;font-size:11px;font-weight:700;line-height:1;">${qty}</span>
+                        </span>
+                    </p>
+                    <span class="price">${currency_symbol}${total.toFixed(2)}</span>
+                </li>
+            `;
+        });
+    }
+
+    var couponHtml = '';
+    if (summary.coupon) {
+        var couponCode = summary.coupon.coupon_code || '';
+        var discount = parseFloat(summary.coupon.discount || 0);
+        grandTotal = parseFloat(summary.coupon.final_total || 0);
+        if (discount > 0) {
+            couponHtml = `
+                <li class="subtitle" style="color: #2e7d32;">
+                    <p>Coupon Discount (${couponCode}) <span class="float-end totals" style="color: #2e7d32;">-${currency_symbol}${discount.toFixed(2)}</span></p>
+                </li>
+            `;
+        }
+    }
+
+    html += `
+        <li class="subtitle">
+            <p>Sub Total <span class="float-end totals">${currency_symbol}${subtotal.toFixed(2)}</span></p>
+        </li>
+        <li class="subtitle">
+            <p>Shipping <span class="float-end totals">${shipping <= 0 ? 'Free' : (currency_symbol + shipping.toFixed(2))}</span></p>
+        </li>
+        ${couponHtml}
+        <li class="subtitle">
+            <p>Total <span class="float-end totals">${currency_symbol}${grandTotal.toFixed(2)}</span></p>
+        </li>
+    `;
+
+    if ($('#checkoutSummaryList').length) {
+        $('#checkoutSummaryList').html(html);
+    }
+    if ($('#checkoutSummaryListPayment').length) {
+        $('#checkoutSummaryListPayment').html(html);
+    }
+}
+
+function setCheckoutStep(currentStep) {
+    let found = false;
+
+    $('#checkoutSteps li[data-step]').each(function () {
+        const step = $(this).data('step');
+        $(this).removeClass('fw600 text-thm').addClass('text-muted');
+        if (step === currentStep) {
+            $(this).addClass('fw600 text-thm').removeClass('text-muted');
+            found = true;
+        } else if (!found) {
+            $(this).removeClass('text-muted');
+        }
+    });
+}
+
+function showStep(step) {
+    $('#addressSection').hide();
+    $('#paymentSection').hide();
+    $('#confirmSection').hide();
+
+    var title = 'Select Delivery Address';
+    var subtitle = 'Choose an address or add a new one to continue';
+
+    if (step === 'payment') {
+        title = 'Payment';
+        subtitle = 'Select a payment method and place your order';
+    } else if (step === 'confirm') {
+        title = 'Order Complete';
+        subtitle = 'Your order has been placed successfully';
+    }
+
+    if ($('#checkoutPageTitle').length) {
+        $('#checkoutPageTitle').text(title);
+    }
+    if ($('#checkoutPageSubtitle').length) {
+        $('#checkoutPageSubtitle').text(subtitle);
+    }
+
+    if (step === 'payment') {
+        $('#paymentSection').show();
+
+        var $checked = $('input[name="selectedAddress"]:checked');
+        if ($checked.length) {
+            var $card = $checked.closest('.address-card');
+            var summaryText = $card.text().replace(/\s+/g, ' ').trim();
+            if (summaryText) {
+                $('#selectedAddressSummary').text(summaryText);
+                $('#selectedAddressBox').show();
+            }
+        }
+    } else if (step === 'confirm') {
+        $('#confirmSection').show();
+    } else {
+        $('#addressSection').show();
+    }
+    setCheckoutStep(step);
+}
+
+function address_html(resp){
+    let html = "";
+    const STATUS = (typeof resp.STATUS !== 'undefined') ? resp.STATUS : resp.status;
+    const DATA = (typeof resp.DATA !== 'undefined') ? resp.DATA : resp.data;
+    const MSG = (typeof resp.MSG !== 'undefined') ? resp.MSG : resp.msg;
+
+    if(STATUS == 1) {
+        var data = DATA;
+        var addresses = Array.isArray(data) ? data : Object.values(data);
+
+        window.__checkoutAddressesById = {};
+        addresses.forEach(function(a){
+            var _id = a.shipping_address_id || a.id || '';
+            if (_id !== '') window.__checkoutAddressesById[String(_id)] = a;
+        });
+
+        addresses.forEach(function(addr, index){
+            var id = addr.shipping_address_id || addr.id || '';
+            var isDefault = String(addr.default_address || '0') === '1';
+            var shouldCheck = false;
+            if (__checkout_select_address_id && String(id) === String(__checkout_select_address_id)) {
+                shouldCheck = true;
+            } else if (isDefault && !__checkout_select_address_id) {
+                shouldCheck = true;
+            } else if (index === 0 && !__checkout_select_address_id && !addresses.some(function(a){ return String(a.default_address||'0')==='1'; })) {
+                shouldCheck = true;
+            }
+
+            var tagHtml = isDefault
+                ? '<span class="address-tag badge-default">Default</span>'
+                : '<span class="address-tag">Saved</span>';
+            var label = String(addr.address_type || 'Address');
+            var hint = shouldCheck ? 'Used as your primary delivery address' : 'You can set this as default anytime';
+            var line1 = [addr.address_1, addr.address_2].filter(Boolean).join(', ');
+            var line2 = [addr.city].filter(Boolean).join(', ');
+            var pc = addr.postcode ? (' - ' + addr.postcode) : '';
+
+            html += `
+                <div class="col-md-6 address-col mb20">
+                  <div class="address-card${(shouldCheck ? ' selected' : '')} h-100 card p20 border bdrs12 ${shouldCheck ? 'border-warning' : 'border-light'}" data-address-id="${id}">
+                    <div class="d-flex justify-content-between align-items-start mb12">
+                      <div>
+                        <div class="d-flex align-items-center gap-2">
+                          <h6 class="mb0 fz14 fw600 address-label">${label}</h6>
+                          ${tagHtml}
+                        </div>
+                        <p class="mb0 fz12 text-muted mt4 address-hint">${hint}</p>
+                      </div>
+                      <div class="form-check mb0 d-flex align-items-center">
+                        <input class="form-check-input me10 address-radio" type="radio" name="selectedAddress" value="${id}" ${shouldCheck ? 'checked' : ''}>
+                        <label class="form-check-label fz12 text-muted">Use for deliveries</label>
+                      </div>
+                    </div>
+
+                    <p class="mb0 fz13 address-name">${addr.fullname || ''}</p>
+                    <p class="mb0 fz13 address-line1">${line1}</p>
+                    <p class="mb0 fz13 address-line2">${line2}${pc}</p>
+                    <p class="mb10 fz13 address-phone">Phone: ${addr.mobile || ''}</p>
+
+                    <div class="d-flex justify-content-between align-items-center pt10 mt10 address-actions">
+                      <button class="btn btn-link p-0 fz13 text-thm btn-edit-address" type="button">Edit address</button>
+                      <div class="d-flex gap-3">
+                        <button class="btn btn-link p-0 fz13 text-muted btn-set-default" type="button">Set as default</button>
+                        <button class="btn btn-link p-0 fz13 text-danger btn-delete-address" type="button">Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+            `;
+        });
+    } else {
+        html = `
+        <div class="col-12 text-center py-4">
+            <p class="text-muted mb-3">${MSG || 'No saved addresses found'}</p>
+        </div>`;
+    }
+
+    $("#addressList").html(html);
+
+    if (__checkout_select_address_id) {
+        __checkout_select_address_id = null;
+    }
+    
+    // If first address was auto-selected, update the hidden field
+    if ($('input[name="selectedAddress"]:checked').length > 0) {
+        var selectedId = $('input[name="selectedAddress"]:checked').val();
+        $('#selected_address_id').val(selectedId);
+        updateCheckoutHintUI(selectedId);
+        validateCheckout();
+    }
+}
+
+// Validation function for Continue button
+function validateCheckout() {
+    let addressSelected = $('input[name="selectedAddress"]:checked').length > 0;
+    let termsChecked = $('#termsCheck').is(':checked');
+    
+    if (addressSelected && termsChecked) {
+        $('#continueToPayment').prop('disabled', false).removeClass('btn-disabled');
+    } else {
+        $('#continueToPayment').prop('disabled', true).addClass('btn-disabled');
+    }
+}
+
+function err_get_address(xhr, status, error){
+}
+</script>

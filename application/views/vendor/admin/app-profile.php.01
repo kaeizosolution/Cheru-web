@@ -1,0 +1,657 @@
+<?php $page_lang = get_page_language_data('admin_page_lang'); ?>
+
+<style>
+    :root {
+        --primary: #6366f1;
+        --secondary: #64748b;
+        --dark: #1e293b;
+        --light-gray: #f8fafc;
+        --border-color: #e2e8f0;
+    }
+
+    /* --- PROFILE HEADER --- */
+    .profile-card {
+        background: #fff;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+    }
+    
+    .cover-photo {
+        height: 200px;
+        background-color: #cbd5e1; /* Fallback */
+        background-size: cover;
+        background-position: center;
+    }
+
+    .profile-info {
+        padding: 20px 30px;
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        margin-top: -60px; /* Overlap */
+    }
+    
+    .profile-photo img {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        border: 4px solid #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background: #fff;
+    }
+    
+    .profile-details { margin-left: 20px; margin-bottom: 10px; }
+    .profile-name h4 { font-weight: 700; color: var(--dark); margin: 0; font-size: 22px; }
+    .profile-name p { color: #64748b; margin: 0; font-size: 14px; }
+
+    /* --- TABS --- */
+    .custom-tab-1 .nav-tabs { border-bottom: 1px solid var(--border-color); padding: 0 20px; }
+    .custom-tab-1 .nav-link {
+        border: none;
+        color: #64748b;
+        font-weight: 600;
+        padding: 15px 20px;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    .custom-tab-1 .nav-link:hover { color: var(--primary); }
+    .custom-tab-1 .nav-link.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+        background: transparent;
+    }
+    
+    /* --- FORMS --- */
+    .form-group label {
+        font-weight: 600;
+        color: #475569;
+        font-size: 13px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    .form-control {
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        padding: 10px 15px;
+        font-size: 14px;
+    }
+    
+    .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+    
+    .btn-primary {
+        background-color: var(--primary); border: none;
+        border-radius: 8px; padding: 10px 25px;
+        font-weight: 600;
+        box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+    }
+    .btn-primary:hover { background-color: #4f46e5; transform: translateY(-2px); }
+
+    .tab-content { padding: 30px; }
+    
+    /* --- IMAGE UPLOAD --- */
+    .file-upload-wrapper {
+        border: 2px dashed var(--border-color);
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
+        background: #fafafa;
+        cursor: pointer;
+        position: relative;
+    }
+    .file-upload-wrapper input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; }
+</style>
+
+<div class="content-body" style="padding-top: 100px; margin-left: 17rem;">
+    <div class="container-fluid">                   
+        <div class="row page-titles">
+            <div class="col-lg-6 p-0">
+                 <h3 class="text-primary" style="font-family: 'Poppins', sans-serif; font-weight: 700; color: #1e293b !important;">Profile</h3>
+            </div>
+            <?= $breadcrumbs ?> 
+        </div>
+
+		<?php
+			$__vendor_doc_status = isset($vendor_document_status) ? strtolower((string)$vendor_document_status) : '';
+			$__vendor_doc_admin_note = isset($vendor_document_admin_note) ? (string)$vendor_document_admin_note : '';
+			$__vendor_doc_front = isset($vendor_document_front) ? (string)$vendor_document_front : '';
+			$__vendor_doc_back = isset($vendor_document_back) ? (string)$vendor_document_back : '';
+			$__vendor_profile_readonly = ($__vendor_doc_status === 'approved');
+		?>
+
+		<?php if($__vendor_doc_status === 'pending'){ ?>
+			<div class="alert alert-warning" style="border-radius: 12px; padding: 25px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #ffeeba; background-color: #fff3cd; color: #856404; margin-top: 20px;">
+				<i class="fa fa-clock-o" style="font-size: 40px; display: block; margin-bottom: 15px; color: #e0a800;"></i>
+				<h4 style="font-weight: 700; color: #856404; margin-bottom: 8px;">Verification Pending</h4>
+				<p style="margin: 0; font-size: 15px;">Your account has been resubmitted and is under verification. We will notify you once the administrator has approved your profile.</p>
+			</div>
+		<?php }elseif($__vendor_doc_status === 'rejected'){ ?>
+			<div class="alert alert-danger" style="border-radius: 12px;">
+				<div><strong>Verification Rejected</strong></div>
+				<?php if(trim($__vendor_doc_admin_note) !== ''){ ?>
+					<div class="mt-1"><?php echo nl2br(htmlspecialchars($__vendor_doc_admin_note, ENT_QUOTES, 'UTF-8')); ?></div>
+				<?php } ?>
+				<div class="mt-1">Please resubmit your details</div>
+			</div>
+		<?php }elseif($__vendor_doc_status === 'approved'){ ?>
+			<div id="vendor-congrats-alert" class="alert alert-success" style="border-radius: 12px; display: none;">
+				Congratulations, your account is approved
+			</div>
+			<script>
+				$(document).ready(function() {
+					var storageKey = 'congrats_seen_vendor_' + '<?= isset($vendor_id) ? $vendor_id : 0 ?>';
+					if (!localStorage.getItem(storageKey)) {
+						$('#vendor-congrats-alert').show();
+						localStorage.setItem(storageKey, '1');
+					}
+				});
+			</script>
+		<?php } ?>
+
+		<?php if($__vendor_doc_status !== 'pending'){ ?>
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="profile-card">
+                    <?php 
+                        $bg_url = 'banner-1.png';
+                        if( isset($basic->vendor_img) && !empty($basic->vendor_img) ){
+                            $vendor_img = @unserialize($basic->vendor_img);
+                            if(is_array($vendor_img) && isset($vendor_img['large'])){
+                                $bg_url = $vendor_img['large'];
+                            }else{
+                                $bg_url = $basic->vendor_img;
+                            }
+                        }
+                    ?>
+                    <div class="cover-photo" style="background-image: url('<?php echo $bg_url; ?>');"></div>
+
+                    <div class="profile-info">
+                        <div class="profile-photo">
+                            <?php 
+                                $prof_img = '/assets/vendor/images/profile/pic1.jpg';
+                                if(!empty($basic->logo)){
+                                    $logo_data = @unserialize($basic->logo);
+                                    if(is_array($logo_data) && isset($logo_data['thumb'])){
+                                        $prof_img = $logo_data['thumb'];
+                                    }else{
+                                        $prof_img = $basic->logo;
+                                    }
+                                } 
+                            ?>
+                            <img src="<?= $prof_img ?>" alt="Profile">
+                        </div>
+                        <div class="profile-details">
+                            <div class="profile-name">
+                                <?php if( isset($basic->store_name) && !empty($basic->store_name) ) { ?>
+                                    <h4><?= ucwords($basic->store_name) ?></h4>
+                                    <p><?= ucwords($basic->city) ?></p>
+                                <?php } ?>
+                            </div>                          
+                        </div>
+                    </div>
+
+                    <div class="profile-tab">
+                        <div class="custom-tab-1">
+                            <ul class="nav nav-tabs">
+                                <li class="nav-item"><a href="#profile-settings" data-bs-toggle="tab" class="nav-link active show">Account Info</a></li>
+                                <li class="nav-item"><a href="#Owner_info" data-bs-toggle="tab" class="nav-link">Owner Info</a></li>
+								<li class="nav-item"><a href="#uploaded-documents" data-bs-toggle="tab" class="nav-link">Uploaded Documents</a></li>
+                                <li class="nav-item"><a href="#change-password" data-bs-toggle="tab" class="nav-link"><i class="fa fa-lock mr-1"></i> Change Password</a></li>
+                            </ul>
+                            
+                            <div class="tab-content">
+                                <div id="profile-settings" class="tab-pane fade active show">
+                                    <div class="settings-form">
+                                        <h5 class="text-primary mb-4">Update Account</h5>
+                                        <div id="account_success_msg"></div>
+                                        <div id="account_error_msg"></div>
+                                        
+                                        <?php if($this->session->flashdata('msg')){ ?>  
+                                            <div class="alert alert-danger"> <?= $this->session->flashdata('msg')?> </div> 
+                                        <?php } ?> 
+                                        <?php if (validation_errors()!='') { ?>
+                                            <div class="alert alert-danger"> <?php echo validation_errors();?> </div>
+                                        <?php } ?>
+                                        
+                                        <form id="account_information" method="post" enctype="multipart/form-data">
+                                            <div class="row">
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Store Name</label>
+                                                    <input type="text" name="store_name" value="<?= isset($basic->store_name) ? ($basic->store_name):'' ?>" class="form-control" placeholder="Name" required <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+                                                </div>
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Address</label>                                                                
+                                                    <input type="text" name="address" value="<?= isset($basic->address) ? ($basic->address):'' ?>" class="form-control" placeholder="Enter Area name" id="locality" autocomplete="nope" <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>  
+                                                    <input type="hidden" name="latitude" value="<?= isset($basic->latitude) ? ($basic->latitude):'' ?>" class="form-control" id="latitude" />                                                                
+                                                    <input type="hidden" name="longitude" value="<?= isset($basic->longitude) ? ($basic->longitude):'' ?>" class="form-control" id="longitude" />
+                                                    <input type="hidden" name="place_id" value="<?= isset($basic->place_id) ? $basic->place_id :''; ?>" class="form-control" id="location_id"/>
+                                                </div>
+
+												<div class="mb-3 col-md-4">
+													<label class="form-label">House No.</label>
+													<input type="text" name="house_no" value="<?= isset($basic->house_no) ? ($basic->house_no):'' ?>" class="form-control" placeholder="e.g. 12A, B-204" <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+												</div>
+                                                
+												<div class="mb-3 col-md-4">
+													<label class="form-label">City</label>
+													<input type="text" name="city" value="<?= isset($basic->city) ? ($basic->city):'' ?>" class="form-control" required <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+												</div>
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Zip</label>
+                                                    <input type="text" name="zip" value="<?= isset($basic->zip) ? ($basic->zip):'' ?>" class="form-control" required <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+                                                </div>
+												<div class="mb-3 col-md-4">
+													<label class="form-label">Country</label>
+													<input type="text" name="country" value="<?= isset($basic->country) ? ($basic->country):'' ?>" class="form-control" required <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+												</div>
+                                            </div>
+                                            <input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>" />
+										<?php if(!$__vendor_profile_readonly){ ?>
+											<button type="submit" name="submit" value="submit" class="btn btn-primary mt-3">Save Changes</button>
+										<?php } ?>
+                                        </form>
+                                    </div>                      
+                                </div>
+                                
+                                <div id="Owner_info" class="tab-pane fade">                                                                               
+                                    <h5 class="text-primary mb-4">Owner Information</h5>
+                                    <div id="success_msg"></div>                                    
+                                    <div id="subform">
+                                      <?php if($this->session->flashdata('error_msg')){ ?>  
+                                        <div class="alert alert-danger"> <?= $this->session->flashdata('error_msg')?> </div> 
+                                      <?php } ?> 
+                                    
+                                        <form id="owner_information" method="post" enctype="multipart/form-data"> 
+                                            <div class="row">
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Owner Name</label>
+                                                    <input type="text" name="fname" value="<?= isset($basic->fname) ? ($basic->fname):'' ?>" class="form-control" placeholder="Your Name" <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+                                                </div>
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Owner Email</label>
+                                                    <input type="email" name="email" value="<?= isset($basic->email) ? ($basic->email):'' ?>" class="form-control" placeholder="Your Email Id" required <?= $__vendor_profile_readonly ? 'readonly' : '' ?> />
+                                                </div>
+                                                <div class="mb-3 col-md-6">
+                                                    <label class="form-label">Owner Mobile</label>
+                                                    <input type="text" name="mobile" value="<?= isset($basic->mobile) ? ($basic->mobile):'' ?>" class="form-control" placeholder="Your mobile" <?= $__vendor_profile_readonly ? 'readonly' : '' ?>>
+                                                </div>  
+                                                <div id="owner_error_msg" class="text-danger small mt-1"></div>
+                                                
+                                            </div>
+                                            <input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>" />
+										<?php if(!$__vendor_profile_readonly){ ?>
+											<button type="submit" id="confirm" name="submit" value="submit" class="btn btn-primary mt-3">Save Changes</button>
+										<?php } ?>
+                                        </form>
+                                    </div>                                  
+                                </div>
+
+								<div id="uploaded-documents" class="tab-pane fade">
+									<h5 class="text-primary mb-4">Uploaded Documents</h5>
+									<?php
+										$__doc_dir = 'uploads/vendor_documents/';
+										$__front_url = ($__vendor_doc_front !== '') ? base_url($__doc_dir . $__vendor_doc_front) : '';
+										$__back_url = ($__vendor_doc_back !== '') ? base_url($__doc_dir . $__vendor_doc_back) : '';
+										$__admin_doc = isset($vendor_admin_uploaded_doc) ? (string)$vendor_admin_uploaded_doc : '';
+										$__admin_url = ($__admin_doc !== '') ? base_url($__doc_dir . $__admin_doc) : '';
+										$__is_image = function($file){
+											$ext = strtolower(pathinfo((string)$file, PATHINFO_EXTENSION));
+											return in_array($ext, array('jpg','jpeg','png','gif','webp'));
+										};
+									?>
+
+									<?php if(!$__front_url && !$__back_url){ ?>
+										<div class="alert alert-secondary" style="border-radius: 12px;">
+											No documents uploaded.
+										</div>
+									<?php } ?>
+									<?php if($__front_url || $__back_url){ ?>
+									<div class="row">
+										<div class="col-md-6 mb-3">
+											<div class="card" style="border-radius: 12px;">
+												<div class="card-body">
+													<h6 class="mb-3">Document Front</h6>
+														<?php if($__front_url){ ?>
+															<?php if($__is_image($__vendor_doc_front)){ ?>
+																<a href="<?php echo $__front_url; ?>" target="_blank" rel="noopener">
+																	<img src="<?php echo $__front_url; ?>" class="img-fluid rounded" style="max-height:260px;" alt="Document Front" />
+																</a>
+															<?php }else{ ?>
+																<a class="btn btn-outline-primary" href="<?php echo $__front_url; ?>" target="_blank" rel="noopener">View / Download</a>
+															<?php } ?>
+														<?php }else{ ?>
+															<div class="text-muted">Not uploaded</div>
+														<?php } ?>
+													</div>
+										</div>
+									</div>
+									<div class="col-md-6 mb-3">
+										<div class="card" style="border-radius: 12px;">
+											<div class="card-body">
+												<h6 class="mb-3">Document Back</h6>
+														<?php if($__back_url){ ?>
+															<?php if($__is_image($__vendor_doc_back)){ ?>
+																<a href="<?php echo $__back_url; ?>" target="_blank" rel="noopener">
+																	<img src="<?php echo $__back_url; ?>" class="img-fluid rounded" style="max-height:260px;" alt="Document Back" />
+																</a>
+															<?php }else{ ?>
+																<a class="btn btn-outline-primary" href="<?php echo $__back_url; ?>" target="_blank" rel="noopener">View / Download</a>
+															<?php } ?>
+														<?php }else{ ?>
+															<div class="text-muted">Not uploaded</div>
+														<?php } ?>
+													</div>
+										</div>
+									</div>
+								</div>
+							<?php } ?>
+
+								<div class="row">
+									<div class="col-md-6 mb-3">
+										<div class="card" style="border-radius: 12px;">
+											<div class="card-body">
+												<h6 class="mb-3">Document by admin</h6>
+												<?php if($__admin_url){ ?>
+													<?php if($__is_image($__admin_doc)){ ?>
+														<a href="<?php echo $__admin_url; ?>" target="_blank" rel="noopener">
+															<img src="<?php echo $__admin_url; ?>" class="img-fluid rounded" style="max-height:260px;" alt="Document by admin" />
+														</a>
+													<?php }else{ ?>
+														<a class="btn btn-outline-primary" href="<?php echo $__admin_url; ?>" target="_blank" rel="noopener">View / Download</a>
+													<?php } ?>
+												<?php }else{ ?>
+													<div class="text-muted">Not uploaded</div>
+												<?php } ?>
+											</div>
+										</div>
+									</div>
+								</div>
+
+								<?php if($__vendor_doc_status === 'rejected' || $__vendor_doc_status === 'pending'){ ?>
+								<div class="alert alert-info" style="border-radius: 12px;">
+									You can upload your verification documents below.
+								</div>
+									<div class="card" style="border-radius: 12px;">
+										<div class="card-body">
+											<h6 class="mb-3">Upload Documents</h6>
+											<div id="doc_success_msg"></div>
+											<div id="doc_error_msg"></div>
+											<form id="vendor_documents_reupload" method="post" enctype="multipart/form-data">
+												<div class="row">
+													<div class="mb-3 col-md-6">
+														<label class="form-label">Upload Document Front <span class="text-danger">*</span></label>
+														<input type="file" name="document_front" id="document_front" class="form-control" required>
+													</div>
+													<div class="mb-3 col-md-6">
+														<label class="form-label">Upload Document Back <span class="text-danger">*</span></label>
+														<input type="file" name="document_back" id="document_back" class="form-control" required>
+													</div>
+												</div>
+												<input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>" />
+												<button type="submit" class="btn btn-primary">Submit Documents</button>
+											</form>
+										</div>
+									</div>
+								<?php } ?>
+							</div>
+
+							<!-- ===================== CHANGE PASSWORD TAB ===================== -->
+							<div id="change-password" class="tab-pane fade">
+								<h5 class="text-primary mb-4">Change Password</h5>
+								<div id="pwd_success_msg"></div>
+								<div id="pwd_error_msg"></div>
+								<form id="change_password_form" method="post" autocomplete="off">
+									<input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>" />
+									<div class="row">
+										<div class="mb-3 col-md-6">
+											<label class="form-label">New Password <span class="text-danger">*</span></label>
+											<input type="password" name="new_password" id="new_password" class="form-control" placeholder="Min 6 characters" required minlength="6">
+										</div>
+										<div class="mb-3 col-md-6">
+											<label class="form-label">Confirm New Password <span class="text-danger">*</span></label>
+											<input type="password" name="confirm_password" id="pwd_confirm" class="form-control" placeholder="Repeat new password" required minlength="6">
+										</div>
+									</div>
+									<button type="submit" id="pwd_submit_btn" class="btn btn-primary mt-2">
+										<span class="btn-text">Update Password</span>
+										<span class="btn-loader" style="display:none;"><i class="fa fa-spinner fa-spin"></i></span>
+									</button>
+								</form>
+							</div>
+							<!-- ===================== END CHANGE PASSWORD TAB ===================== -->
+
+                            </div> 
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+		<?php } // end if not pending ?>
+    </div>
+</div>
+
+<script>        
+$(document).ready(function(){
+    
+    $('#success_msg').hide();   
+    $('#owner_error_msg').hide();       
+    
+    // Owner Form Submit
+    $('#owner_information').on('submit', function (e) {
+      e.preventDefault();
+      var formdata = new FormData(this);      
+      $.ajax({
+        type: 'POST',
+        url: '<?= (isset($use_api) && $use_api && !empty($access_token)) ? base_url("api/v1/vendor/profile/update") : "/vendor/profile/ajaxform" ?>',
+        headers: <?= (isset($use_api) && $use_api && !empty($access_token)) ? json_encode(['Authorization' => 'Bearer ' . $access_token]) : '{}' ?>,
+        data: formdata,
+        contentType:false,
+        processData:false,
+        dataType:"json",
+        success: function (data) {
+                var isSuccess = data.success || (data.status == 1);
+                var msg = data.msg || data.message || 'Updated Successfully.';
+                if(isSuccess){
+                    $('#success_msg').html('<div class="alert alert-success">'+msg+'</div>');              
+                    $('#success_msg').show(); 
+                    window.location.reload();
+                }else{                  
+                    var errMsg = (data.errors && data.errors.length > 0) ? data.errors[0] : msg;
+                    $('#owner_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+                    $('#owner_error_msg').show(); 
+                }
+            },
+        error: function(xhr) {
+                var errMsg = 'Failed to update profile.';
+                if (xhr.responseText) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        errMsg = (res.errors && res.errors.length > 0) ? res.errors[0] : (res.message || errMsg);
+                    } catch(e) {}
+                }
+                $('#owner_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+                $('#owner_error_msg').show(); 
+            }
+        });
+    });
+    
+    // Account Form Submit
+    $('#account_success_msg').hide();
+    $('#account_error_msg').hide();     
+    $('#account_information').on('submit', function (e) {
+      e.preventDefault();
+	  if(<?= $__vendor_profile_readonly ? 'true' : 'false' ?>){
+		return;
+	  }
+      var data_acc = new FormData(this);    
+      $.ajax({
+        type: 'POST',
+        url: '<?= (isset($use_api) && $use_api && !empty($access_token)) ? base_url("api/v1/vendor/profile/update_profile") : "/vendor/profile/ajax_accountform" ?>',
+        headers: <?= (isset($use_api) && $use_api && !empty($access_token)) ? json_encode(['Authorization' => 'Bearer ' . $access_token]) : '{}' ?>,
+        data: data_acc,
+        contentType:false,
+        processData:false,
+        dataType:"json",
+        success: function (data) {
+                var isSuccess = data.success || (data.status == 1);
+                var msg = data.msg || data.message || 'Updated Successfully.';
+                if(isSuccess){
+                    $('#account_success_msg').html('<div class="alert alert-success">'+msg+'</div>');
+                    $('#account_success_msg').show(); 
+                    window.location.reload();
+                }else{                  
+                    var errMsg = (data.errors && data.errors.length > 0) ? data.errors[0] : msg;
+                    $('#account_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+                    $('#account_error_msg').show(); 
+                }
+            },
+        error: function(xhr) {
+                var errMsg = 'Failed to update store info.';
+                if (xhr.responseText) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        errMsg = (res.errors && res.errors.length > 0) ? res.errors[0] : (res.message || errMsg);
+                    } catch(e) {}
+                }
+                $('#account_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+                $('#account_error_msg').show(); 
+            }
+        });
+    });
+ 
+	$('#doc_success_msg').hide();
+	$('#doc_error_msg').hide();
+	$('#vendor_documents_reupload').on('submit', function(e){
+		e.preventDefault();
+		var formData = new FormData(this);
+		$.ajax({
+			type: 'POST',
+			url: '<?= (isset($use_api) && $use_api && !empty($access_token)) ? base_url("api/v1/vendor/profile/documents") : "/vendor/profile/reupload_documents" ?>',
+			headers: <?= (isset($use_api) && $use_api && !empty($access_token)) ? json_encode(['Authorization' => 'Bearer ' . $access_token]) : '{}' ?>,
+			data: formData,
+			contentType:false,
+			processData:false,
+			dataType:"json",
+			success: function(data) {
+				var isSuccess = data.success || (data.status == 1);
+				var msg = data.msg || data.message || 'Documents submitted successfully.';
+				if(isSuccess){
+					$('#doc_success_msg').html('<div class="alert alert-success">'+msg+'</div>');
+					$('#doc_success_msg').show();
+					setTimeout(function(){ window.location.reload(); }, 900);
+				}else{
+					var errMsg = (data.errors && data.errors.length > 0) ? data.errors[0] : msg;
+					$('#doc_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+					$('#doc_error_msg').show();
+				}
+			},
+			error: function(xhr) {
+				var errMsg = 'Failed to submit documents.';
+				if (xhr.responseText) {
+					try {
+						var res = JSON.parse(xhr.responseText);
+						errMsg = (res.errors && res.errors.length > 0) ? res.errors[0] : (res.message || errMsg);
+					} catch(e) {}
+				}
+				$('#doc_error_msg').html('<div class="alert alert-danger">'+errMsg+'</div>');
+				$('#doc_error_msg').show();
+			}
+		});
+	});
+
+    <?php if (isset($use_api) && $use_api && !empty($access_token)) { ?>
+    // Fetch profile info from API (visible in Network Tab)
+    $.ajax({
+        type: 'GET',
+        url: '<?= base_url("api/v1/vendor/profile") ?>',
+        headers: {
+            'Authorization': 'Bearer <?= $access_token ?>'
+        },
+        dataType: 'json',
+        success: function(res) {
+            if(res && res.status == 1 && res.data) {
+                var p = res.data;
+                if(p.name)       $('input[name="fname"]').val(p.name);
+                if(p.email)      $('input[name="email"]').val(p.email);
+                if(p.mobile)     $('input[name="mobile"]').val(p.mobile);
+                if(p.store_name) { $('input[name="store_name"]').val(p.store_name); $('.profile-name h4').text(p.store_name); }
+                if(p.address)    $('input[name="address"]').val(p.address);
+                if(p.city)       { $('input[name="city"]').val(p.city); $('.profile-name p').text(p.city); }
+                if(p.zip)        $('input[name="zip"]').val(p.zip);
+                if(p.country)    $('input[name="country"]').val(p.country);
+                if(p.house_no)   $('input[name="house_no"]').val(p.house_no);
+                if(p.latitude)   $('#latitude').val(p.latitude);
+                if(p.longitude)  $('#longitude').val(p.longitude);
+                if(p.place_id)   $('#location_id').val(p.place_id);
+            }
+        }
+    });
+    <?php } ?>
+
+    // ===== CHANGE PASSWORD FORM =====
+    $('#pwd_success_msg').hide();
+    $('#pwd_error_msg').hide();
+    $('#change_password_form').on('submit', function(e) {
+        e.preventDefault();
+        var newPass = $('#new_password').val();
+        var confirmPass = $('#pwd_confirm').val();
+        if (newPass !== confirmPass) {
+            $('#pwd_error_msg').html('<div class="alert alert-danger" style="border-radius:8px;"><i class="fa fa-exclamation-circle mr-1"></i>New password and confirm password do not match.</div>').show();
+            return;
+        }
+        var btn = $('#pwd_submit_btn');
+        btn.prop('disabled', true).find('.btn-text').hide();
+        btn.find('.btn-loader').show();
+        $('#pwd_success_msg').hide();
+        $('#pwd_error_msg').hide();
+
+        $.ajax({
+            type: 'POST',
+            url: '<?= base_url("api/v1/vendor/profile/password") ?>',
+            headers: {
+                'Authorization': 'Bearer <?= !empty($access_token) ? $access_token : "" ?>'
+            },
+            data: JSON.stringify({
+                new_password: newPass,
+                confirm_password: confirmPass
+            }),
+            contentType: 'application/json',
+            dataType: 'json',
+            success: function(res) {
+                btn.prop('disabled', false).find('.btn-text').show();
+                btn.find('.btn-loader').hide();
+                if (res && res.status == 1) {
+                    $('#pwd_success_msg').html('<div class="alert alert-success" style="border-radius:8px;"><i class="fa fa-check-circle mr-1"></i>' + (res.message || 'Password updated successfully.') + '</div>').show();
+                    $('#change_password_form')[0].reset();
+                } else {
+                    var errMsg = 'Failed to update password.';
+                    if (res && res.errors && res.errors.length > 0) {
+                        errMsg = res.errors[0];
+                    } else if (res && res.message) {
+                        errMsg = res.message;
+                    }
+                    $('#pwd_error_msg').html('<div class="alert alert-danger" style="border-radius:8px;"><i class="fa fa-exclamation-circle mr-1"></i>' + errMsg + '</div>').show();
+                }
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).find('.btn-text').show();
+                btn.find('.btn-loader').hide();
+                var errMsg = 'Server error. Please try again.';
+                if (xhr.responseJSON) {
+                    var res = xhr.responseJSON;
+                    if (res.errors && res.errors.length > 0) {
+                        errMsg = res.errors[0];
+                    } else if (res.message) {
+                        errMsg = res.message;
+                    }
+                }
+                $('#pwd_error_msg').html('<div class="alert alert-danger" style="border-radius:8px;">' + errMsg + '</div>').show();
+            }
+        });
+    });
+
+});
+</script>

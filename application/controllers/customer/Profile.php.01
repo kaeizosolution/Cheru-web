@@ -1,0 +1,1557 @@
+<?php 
+defined('BASEPATH') OR exit('No direct script access allowed');
+ 
+class Profile extends MY_Controller {
+
+	function __construct() 
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Product_model');
+        $this->load->model('Checkout_model');
+        $this->load->model('Order_model');
+		$this->config->load('custom_config');
+		$this->load->helper('api');
+        $this->load->helper('text');	
+		$this->load->library('ImageUploadService');	
+		$this->TYPE = $this->session->userdata('type');
+        $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+	}
+
+	private function _get_customer_access_token()
+	{
+		$customer = $this->session->userdata('customer');
+		if (is_array($customer) && !empty($customer['access_token'])) {
+			return (string)$customer['access_token'];
+		}
+		if (!empty($_SESSION['token'])) {
+			return (string)$_SESSION['token'];
+		}
+		return '';
+	}
+
+	private function _build_api_headers()
+	{
+		$token = $this->_get_customer_access_token();
+		if ($token === '') {
+			return [];
+		}
+		return ['Authorization' => 'Bearer ' . $token];
+	}
+
+
+	public function index()
+{
+    $customer = $this->session->userdata('customer');
+    $customer_id0 = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+    if ($customer_id0 <= 0) {
+        redirect(base_url());
+    }
+
+    $tab = $this->input->get('tab') ?? 'dashboard';
+	if ($tab === 'wallet' || $tab === 'wallet_transactions') {
+		$this->load->model('Wallet_model');
+	}
+
+    $customer = $this->session->userdata('customer');
+    $customer_id = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+
+    $data['active_tab'] = $tab;
+    $data['customer'] = $customer;
+	if ($tab === 'wallet') {
+		$customer_id2 = $customer['customer_id'] ?? $customer['login_id'];
+		$customer_id2 = (int)$customer_id2;
+		if ($customer_id2 > 0) {
+			$this->Wallet_model->ensure_wallet($customer_id2);
+			$data['wallet_balance'] = $this->Wallet_model->get_balance($customer_id2);
+			$data['wallet_transactions'] = $this->Wallet_model->get_transactions($customer_id2, 10);
+			$data['wallet_has_bank'] = $this->Wallet_model->has_bank_details($customer_id2) ? 1 : 0;
+		}
+	}
+	if ($tab === 'wallet_transactions') {
+		$customer_id2 = $customer['customer_id'] ?? $customer['login_id'];
+		$customer_id2 = (int)$customer_id2;
+		if ($customer_id2 > 0) {
+			$this->Wallet_model->ensure_wallet($customer_id2);
+			$data['wallet_balance'] = $this->Wallet_model->get_balance($customer_id2);
+			$data['wallet_transactions'] = $this->Wallet_model->get_transactions($customer_id2, null);
+			$data['wallet_has_bank'] = $this->Wallet_model->has_bank_details($customer_id2) ? 1 : 0;
+		}
+	}
+
+	$use_api = (bool)$this->config->item('use_api');
+	$headers = $this->_build_api_headers();
+	if ($use_api && !empty($headers)) {
+		$api_prof = call_api('GET', 'profile', null, $headers);
+		if ($api_prof['response'] !== null && (int)($api_prof['response']['status'] ?? 0) === 1 && is_array($api_prof['response']['data'] ?? null)) {
+			$api_data = $api_prof['response']['data'];
+			$stats = is_array($api_data['stats'] ?? null) ? $api_data['stats'] : [];
+			$data['total_orders'] = (int)($stats['total_orders'] ?? 0);
+			$data['orders_in_progress'] = (int)($stats['orders_in_progress'] ?? 0);
+			$data['orders_delivered'] = (int)($stats['orders_delivered'] ?? 0);
+			$data['total_wishlist'] = (int)($stats['total_wishlist'] ?? 0);
+			return $this->load->template('customer/profile', $data);
+		}
+	}
+
+	$data['total_orders'] = $this->db
+		->where('user_id', $customer_id)
+		->count_all_results('ec_orders');
+
+	$data['orders_in_progress'] = $this->db
+		->where('user_id', $customer_id)
+		->where_in('status', ['pending', 'confirmed', 'shipped'])
+		->count_all_results('ec_orders');
+
+	$data['orders_delivered'] = $this->db
+		->where('user_id', $customer_id)
+		->where('status', 'delivered')
+		->count_all_results('ec_orders');
+
+	$data['total_wishlist'] = $this->db
+		->where('customer_id', $customer_id)
+		->count_all_results('ec_wishlist');
+
+    $this->load->template('customer/profile', $data);
+}
+
+
+  
+
+	function get_profile()
+	{
+		$user_obj = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $this->LOGIN_ID));
+		$user_obj->name = $user_obj->fname;
+		$user_obj->user_image = $user_obj->user_img &&$user_obj->user_img != 'NULL' ? base_url('/uploads/profile_image/').$user_obj->user_img : base_url('/assets/images/default-profile-pic.png');
+		api_response(['status'=>1, 'msg'=>'Profile Detail', 'data'=>$user_obj]);
+	}
+
+public function update_profile() {
+    $customer_session = $this->session->userdata('customer');
+    $customer_id = $customer_session['customer_id'] ?? $customer_session['login_id'];
+    
+    // Ensure these keys match your DB column names exactly
+    $update_data = [
+        'fname'  => $this->input->post('fname'),
+        'mobile' => $this->input->post('mobile') 
+    ];
+
+    // Image Upload Logic
+    if (!empty($_FILES['uploadPhoto']['name'])) {
+        $config['upload_path']   = './assets/uploads/';
+        $config['allowed_types'] = 'jpg|jpeg|png|webp';
+        $config['file_name']     = 'user_' . $customer_id . '_' . time();
+
+        $this->load->library('upload', $config);
+
+        if ($this->upload->do_upload('uploadPhoto')) {
+            $fileData = $this->upload->data();
+            // Store the full URL in 'user_img'
+            $update_data['user_img'] = base_url('assets/uploads/' . $fileData['file_name']);
+        }
+    }
+
+    $this->db->where('customer_id', $customer_id); 
+    if ($this->db->update('ec_customer', $update_data)) {
+        
+        // Update the session so the image and mobile show up on refresh
+        $customer_session['fname'] = $update_data['fname'];
+        $customer_session['mobile'] = $update_data['mobile'];
+        if(isset($update_data['user_img'])) {
+            $customer_session['user_img'] = $update_data['user_img'];
+            $customer_session['profile_img'] = $update_data['user_img'];
+        }
+        
+        $this->session->set_userdata('customer', $customer_session);
+        echo json_encode(['STATUS' => 1, 'MSG' => 'Updated successfully']);
+    } else {
+        echo json_encode(['STATUS' => 0, 'MSG' => 'DB Update Failed']);
+    }
+    exit;
+}
+
+	public function change_password()
+	{
+		$customer_session = $this->session->userdata('customer');
+		$customer_id = $customer_session['customer_id'] ?? ($customer_session['login_id'] ?? 0);
+		if(!$customer_id){
+			echo json_encode(['STATUS' => 0, 'MSG' => 'Please login first']);
+			exit;
+		}
+
+		$new_password = (string)$this->input->post('new_password');
+		$confirm_password = (string)$this->input->post('confirm_password');
+
+		if($new_password === '' || strlen($new_password) < 6){
+			echo json_encode(['STATUS' => 0, 'MSG' => 'New password must be at least 6 characters']);
+			exit;
+		}
+		if($new_password !== $confirm_password){
+			echo json_encode(['STATUS' => 0, 'MSG' => 'Password confirmation does not match']);
+			exit;
+		}
+
+		$user = $this->db->select('customer_id,password')->from('ec_customer')->where('customer_id', (int)$customer_id)->limit(1)->get()->row();
+		if(!$user){
+			echo json_encode(['STATUS' => 0, 'MSG' => 'User not found']);
+			exit;
+		}
+
+		$hashed = password_hash($new_password, PASSWORD_BCRYPT);
+		$ok = $this->db->where('customer_id', (int)$customer_id)->update('ec_customer', ['password' => $hashed]);
+		if($ok){
+			echo json_encode(['STATUS' => 1, 'MSG' => 'Password updated successfully']);
+		} else {
+			echo json_encode(['STATUS' => 0, 'MSG' => 'Failed to update password']);
+		}
+		exit;
+	}
+	function addresses()
+	{
+		$post_data = $this->input->post();
+		$where = [];
+		$where['customer_id'] = $this->LOGIN_ID;
+		$where['status'] ='1';
+		
+		if($this->input->post('address_id'))
+		$where['shipping_address_id'] =$this->input->post('address_id');
+
+		if($this->input->post('default'))
+		$where['default_address'] ='1';
+
+		$address_obj = $this->Query_model->get_data('ec_shipping_address', $where);	
+		if($address_obj)
+		api_response(['status'=>1, 'msg'=>'Addresses.', 'data'=>$address_obj]);
+		else
+		api_response(['status'=>0, 'msg'=>'There is no address.', 'data'=>[]]);
+	
+	}
+
+	function get_addresses()
+	{
+		$customer = $this->session->userdata('customer');
+		$customer_id = $this->LOGIN_ID;
+		if (!$customer_id) {
+			$customer_id = $customer['customer_id'] ?? ($customer['login_id'] ?? 0);
+		}
+		if (!$customer_id) {
+			api_response(['status'=>0, 'msg'=>'Invalid customer session.', 'data'=>[]]);
+			return;
+		}
+
+		$address_obj = $this->Query_model->get_data('ec_shipping_address', ['customer_id'=>$customer_id, 'status'=>'1']);	
+		if($address_obj){
+		$indexed = array_column($address_obj, null, 'shipping_address_id');
+		api_response(['status'=>1, 'msg'=>'Addresses.', 'data'=>$indexed]);
+		} else {
+		api_response(['status'=>0, 'msg'=>'There is no address.', 'data'=>[]]);
+		}
+	
+	}
+	
+	public function set_default_address()
+	{
+		$post_data = $this->input->post();
+		$address_id = $post_data['address_id'];
+		$this->Query_model->update_data('ec_shipping_address', ['default_address'=>'0'], ['customer_id'=>$this->LOGIN_ID]);
+		$update_sts = $this->Query_model->update_data('ec_shipping_address', ['default_address'=>'1'], ['customer_id'=>$this->LOGIN_ID, 'shipping_address_id'=>$address_id]);
+		if($update_sts)
+		api_response(['status'=>1, 'msg'=>'Default Address Set.', 'data'=>[]]);
+		else
+		api_response(['status'=>0, 'msg'=>'Some Thing went wrong.', 'data'=>[]]);
+		
+	}
+
+	
+
+    public function add_address() {
+    $customer = $this->session->userdata('customer');
+    if (!$customer) {
+        api_response(['status' => 0, 'msg' => 'Please login to add address.', 'data' => []]);
+        return;
+    }
+
+    $customer_id = $this->LOGIN_ID;
+    if (!$customer_id) {
+        $customer_id = $customer['customer_id'] ?? ($customer['login_id'] ?? 0);
+    }
+    if (!$customer_id) {
+        api_response(['status' => 0, 'msg' => 'Invalid customer session.', 'data' => []]);
+        return;
+    }
+
+    $this->load->library('form_validation');
+
+    $this->form_validation->set_rules('fullname', 'Full Name', 'required|trim');
+    $this->form_validation->set_rules('address_1', 'Street Address', 'required|trim');
+    $this->form_validation->set_rules('city', 'City', 'required|trim');
+    $this->form_validation->set_rules('state', 'State', 'required|trim');
+    $this->form_validation->set_rules('mobile', 'Mobile', 'required|regex_match[/^[0-9]{10}$/]');
+    $this->form_validation->set_rules('postcode', 'ZIP Code', 'required|numeric');
+    $this->form_validation->set_rules('address_type', 'Address Type', 'required|trim');
+
+    if ($this->form_validation->run() == FALSE) {
+        api_response(['status' => 0, 'msg' => strip_tags(validation_errors()), 'data' => []]);
+        return;
+    }
+
+    $data = [
+        'customer_id'  => $customer_id,
+        'fullname'     => $this->input->post('fullname'),
+        'address_1'    => $this->input->post('address_1'),
+        'address_2'    => $this->input->post('address_2'),
+        'city'         => $this->input->post('city'),
+        'state'        => $this->input->post('state'),
+        'mobile'       => $this->input->post('mobile'),
+        'postcode'     => $this->input->post('postcode'),
+        'address_type' => $this->input->post('address_type'),
+        'status'       => '1'
+    ];
+
+    $address_obj = $this->Query_model->get_data('ec_shipping_address', ['customer_id' => $customer_id]);
+    if (empty($address_obj)) {
+        $data['default_address'] = '1';
+    }
+
+    $insert_id = '';
+    $msg = '';
+    if ($this->input->post('id')) {
+        $id = $this->input->post('id');
+        $this->Query_model->update_data('ec_shipping_address', $data, ['shipping_address_id' => $id]);
+        $insert_id = $id;
+        $msg = 'Updated';
+    } else {
+        $insert_id = $this->Query_model->insert_data('ec_shipping_address', $data);
+        $msg = 'Added';
+    }
+
+    $data['shipping_address_id'] = $insert_id;
+    api_response(['status' => 1, 'msg' => "Address $msg successfully", 'data' => $data]);
+}
+
+
+///////////////////////////////
+	 public function customer_profile()
+    {
+        $data         = array();
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+		$data['homepage'] = 1;
+        $data['customer_id']     = $this->LOGIN_ID;
+        $data['account_detail']  = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $this->LOGIN_ID));
+		$data['cate_all_strip']  = $this->Product_model->categories_all_strip();
+        $categories = '';
+        $this->load->template("$this->TYPE/edit_profile", $data);
+    }
+
+
+	public function ajax_get_profile()
+    {
+		$data         = array();
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+        $data['error'] = false;
+        $data['type'] = '';
+        $data['message']['error'] = '';
+        $customer_id = $this->LOGIN_ID;
+
+        $data_obj = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $this->LOGIN_ID));
+
+        if($this->input->post('request_type') == 'get')
+        {
+            $data_obj->name = ($data_obj->fname !='' && $data_obj->lname !='') ? $data_obj->fname : " ".' '.$data_obj->lname;
+            $data_obj->user_img = ($data_obj->user_img !='') ? base_url()."assets/user_profile/".$data_obj->user_img : base_url().'assets/images/Profile-Image@3x.png';
+            api_response(array('status' => 1, 'msg' => 'success', 'data' => $data_obj));
+
+        }else{
+
+            $this->validation($data_obj);
+
+            if ($this->form_validation->run() == false) {
+               api_response(array('status' => 0, 'msg' => remove_extra_for_api(validation_errors()), 'data' => array()));
+
+            }else{
+
+                if($_POST) {
+
+                    $data =  array(
+                            'fname'            => $this->input->post('fname'),
+                            'lname'            => $this->input->post('lname'),
+                            'email'            => $this->input->post('email'),
+                            'gender'           => $this->input->post('gender'),
+                            );
+                }else{
+                    $data['customer_id']    = $userdetail->customer_id;
+                    $data['fname']          = $userdetail->fname;
+                    $data['lname']          = $userdetail->lname;
+                    $data['email']          = $userdetail->email;
+                    $data['gender']         = $userdetail->gender;
+                }
+
+                $condition = array('customer_id' => $customer_id);
+                $status    = $this->Query_model->update_data('ec_customer',$data, $condition);
+                $msg  = 'Successfully Update.';
+                $data = array($data);
+	            
+				api_response(array('status' => '1', 'msg' => $msg, 'data' => $data));
+
+				}
+		
+            }
+    }
+
+
+    public function update_detail($args)
+    {
+        $update_data = $args['DATA'];
+        unset($update_data['id']); unset($update_data['api']);
+
+        if(isset($update_data['password']) && $update_data['password']){
+                $update_data['password'] = md5($update_data['password']);
+         }
+         else
+        {
+            unset($update_data['password']);
+        }
+
+        $condition = array('customer_id' => $this->LOGIN_ID);
+        $status    =  $this->Query_model->update_data('ec_customer',$update_data,$condition);
+        $user_id   = $this->LOGIN_ID;
+        $this->profile_img($user_id); 
+        return $status;
+    }
+
+
+    public function validation($data_obj)
+    {
+        $this->load->library('form_validation');
+        $this->form_validation->set_error_delimiters('<div class="error">', '</div>');
+        $this->form_validation->set_rules('fname', 'First Name', 'trim|required|min_length[2]|max_length[50]');
+        if($data_obj->email != $this->input->post('email'))
+        {
+            $this->form_validation->set_rules('email', 'Email', 'trim|required|valid_email|is_unique[ec_customer.email]');
+        }
+    }
+
+
+    public function profile_img($user_id)
+    {
+        $this->config->load('custom_config');
+        $USER_IMG = $this->config->item('USER_IMG');
+        if(isset($_FILES["user_img"]["name"]) && $_FILES["user_img"]["name"] != '' ){
+            $path_parts     = pathinfo($_FILES["user_img"]["name"]);
+            $user_img  = $user_id.'.'.$path_parts['extension'];
+            $user_img  = trim($user_img);
+            $config['upload_path']      = $USER_IMG;
+            $config['allowed_types']    = 'gif|jpg|png|jpeg';
+            //$config['max_size']       = 5048;
+            //$config['max_width']      = 940;
+            //$config['max_height']     = 336;
+            $config['overwrite']        = TRUE;
+            $config['file_name']        = $user_img;
+            $this->load->library('upload', $config);
+            $this->upload->initialize($config);
+            if ($this->upload->do_upload('user_img'))
+            {
+                $post_data = array('user_img' => $user_img);
+                $condition = array('customer_id'  => $user_id);
+                $this->Query_model->update_data('ec_customer',$post_data, $condition);
+            }
+        }
+    }
+
+
+	public function ajax_user_image_upload()
+	{
+		$data	 =	array();
+		$user_id = $this->input->post('customer_id');
+		//print_r($_FILES['profileimg']); exit;
+
+
+		$this->config->load('custom_config');
+        $USER_IMG = $this->config->item('USER_IMG');
+        if(isset($_FILES["profileimg"]["name"]) && $_FILES["profileimg"]["name"] != '' ){
+            $path_parts     = pathinfo($_FILES["profileimg"]["name"]);
+            $user_img  = rand(1,1000).$user_id.'.'.$path_parts['extension'];
+            $user_img  = trim($user_img); 
+            $config['upload_path']      = $USER_IMG;
+            $config['allowed_types']    = 'gif|jpg|png|jpeg|webp';
+            //$config['max_size']       = 5048;
+            //$config['max_width']      = 940;
+            //$config['max_height']     = 336;
+            $config['overwrite']        = TRUE;
+            $config['file_name']        = $user_img;
+            $this->load->library('upload', $config);
+            $this->upload->initialize($config);
+            if ($this->upload->do_upload('profileimg'))
+            {   
+                $post_data = array('user_img' => $user_img);
+                $condition = array('customer_id'  => $user_id);
+                $data  = $this->Query_model->update_data('ec_customer',$post_data, $condition);
+					
+				if($data)
+				{
+						$userimg = base_url().'assets/user_profile/'.$user_img;
+						$response = array(
+										'status'    => '1',
+										'message'   => 'success',
+										'data'      => $userimg
+										);
+
+						$this->output
+								->set_content_type('application/json')
+								->set_output(json_encode($response));
+				}
+				else{
+
+					 $response = array(
+                                        'status'    => '0',
+                                        'message'   => 'Fail',
+                                        'data'      => array()
+                                        );
+
+                        $this->output
+                                ->set_content_type('application/json')
+                                ->set_output(json_encode($response));
+
+				}
+			
+            }
+            else
+            {
+                $error = $this->upload->display_errors();
+                $response = array(
+                                        'status'    => '0',
+                                        'message'   => $error,
+                                        'data'      => []
+                                        );
+                $this->output
+                        ->set_content_type('application/json')
+                        ->set_output(json_encode($response));
+            }
+        }
+
+	}
+
+
+
+  public function user_card_list()
+  {
+	 $data = array();
+	 $customer_id = $this->LOGIN_ID;
+	 $condition = array('customer_id' => $customer_id);
+	 $card_detail = $this->Query_model->get_data('ec_card_detail', $condition); 
+			
+	if($card_detail)
+	{
+        foreach($card_detail as $row_wise)
+        {
+            $row_wise_valid_year = date('y/m', strtotime($row_wise->valid));
+            $row_wise->valid_modify = $row_wise_valid_year; 
+        }
+		api_response(array('status' => 1, 'msg' => 'Success', 'data' => $card_detail));
+	}
+	else
+	{
+		api_response(array('status' => 1, 'msg' => 'No data found', 'data' => array()));
+	}	
+
+  }
+
+
+	public function my_address()
+	{
+        $data         = array();
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+        $crumbs = array("Home" => "/$this->TYPE/profile/", "Address" => "");
+        $breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+		$data['homepage']	=	1;
+		$data['cate_all_strip']  = $this->Product_model->categories_all_strip();
+        $categories = '';
+        $data['account_detail']  = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $this->LOGIN_ID));
+        $this->load->template("$this->TYPE/my_address", $data);		
+	}
+
+
+	public function ajax_shipping_address()
+	{
+		$data = array();
+        $condition = array('customer_id' => $this->LOGIN_ID);
+        $addresslist = $this->Query_model->get_data('ec_shipping_address', $condition);
+        foreach ($addresslist as $addresslistdata) 
+        {
+            $row = array();
+            $lock_type 					= location_type();
+            $row['shipping_address_id'] = $addresslistdata->shipping_address_id;
+            $row['customer_id']         = $addresslistdata->customer_id;
+            $row['fullname']            = isset($addresslistdata->fullname) ? $addresslistdata->fullname : 'Hi';
+            $row['mobile']              = $addresslistdata->mobile;
+            $row['full_address']        = $addresslistdata->address_1.', '.$addresslistdata->city.', '.$addresslistdata->street;
+            $row['postcode']            = isset($addresslistdata->postcode) ? $addresslistdata->postcode :'';
+            $row['address_type']	    = isset($addresslistdata->loc_type) ? ucfirst($lock_type[$addresslistdata->loc_type]) : 'N/A';
+            $row['defaultaddress']      = $addresslistdata->default_address;
+            $data[] = $row;
+        }
+
+        $response = array(
+                'status'    => '1',
+                'message'   => 'success',
+                'data'      => $data
+                );
+
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+	}
+
+
+	public function ajax_get_address_byid()
+	{
+		$shippaddress_id	=	$this->input->post('id');
+		$condition			=	array('shipping_address_id' => $shippaddress_id);
+		$data_obj 			= $this->Query_model->get_data_obj('ec_shipping_address', $condition);
+		if(is_api())
+		{
+			api_response(array('status' => 1, 'msg' => 'Success', 'data' => [$data_obj]));
+		}else
+		{
+			$response = array(
+                'status'    => '1',
+                'message'   => 'success',
+                'data'      => $data_obj
+                );
+
+			$this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+		}
+	}
+
+
+	public function ajax_update_address()
+	{
+		$data = array();
+		$customer_id = $this->LOGIN_ID;
+		$this->address_validation();
+	
+		if($this->form_validation->run() == FALSE)
+		{
+			api_response(array('status'=>0, 'msg'=>'All field is mandatory', 'data'=>array()));
+		}
+
+		$shipping_address_id = $this->input->post('shipping_address_id');
+		$fullname   	=  $this->input->post('name');    
+		$mobile     	=  $this->input->post('mobile');         
+		$address_1  	=  $this->input->post('address_1');            
+		$city       	=  $this->input->post('city');     
+		$postcode   	=  $this->input->post('postcode');         
+		$how_to_reach	=  $this->input->post('how_to_reach');
+		$loc_type		=  $this->input->post('loc_type');
+		$latitude		=  $this->input->post('latitude');
+		$longitude		=  $this->input->post('longitude');
+		$place_id		=  $this->input->post('place_id');
+    
+        #if(empty($place_id))
+        if(0)
+        {
+          api_response(array('status' => '1', 'msg' => 'Address is not valid', 'data' => array())); 
+          exit; 
+        }
+
+		if($shipping_address_id){
+			 $addressdata =   array('fullname'      =>  $fullname,     
+                    				'mobile'        =>  $mobile,           
+				                    'address_1'     =>  $address_1,            
+                				    'city'          =>  $city,     
+				                    'postcode'      =>  $postcode,         
+				                    'loc_type'      =>  $loc_type,         
+                				    'how_to_reach'  => $how_to_reach,        
+                				    'latitude'      => $latitude,       
+                				    'longitude'     => $longitude,        
+                				    'place_id'      => $place_id       
+                    				); 
+ 
+			$condition1 = array('shipping_address_id' => $shipping_address_id);
+			$address   = $this->Query_model->update_data('ec_shipping_address', $addressdata, $condition1);
+			
+			if($address)
+			{
+
+                api_response(array('status' => '1', 'msg' => 'Address Updated Successfully', 'data' => $address));
+			}else{
+
+                 api_response(array('status' => '0', 'msg' => 'Data not Updated Successfully', 'data' => $address));
+			}
+	
+		}else{
+		
+			$addressdata =   array('fullname'       =>  $fullname,
+                                    'mobile'        =>  $mobile,
+                                    'address_1'     =>  $address_1,
+                                    'city'          =>  $city,
+                                    'postcode'      =>  $postcode,
+                                    'how_to_reach'  => $how_to_reach,
+                                    'loc_type'	    => $loc_type,
+									'customer_id'   => $customer_id,
+                                    'latitude'      => $latitude, 
+                                    'longitude'     => $longitude,
+                                    'place_id'      => $place_id
+                                    );
+			
+			$data	=	$this->Query_model->insert_data('ec_shipping_address', $addressdata);
+            $condition = array('shipping_address_id'=>$data, 'customer_id'=>$customer_id);
+            $condition1 = array('customer_id'=>$customer_id);
+            $update =   $this->Query_model->update_data('ec_shipping_address', array('default_address'=>'0'),$condition1);
+            $update =   $this->Query_model->update_data('ec_shipping_address', array('default_address'=>'1'),$condition);
+            
+			if($data)
+			{
+                api_response(array('status' => '1', 'msg' => 'Address Added Successfully', 'data' => $data));
+			}
+		}
+	
+	}
+
+
+	public function address_validation()
+	{
+		$this->load->library('form_validation');
+        $this->form_validation->set_error_delimiters('<div class="error">', '</div>');
+        $this->form_validation->set_rules('name', 'First Name', 'trim|required|min_length[2]|max_length[50]');
+        $this->form_validation->set_rules('mobile', 'Mobile No', 'trim|required');
+        $this->form_validation->set_rules('address_1', 'Flat / House / Office No.', 'trim|required');
+        $this->form_validation->set_rules('city', 'City Name', 'trim|required');
+        $this->form_validation->set_rules('postcode', 'Postcode', 'trim|required');
+        $this->form_validation->set_rules('how_to_reach', 'Locality', 'trim|required');
+	}
+
+
+	public function user_address_list()
+	{
+		$data	=	array();
+		$customer_id = $this->LOGIN_ID;
+		$condition = array('customer_id' => $customer_id);
+		$addressdata	=	$this->Query_model->get_data('ec_shipping_address', $condition);	
+
+		if(is_api() && $this->input->post('request_type') == 'get')
+        {
+			if($addressdata)
+			{
+				$loc_type = location_type();
+				foreach($addressdata as $row_wise)
+				{
+					$row_wise->loc_type_modify = isset($loc_type[$row_wise->loc_type]) ? $loc_type[$row_wise->loc_type] : '';
+				}
+            	api_response(array('status' => 1, 'msg' => 'success', 'data' => $addressdata));
+			}
+			else
+			{
+				api_response(array('status' => 1, 'msg' => 'No data found', 'data' => array()));
+			}
+        }
+
+		if($_POST)
+		{
+				$data['latitude']       = $this->input->post('latitude');
+				$data['longitude']      = $this->input->post('longitude');
+				$data['how_to_reach']   = $this->input->post('how_to_reach');
+				$data['loc_type']       = $this->input->post('loc_type');
+				$data['place_id']       = $this->input->post('place_id');
+
+				if($data['latitude'] !='' && $data['longitude'] !='')
+				{
+						#this function use for set location in session
+						$ret_data = [];
+						$ret_data['lat']    = $data['latitude'];
+						$ret_data['long']   = $data['longitude'];
+						$this->session->set_userdata('set_lat_long', $ret_data);
+						$getdata = getLocation($data);
+
+						$insert_data = array('customer_id'  => $customer_id,
+										'city'         => $getdata['city'],
+										'street'       => $getdata['area'],
+										'address_1'    => $getdata['address'],
+										'latitude'     => $data['latitude'],
+										'longitude'    => $data['longitude'],
+										'how_to_reach' => $data['how_to_reach'],
+										'loc_type'     => $data['loc_type'],
+										'place_id'     => $data['place_id']
+												
+										);
+
+						#this Query use for the check address in database and then update the data
+						$condition = array('customer_id' => $customer_id, 'latitude' => $data['latitude'], 'longitude' => $data['longitude']);
+						$address_obj = $this->Query_model->get_data_obj('ec_shipping_address', $condition);
+						//print_r($address_obj); exit;
+
+						if($address_obj)
+						{
+								$condition1 = array('shipping_address_id' => $address_obj->shipping_address_id, 'customer_id' => $customer_id);
+								$address   = $this->Query_model->update_data('ec_shipping_address', $insert_data, $condition1);
+								api_response(array('status' => 1, 'msg' => 'Your Address added successfully', 'data' => array()));
+						}
+						else
+						{
+								$shipping_address_id = $this->Query_model->insert_data('ec_shipping_address', $insert_data);
+                                $condition = array('shipping_address_id'=>$shipping_address_id, 'customer_id'=>$customer_id);
+                                $condition1 = array('customer_id'=>$customer_id);
+                                $update =   $this->Query_model->update_data('ec_shipping_address', array('default_address'=>'0'),$condition1);
+                                $update =   $this->Query_model->update_data('ec_shipping_address', array('default_address'=>'1'),$condition);
+								if($shipping_address_id)
+								{
+										api_response(array('status' => 1, 'msg' => 'Your Address added successfully', 'data' => $shipping_address_id));			
+								}
+								else
+								{
+										api_response(array('status' => 0, 'msg' => 'Fail', 'data' => array()));
+								}
+						}
+
+				}
+			else
+			{
+				api_response(array('status' => 1, 'msg' => 'Please select your location', 'data' => array()));
+			}
+		}
+
+	}
+
+
+	public function delete_my_address()
+	{
+		$data		 =	array();
+		$customer_id = $this->LOGIN_ID;
+		$address_id  = $this->input->post('shipping_address_id');
+			
+		$this->delete_address_validation();
+        if($this->form_validation->run() == FALSE)
+        {
+            api_response(array('status' => 0, 'msg' => remove_extra_for_api(validation_errors()), 'data' => array()));
+			return;
+        }
+	
+		if($_POST)
+		{
+			$condition = array('customer_id' => $customer_id, 'shipping_address_id' => $address_id);
+			$shipping_address = $this->Query_model->delete_query('ec_shipping_address', $condition);
+
+			// Ensure at least one default address remains for the customer
+			$remaining = $this->db
+				->from('ec_shipping_address')
+				->where('customer_id', $customer_id)
+				->where('status', '1')
+				->count_all_results();
+
+			if ((int)$remaining > 0) {
+				$has_default = $this->db
+					->from('ec_shipping_address')
+					->where('customer_id', $customer_id)
+					->where('status', '1')
+					->where('default_address', '1')
+					->count_all_results();
+
+				if ((int)$has_default === 0) {
+					$next_default = $this->db
+						->select('shipping_address_id')
+						->from('ec_shipping_address')
+						->where('customer_id', $customer_id)
+						->where('status', '1')
+						->order_by('shipping_address_id', 'ASC')
+						->limit(1)
+						->get()
+						->row();
+
+					if (!empty($next_default) && !empty($next_default->shipping_address_id)) {
+						$this->Query_model->update_data('ec_shipping_address', array('default_address' => '0'), array('customer_id' => $customer_id));
+						$this->Query_model->update_data('ec_shipping_address', array('default_address' => '1'), array('shipping_address_id' => $next_default->shipping_address_id));
+					}
+				}
+			}
+
+			if(is_api()){
+
+					if($shipping_address)
+					{
+							api_response(array('status' => 1, 'msg' => 'Remove a address successfully', 'data' => array()));
+					}
+					else
+					{
+							api_response(array('status' => 0, 'msg' => 'Fail', 'data' => array()));
+					}
+			}else
+			{
+				$response = array(
+                'status'    => 1,
+                'message'   => 'Remove a address successfully',
+                'data'      => $shipping_address
+                );
+                
+                $this->output
+                ->set_content_type('application/json')
+                ->set_output(json_encode($response));
+			}
+		}
+		
+	}
+
+	public function delete_address_validation()
+	{
+        $this->load->library('form_validation');
+        $this->form_validation->set_error_delimiters('<div class="error">', '</div>');
+        $this->form_validation->set_rules('shipping_address_id', 'Select Address', 'trim|required', array('required' => 'Please the select address'));
+	}
+
+
+
+	public function update_user_address()
+	{
+		$data	=	array();
+		$customer_id	=	$this->LOGIN_ID;
+		$shipping_address_id = $this->input->post('shipping_address_id');			
+
+		$this->delete_address_validation(); 
+        if($this->form_validation->run() == FALSE)
+        {
+            api_response(array('status' => 0, 'msg' => remove_extra_for_api(validation_errors()), 'data' => array()));
+			return;
+        }		
+	
+		if(is_api() && $this->input->post('request_type') == 'get')
+		{
+			$condition = array('shipping_address_id' => $shipping_address_id, 'customer_id'=> $customer_id);
+			$address_obj = $this->Query_model->get_data_obj('ec_shipping_address', $condition);
+			
+			if($address_obj)
+			{
+				api_response(array('status' => 1, 'msg' => 'Successfull', 'data' => $address_obj));
+			}			
+		}	
+
+		if($shipping_address_id)
+		{
+			$com_address	=	$this->input->post('complete_address');
+			$how_to_reach	=	$this->input->post('how_to_reach');
+			$address_obj = $this->Query_model->get_data_obj('ec_shipping_address', array('shipping_address_id'=> $shipping_address_id));
+			$data	=	array('customer_id' => $customer_id,
+							  'address_1' 	=> $com_address,
+							  'how_to_reach'=> $how_to_reach,
+							  'latitude'    => $address_obj->latitude,
+							  'longitude'   => $address_obj->longitude,
+							  'city'		=> $address_obj->city,
+							  'street'		=> $address_obj->street);
+
+		   $condition = array('shipping_address_id' => $shipping_address_id);
+		   $update	=	$this->Query_model->update_data('ec_shipping_address', $data, $condition);
+			
+			if($update)
+			{
+				api_response(array('status' => 1, 'msg' => 'Address updated successfully', 'data' => array()));
+			}
+
+		}
+
+	}
+
+
+    public function my_orders()
+	{
+			$data   =   array();
+			$data['TYPE'] = $this->TYPE;
+			$data['csrf'] = csrf_token();
+			$crumbs = array("Home" => "/$this->TYPE/profile/", "Orders" => "");
+			$breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+			$customer_id  = $this->LOGIN_ID;
+			$data['process']    = $this->Product_model->get_order_count_process($customer_id);
+			$data['completed']  = $this->Product_model->get_order_count_completed($customer_id);
+			$data['cancel']     = $this->Product_model->get_order_count_cancel($customer_id);
+			$data['account_detail']  = $this->Query_model->get_data_obj('ec_customer', array('customer_id' => $this->LOGIN_ID));
+			$data['breadcrumbs']   = $breadcrumbs;
+			$data['homepage']	=	1;
+			$data['cate_all_strip']  = $this->Product_model->categories_all_strip();
+	        $categories = '';
+			$this->load->template("$this->TYPE/my_order", $data);
+	}
+
+
+	public function ajax_get_customer_order()
+    {
+        $data = array();
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+        $customer_id = $this->LOGIN_ID;
+        $orderStatus = $this->input->post('filter') ?: ($this->input->post('orderStatus') ?: null);
+        $orderlist = $this->Product_model->get_order_data($customer_id, $orderStatus);
+        $data = array();
+
+        $order_id_arr = array();
+        $order_id_arr_web = array();
+        if($customer_id){
+            foreach ($orderlist as $row) {
+
+                // Prefer new products table
+                $product_obj = $this->Query_model->get_data_obj('products', array('id' => $row->product_id));
+                if (!$product_obj) {
+                    $product_obj = $this->Query_model->get_data_obj('ec_product', array('product_id' => $row->product_id));
+                }
+                $shipping_obj = $this->Query_model->get_data_obj('ec_shipping_address', array('shipping_address_id' => $row->shipping_address_id));
+                $currency_obj = current_currency($row->currency_id);
+
+                if($product_obj){
+                    $attribute_item = array();
+                    $variation_id = 0;
+                    if (isset($row->options) && $row->options) {
+                        $opt = json_decode((string)$row->options, true);
+                        if (is_array($opt) && isset($opt['variation_id'])) {
+                            $variation_id = (int)$opt['variation_id'];
+                        }
+                    }
+
+                    // Determine image (new products vs legacy)
+                    if (isset($product_obj->product_type)) {
+                        // New products table
+                        $productimg = base_url().'assets/default_images/product.jpg';
+                        if ($variation_id > 0) {
+                            $img = $this->db->get_where('product_variation_images', ['variation_id' => $variation_id], 1)->row();
+                            if ($img && !empty($img->image_path)) {
+                                $productimg = base_url().'uploads/products/'.(string)$img->image_path;
+                            }
+                        }
+                        if ((string)$product_obj->product_type === 'variable') {
+                            $attr_csv = (string)($row->attribute_item_id ?? '');
+                            $attr_ids = array_filter(array_map('trim', explode(',', $attr_csv)));
+                            $attr_ids = array_values(array_filter(array_map(function ($v) {
+                                if (ctype_digit((string)$v)) return (int)$v;
+                                return null;
+                            }, $attr_ids), function ($v) { return $v !== null; }));
+                            sort($attr_ids);
+
+                            if (!empty($attr_ids)) {
+                                $vars = $this->db
+                                    ->select('id, attr_json')
+                                    ->from('product_variations')
+                                    ->where('product_id', (int)$row->product_id)
+                                    ->get()->result_array();
+                                $vid = 0;
+                                foreach ($vars as $vr) {
+                                    $vals = json_decode((string)($vr['attr_json'] ?? ''), true);
+                                    if (!is_array($vals)) {
+                                        continue;
+                                    }
+                                    $vals = array_values(array_filter(array_map(function ($x) {
+                                        if (is_int($x)) return $x;
+                                        if (is_string($x) && ctype_digit(trim($x))) return (int)trim($x);
+                                        return null;
+                                    }, $vals), function ($x) { return $x !== null; }));
+                                    sort($vals);
+                                    if (json_encode($vals) === json_encode($attr_ids)) {
+                                        $vid = (int)($vr['id'] ?? 0);
+                                        break;
+                                    }
+                                }
+                                if ($vid > 0) {
+                                    $img = $this->db->get_where('product_variation_images', ['variation_id' => $vid], 1)->row();
+                                    if ($img && !empty($img->image_path)) {
+                                        $productimg = base_url().'uploads/products/'.(string)$img->image_path;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Legacy ec_product
+                        if($product_obj->type == 'simple'){
+                            $product_gallery = $this->Query_model->get_data_obj('ec_gallery',array('product_id' => $row->product_id), array(), array('length' => 1));
+                            if($product_gallery){
+                                $productimg = base_url().'assets/uploads/files/'.$product_gallery->file_name;
+                            }else{
+                                $productimg = base_url().'assets/default_images/product.jpg';
+                            }
+                        }else{
+                            $product_gallery = $this->Query_model->get_data('ec_product_variation',array('product_id' => $row->product_id, 'attribute_item_id' => $row->attribute_item_id));
+                            if(isset($product_gallery[0]->_thumbnail_id)){
+                                $productimg = base_url().'assets/uploads/'.$product_gallery[0]->_thumbnail_id;
+                            }else{
+                                $productimg = base_url().'assets/default_images/product.jpg';
+                            }
+                        }
+                    }
+
+                    // Attribute labels (legacy attributes table)
+                    if($row->attribute_item_id){
+                        $get_attribute = get_attribute();
+                        $att_array = explode(',',$row->attribute_item_id);
+                        if($att_array){
+                            $attribute_item_obj = $this->Query_model->get_data('ec_attribute_item',array('attribute_item_id' => $att_array));
+                            if($attribute_item_obj){
+                                foreach($attribute_item_obj as $at){
+                                    $attribute_item[$get_attribute[$at->attribute_id]][] = $at->name;
+                                }
+                            }
+                        }
+                    }
+
+                    $rating_obj = array();
+                    if($row->status == '10'){ 
+                        $rating_obj = $this->Query_model->get_data('ec_review_rating', array('product_id' => $row->product_id,  'customer_id' => $customer_id));
+                    //print_r($rating_obj);
+                   }
+
+                    $supplier_obj = $this->Query_model->get_data_obj('ec_admin', array('admin_id' => $row->supplier_id));
+
+                    $unit_price = ($row->subtotal / $row->quantity);
+                    $unit_price = sprintf('%.02f',$unit_price);
+
+                    $unit_gross_price = $row->subtotal;
+                    if(is_numeric($row->tax)){
+                        $unit_gross_price+= $row->tax;
+                    }
+                    if(is_numeric($row->shipping)){
+                        $unit_gross_price+=$row->shipping;
+                    }
+                    if(isset($row->coupon_amount) && $row->coupon_amount)
+                    {
+                        $unit_gross_price = $unit_gross_price - $row->coupon_amount;
+                    }
+
+                    $orderstatus        = order_status($row->status);
+                    $row->iso_code      = $currency_obj->iso_code;                   
+                    $row->symbol        =  htmlspecialchars_decode($currency_obj->symbol);                    
+                    $row->order_id      = $row->order_id;
+                    $row->order_uid     = $row->order_uid;
+                    $row->product_id    = $row->product_id;
+                    $row->order_item_uid= $row->order_item_uid;
+                    $row->cancel_order_reason = isset($row->cancel_order_reason) ? $row->cancel_order_reason : '';
+                    $row->comment       = isset($row->comment) ? $row->comment : '';
+                    $row->num_items     = $row->num_items_sold;
+                    if (isset($product_obj->product_type)) {
+                        $row->productname = isset($product_obj->name) ? $product_obj->name : '';
+                    } else {
+                        $row->productname = $product_obj->post_title;
+                    }
+                    $row->url           = detail_page_url($product_obj);
+                    $row->quantity      = $row->quantity;
+                    $row->supplier      = ($supplier_obj) ? $supplier_obj->store_name : '';
+                    $row->coupon_id     = isset($row->coupon_id) ? $row->coupon_id : '';
+                    $row->coupon_amount = isset($row->coupon_amount) ? $row->coupon_amount :0;
+                    $row->totalprice    = $row->order_total > 0  ? $row->order_total : 0;
+                    $row->proprice      = $row->subtotal;
+                    $row->unit_net_price= $row->subtotal;
+                    $row->unit_tax      = $row->tax;
+                    $row->unit_shipping = $row->shipping;
+                    $row->unit_gross_price = sprintf('%.02f',$unit_gross_price);
+                    $row->attribute_item_id = $row->attribute_item_id;
+                    $row->attribute_item = $attribute_item;
+                    $row->image         = $productimg;
+                    $row->shipping_name = isset($shipping_obj->fullname) ? $shipping_obj->fullname :'';
+                    $row->shipping_mobile = isset($shipping_obj->mobile) ? $shipping_obj->mobile : '';
+                    $row->shipping_city = isset($shipping_obj->city) ? $shipping_obj->city : '';
+                    $row->shipping_street= isset($shipping_obj->street) ? $shipping_obj->street : '';
+                    $row->shipping_postcode = isset($shipping_obj->postcode) ? $shipping_obj->postcode : '';
+                    //$row->shipping_country = get_country($shipping_obj->country)->name;
+                    $row->orderstatus   = $orderstatus;
+                    $row->rating_obj    = $rating_obj;
+                    $row->delivery_date = date("d-M-Y", strtotime($row->date_created."+7 day"));
+                    $row->order_date    = date("d-M-Y", strtotime($row->date_created));
+                    $row->product_link  = $product_obj->post_slug;
+                    $row->cancel_order_reason   = $row->cancel_order_reason;
+                    $row->comment               = $row->comment;
+                    $order_id_arr[]     = $row;
+                    $order_id_arr_web[$row->order_id][] = $row;
+                }
+            }
+        }
+
+        $all_ord = [];
+        foreach($order_id_arr_web as $key => $value)
+        {
+            $date_created = array_column($value, 'order_date');
+            array_multisort($date_created, SORT_DESC, $value);
+            $all_ord[$key] = $value;
+        }
+
+        #print_r($order_id_arr_web);
+        if(is_api()){
+        	api_response(array('status' => 1, 'msg' => 'success', 'data' => $order_id_arr));
+        }else{
+        	$response = array('status' => 1, 'msg' => 'success', 'data' => $order_id_arr_web);
+        }
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+    }
+
+	public function ajax_get_wishlist_product()
+    {
+		$data_out = array();
+		$customer_id  =  $this->LOGIN_ID;
+		$condition = array('customer_id' => $customer_id, 'status' => array('0','1'));
+		$productlist = $this->Query_model->get_data('ec_wishlist', $condition);
+
+		$current_currency = current_currency();
+		$currency = get_currency($current_currency);
+		$rate = $currency->rate;
+		$symbol = $currency->symbol;
+		$ln = current_language();
+
+		if($customer_id){
+			foreach ($productlist as $wl_row) {
+				$product_id = (int)$wl_row->product_id;
+				$attribute_item_id = $wl_row->attribute_item_id;
+
+				$product_obj = $this->Query_model->get_data_obj('products', array('id' => $product_id, 'status' => '1'));
+				if(!$product_obj){
+					continue;
+				}
+
+				$productimg = base_url().'assets/default_images/product.jpg';
+				$sale_price = 0;
+				$regular_price = 0;
+				$discount = 0;
+
+				$variation = $this->Query_model->get_data_obj('product_variations', array('product_id' => $product_id), array('id' => 'ASC'), array('length' => 1));
+				if ($variation && isset($variation->id)) {
+					$img = $this->Query_model->get_data_obj('product_variation_images', array('variation_id' => (int)$variation->id), array('id' => 'ASC'), array('length' => 1));
+					if ($img && !empty($img->image_path)) {
+						$productimg = base_url().'uploads/products/'.$img->image_path;
+					}
+
+					$price_row = $this->Query_model->get_data_obj('product_variation_price', array('variation_id' => (int)$variation->id), array('COALESCE(min_qty,0)' => 'ASC'), array('length' => 1));
+					if ($price_row && isset($price_row->price) && $price_row->price !== null) {
+						$sale_price = (float)$price_row->price;
+						$regular_price = (float)$price_row->price;
+					}
+				}
+
+				$row = array();
+				$row['wishlist_id']       =  $wl_row->wishlist_id;
+				$row['customer_id']       =  $wl_row->customer_id;
+				$row['productimg']        =  $productimg;
+				$row['url']               =  base_url('product/details/'.$product_id);
+				$row['discount']          =  $discount;
+				$row['attribute_item_id'] =  ($attribute_item_id) ? explode(',',$attribute_item_id) : array();
+				$row['attribute_items']   =  array();
+				$row['productname']       =  $product_obj->name;
+				$row['price']             =  sprintf('%.02f',$rate*$sale_price);
+				$row['sale_price']        =  sprintf('%.02f',$rate*$sale_price);
+				$row['regular_price']     =  sprintf('%.02f',$rate*$regular_price);
+				$row['post_content']      =  isset($product_obj->description) ? $product_obj->description : '';
+				$row['symbol']            =  $symbol;
+				$row['iso_code']          =  $currency->iso_code;
+				$row['product_id']        =  $product_id;
+				$row['date_added']        =  $wl_row->date_added;
+
+				$data_out[] = $row;
+			}
+		}
+
+		if(is_api()){
+				api_response(array('status' => 1, 'msg' => 'success', 'data' => $data_out));		
+		}else{
+
+				$response = array(
+								'status'    => '1',
+								'message'   => 'success',
+								'data'      => $data_out
+						);
+
+				$this->output
+						->set_content_type('application/json')
+						->set_output(json_encode($response));
+
+		}
+
+    }
+
+
+
+   public function ajax_remove_wishlist_product()
+   {
+       $wishlist_id = $this->input->post('wishlist_id');
+       $condition   = array('customer_id'=> $this->LOGIN_ID, 'wishlist_id' => $wishlist_id);
+       $status      = $this->Query_model->delete_query('ec_wishlist', $condition);
+
+       if(is_api()){
+    		   api_response(array('status' => 1, 'msg' => 'Product removed successfully', 'data' => (array)$status));			
+       }else{	
+    		   $response = array(
+    				   'status'    => '1',
+    				   'message'   => 'Wishlist product removed successfully',
+    				   'data'      => (array)$status
+    				   );
+
+    		   echo json_encode($response);
+    		   die();
+       }
+   }
+
+
+
+	public function ajax_get_track_package()
+    {
+        wfile($_POST);
+        $data = array();
+        $data['TYPE']   = $this->TYPE;
+        $data['csrf']   = csrf_token();
+        $customer_id    = $this->LOGIN_ID;
+        $order_item_uid = $this->input->post('order_item_uid');
+        $order_uid      = $this->input->post('order_uid');
+
+		$orderstatus = array();
+        $orderlistdata = $this->Product_model->get_order_item($order_uid, $order_item_uid);
+        //print_r($orderlistdata); exit;
+		$orderstatus['status'] = $orderlistdata->status;
+		$orderstatus['orderstatus'] = order_status($orderlistdata->status);
+	
+		if(is_api())
+		{
+			$api_order_track = $this->api_order_track(array('order_status'=>$orderlistdata->status));
+			api_response(array('status' => 1, 'msg' => 'success', 'data' => [$api_order_track]));
+		}
+		else
+		{
+				$response = array('status' => 1, 'msg' => 'success', 'data' => $orderstatus);
+				$this->output
+						->set_content_type('application/json')
+						->set_output(json_encode($response));
+		}
+
+    }
+
+	public function api_order_track($args)
+	{
+		$arr_name = array('Ordered' => array('title'=>'Ordered', 'status'=>0),'In Process' => array('title'=>'In Process', 'status'=>0),'Shipped' => array('title'=>'Shipped', 'status'=>0),'Out For Delivery' => array('title'=>'Out For Delivery', 'status'=>0),'Delivered'=> array('title'=>'Delivered', 'status'=>0));
+
+		$order_item_status = order_item_status();
+		$status = $args['order_status'];
+		$cnt = 0;
+		$arr_indx = array();
+		foreach($order_item_status as $key =>$value)
+		{
+				$arr_indx[] = $value;
+				if($key == $status)
+				{
+						$cnt;
+						break;		
+				}
+
+				$cnt++;
+		}
+
+		for($i=0; $i<=$cnt; $i++)
+		{
+				$arr_name[$arr_indx[$i]]['status'] = 1;
+		}
+		$arr_values = [];
+		foreach($arr_name as $key => $value)
+		{
+			$arr_values[] = $value;
+		}
+		return $arr_values;
+	}
+
+    public function ajax_cancel_product()
+    {
+        $data['csrf'] = csrf_token();
+        $data['error'] = false;
+        $data['type'] = '';
+        $data['message']['error'] = ''; 
+        $data = array();
+        
+        $this->load->library('form_validation');
+        $this->form_validation->set_rules('order_uid', 'Order UID', 'trim|required');
+        $this->form_validation->set_rules('order_item_uid', 'Order Item UID', 'trim|required');
+        $this->form_validation->set_rules('cancel_order_reason', 'Cancel order reason', 'trim|required');
+
+        if($this->form_validation->run() == false) {
+            $response = array(
+                'status'  => '0',
+                'message' => remove_extra_for_api(validation_errors()),
+                'data'    => (array)$data,
+            );
+
+            }
+
+        $order_uid      = $this->input->post('order_uid');
+        $order_item_uid = $this->input->post('order_item_uid');
+        if($order_uid && $order_uid){
+            $item_obj = $this->Product_model->get_order_item($order_uid,$order_item_uid);
+        }
+        
+        if($_POST) {
+            $data['status']               = 5;
+            $data['cancel_order_reason']  = $this->input->post('cancel_order_reason');
+            $data['comment']              = $this->input->post('comment');
+        }
+
+        if (!isset($this->LOGIN_ID) || !isset($item_obj) || $this->form_validation->run() == FALSE){
+            if(!isset($this->LOGIN_ID)){
+                $response = array(
+                    'status' => 0,
+                    'message' => 'Please login first.',
+                );
+            }elseif(!isset($requirement_obj)){
+                $response = array(
+                    'status' => 0,
+                    'message' => 'Invalid Request.',
+                );
+            }else{
+                $response = array(
+                    'status' => 0,
+                    'message' => validation_errors(),
+                );
+            }
+        }else{
+            $post_data = array(        
+                    'status'             => $data['status'],  
+                    'cancel_order_reason'=> $data['cancel_order_reason'],    
+                    'comment'            => $data['comment'],
+                    );
+
+            $tax = $item_obj->tax;
+            $shipping = $item_obj->shipping;
+            $subtotal = $item_obj->subtotal;
+            $total    = $subtotal + $tax + $shipping;
+            if(isset($item_obj->coupon_amount) && $item_obj->coupon_amount)
+            {
+                $total = $total - $item_obj->coupon_amount;
+            }
+            $quantity = $item_obj->quantity;
+            $attribute_item_id = $item_obj->attribute_item_id;
+            $product_id = $item_obj->product_id;
+            $args = array(
+                    'tax'                   => $tax,
+                    'shipping'              => $shipping,
+                    'subtotal'              => $subtotal,
+                    'coupon_amount'         => isset($item_obj->coupon_amount) && $item_obj->coupon_amount ? $item_obj->coupon_amount : 0,
+                    'total'                 => $total,
+                    'quantity'              => $quantity,
+                    'attribute_item_id'     => $attribute_item_id,
+                    'product_id'            => $product_id,
+                    'order_id'              => $item_obj->order_id,
+                    'order_item_id'         => $item_obj->order_item_id,
+                    'type'                  => 'simple',
+                    'status'                => $post_data['status'],
+                    'cancel_order_reason'   => $post_data['cancel_order_reason'],
+                    'comment'               => $post_data['comment'],
+                );
+
+            $product_obj = $this->Query_model->get_data_obj('ec_product',array('product_id' => $product_id));
+            if($product_obj){
+                if($attribute_item_id){
+                    $variation_obj = $this->Query_model->get_data_obj('ec_product_variation',array('attribute_item_id' => $attribute_item_id));
+                    if($variation_obj){
+                        $args['type'] = 'variable';
+                    }
+                }
+                $status = $this->Checkout_model->cancel_order($args);
+                $this->session->set_flashdata('message', 'Order Cancel sucessfully.');
+                $response = array(
+                    'status'  => '1',
+                    'message' => "Order Cancel sucessfully.",
+                    'data'    => (array)$status,
+                );
+            }else{
+                $response = array(
+                    'status'  => '0',
+                    'message' => "Invalid Request.",
+                );
+            }
+        }
+
+        if(!isset($response['data'])){
+            $response['data'] = array();
+        }
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+
+    }
+
+
+	public function ajax_add_to_review_rating()
+    {
+		$data = array();
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+        $customer_id  = $this->LOGIN_ID;
+
+        $this->load->library('form_validation');
+        $this->form_validation->set_error_delimiters('<div class="error">', '</div>');
+        $this->form_validation->set_rules('product_id', 'Product Name', 'trim|required');
+		$this->form_validation->set_rules('rating', 'Rating', 'trim|required');
+        $this->form_validation->set_rules('review', 'Review', 'trim|required');
+        $this->form_validation->set_rules('title', 'Title', 'trim|required');
+
+        if (!isset($this->LOGIN_ID) || $this->form_validation->run() == FALSE)
+        {
+            if(!isset($this->LOGIN_ID)){
+				
+				api_response(array('status' => '0','msg' => 'Please login first to submit the request.', 'data'=> array()));
+
+            }else{
+
+				api_response(array('status' => '0','msg' => remove_extra_for_api(validation_errors()), 'data'=> array()));
+            }
+        }else{
+			
+            $attribute_item     = $this->input->post('attribute_item');
+            $attribute_item_id  = NULL; 
+            $attribute_items = array();
+            if($attribute_item){
+                $attribute_items = json_decode($attribute_item);
+                if($attribute_items){
+                    sort($attribute_items);
+                }
+                $attribute_item_id = implode(',',$attribute_items);
+            }
+
+            $data['customer_id']         = $this->LOGIN_ID;
+            $data['product_id']          = $this->input->post('product_id');
+            $data['attribute_item_id']   = $attribute_item_id;
+            $data['review']              = $this->input->post('review');
+            $data['rating']              = $this->input->post('rating'); 
+            $data['title']              = $this->input->post('title'); 
+            $post_data = array(
+                            'customer_id'       => $this->LOGIN_ID,
+                            'product_id'        => $data['product_id'],
+                            'attribute_item_id' => $data['attribute_item_id'],
+                            'review'            => $data['review'],
+                            'title'             => $data['title'],
+                            'rating'            => $data['rating'],
+                            );
+
+            $get_rating = $this->Query_model->get_data_obj('ec_review_rating', array('product_id' => $post_data['product_id'], 'customer_id' => $this->LOGIN_ID));
+            if($get_rating){
+                $condition = array('customer_id' => $this->LOGIN_ID, 'product_id' => $post_data['product_id']);
+                $lats_id = $this->Query_model->update_data('ec_review_rating', $post_data, $condition);
+            }else{
+								
+                $lats_id = $this->Query_model->insert_data('ec_review_rating', $post_data);
+            }
+
+			api_response(array('status' => '1','msg' => 'Review and rating add sucessfully', 'data'=> array()));
+
+        }
+        
+        if(!isset($response['data'])){
+            $response['data'] = array();
+        } 
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+
+    }
+
+    public function rating_review_validation()
+    {
+        $this->load->library('form_validation');
+        $this->form_validation->set_rules('product_id', 'Product Name', 'trim|required');
+        $this->form_validation->set_rules('review', 'Review', 'trim|required');
+        $this->form_validation->set_rules('rating', 'Rating', 'trim|required');
+    }
+
+
+}
+
+?>

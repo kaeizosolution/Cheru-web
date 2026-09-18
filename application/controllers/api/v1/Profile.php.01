@@ -1,0 +1,231 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Profile extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->library('session');
+    }
+
+    private function _require_customer()
+    {
+        $token = $this->get_bearer_token();
+        if ($token === '') {
+            $customer = $this->session->userdata('customer');
+            $customer_id = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+            if ($customer_id > 0) {
+                return $customer_id;
+            }
+            $this->fail('unauthorized', ['Missing Authorization Bearer token'], 401);
+            return 0;
+        }
+
+        $claims = $this->verify_token($token);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'access' || ($claims['role'] ?? '') !== 'customer') {
+            $this->fail('unauthorized', ['Invalid or expired access token'], 401);
+            return 0;
+        }
+
+        $customer_id = (int)$claims['sub'];
+        if ($customer_id <= 0) {
+            $this->fail('unauthorized', ['Invalid token subject'], 401);
+            return 0;
+        }
+
+        // Merge into session instead of overwriting to preserve names, logged_in status, etc.
+        $cust = $this->session->userdata('customer');
+        $cust = is_array($cust) ? $cust : [];
+        $cust['login_id'] = $customer_id;
+        $cust['customer_id'] = $cust['customer_id'] ?? $customer_id;
+        $cust['logged_in'] = $cust['logged_in'] ?? 1;
+        $this->session->set_userdata('customer', $cust);
+        $this->session->set_userdata('type', 'customer');
+        $_SESSION['type'] = 'customer';
+
+        return $customer_id;
+    }
+
+    public function index()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'GET') {
+            return $this->fail('method_not_allowed', ['Only GET is allowed'], 405);
+        }
+
+        $customer_id = $this->_require_customer();
+        if (!$customer_id) {
+            return;
+        }
+
+        $customer = $this->Query_model->get_data_obj('ec_customer', ['customer_id' => $customer_id]);
+        $customer_out = $customer ? [
+            'customer_id' => $customer_id,
+            'fname' => $customer->fname ?? null,
+            'lname' => $customer->lname ?? null,
+            'email' => $customer->email ?? null,
+            'mobile' => $customer->mobile ?? null,
+            'user_img' => (!empty($customer->user_img) && strpos($customer->user_img, '://') === false) 
+                ? base_url('uploads/profile_image/' . $customer->user_img) 
+                : ($customer->user_img ?? null),
+        ] : ['customer_id' => $customer_id];
+
+        $total_orders = (int)$this->db->where('user_id', $customer_id)->count_all_results('ec_orders');
+        $orders_in_progress = (int)$this->db
+            ->where('user_id', $customer_id)
+            ->where_in('status', ['pending', 'confirmed', 'shipped'])
+            ->count_all_results('ec_orders');
+        $orders_delivered = (int)$this->db
+            ->where('user_id', $customer_id)
+            ->where('status', 'delivered')
+            ->count_all_results('ec_orders');
+        $total_wishlist = (int)$this->db->where('customer_id', $customer_id)->where('status', '1')->count_all_results('ec_wishlist');
+
+        $recent_rows = $this->db
+            ->from('ec_orders')
+            ->where('user_id', $customer_id)
+            ->order_by('date_added', 'DESC')
+            ->limit(5)
+            ->get()->result();
+
+        $recent_orders = [];
+        foreach ($recent_rows as $r) {
+            $recent_orders[] = [
+                'order_id' => (int)($r->id ?? 0),
+                'order_number' => $r->order_number ?? null,
+                'order_date' => $r->date_added ?? null,
+                'final_amount' => (float)($r->final_amount ?? $r->total_amount ?? 0),
+                'payment_status' => $r->payment_status ?? null,
+                'order_status' => $r->status ?? null,
+            ];
+        }
+
+        return $this->ok([
+            'customer' => $customer_out,
+            'stats' => [
+                'total_orders' => $total_orders,
+                'orders_in_progress' => $orders_in_progress,
+                'orders_delivered' => $orders_delivered,
+                'total_wishlist' => $total_wishlist,
+            ],
+            'recent_orders' => $recent_orders,
+        ], 'success');
+    }
+
+    public function update()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'PUT' && strtoupper((string)$this->input->method()) !== 'POST') {
+            return $this->fail('method_not_allowed', ['Only PUT and POST are allowed'], 405);
+        }
+
+        $customer_id = $this->_require_customer();
+        if (!$customer_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+
+        $fname = isset($payload['fname']) ? trim((string)$payload['fname']) : null;
+        $lname = isset($payload['lname']) ? trim((string)$payload['lname']) : null;
+        $mobile = isset($payload['mobile']) ? trim((string)$payload['mobile']) : null;
+        $email = isset($payload['email']) ? trim((string)$payload['email']) : null;
+
+        $update = [];
+        if ($fname !== null) $update['fname'] = $fname;
+        if ($lname !== null) $update['lname'] = $lname;
+        if ($mobile !== null) $update['mobile'] = $mobile;
+        if ($email !== null) {
+            $existing = $this->Query_model->get_data_obj('ec_customer', ['email' => $email]);
+            if ($existing && $existing->customer_id != $customer_id) {
+                return $this->fail('validation_error', ['Email already in use'], 422);
+            }
+            $update['email'] = $email;
+        }
+
+        // Image Upload Logic (Corrected to use /uploads/profile_image/ and store filename)
+        if (!empty($_FILES['uploadPhoto']['name'])) {
+            $config['upload_path']   = './uploads/profile_image/';
+            $config['allowed_types'] = 'jpg|jpeg|png|webp';
+            $config['file_name']     = 'user_' . $customer_id . '_' . time();
+
+            $this->load->library('upload');
+            $this->upload->initialize($config);
+
+            if ($this->upload->do_upload('uploadPhoto')) {
+                $fileData = $this->upload->data();
+                $update['user_img'] = $fileData['file_name']; // Store only filename in DB
+            } else {
+                return $this->fail('upload_error', [$this->upload->display_errors('', '')], 400);
+            }
+        }
+
+        if (empty($update)) {
+            return $this->fail('validation_error', ['No valid fields provided for update'], 422);
+        }
+
+        $this->Query_model->update_data('ec_customer', $update, ['customer_id' => $customer_id]);
+
+        // Prepare response with full URL for user_img
+        $response_fields = $update;
+        if (isset($update['user_img'])) {
+            $response_fields['user_img'] = base_url('uploads/profile_image/' . $update['user_img']);
+        }
+
+        // Update session as well for fallback web controller consistency
+        $customer_session = $this->session->userdata('customer');
+        if (is_array($customer_session)) {
+            foreach ($update as $k => $v) {
+                $customer_session[$k] = $v;
+            }
+            if (isset($update['user_img'])) {
+                // Ensure session also has the full URL or whatever the frontend expects
+                $customer_session['user_img'] = base_url('uploads/profile_image/' . $update['user_img']);
+                $customer_session['profile_img'] = $customer_session['user_img'];
+            }
+            $this->session->set_userdata('customer', $customer_session);
+        }
+
+        return $this->ok(['customer_id' => $customer_id, 'updated' => true, 'fields' => $response_fields], 'success');
+    }
+
+    public function change_password()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'PUT' && strtoupper((string)$this->input->method()) !== 'POST') {
+            return $this->fail('method_not_allowed', ['Only PUT and POST are allowed'], 405);
+        }
+
+        $customer_id = $this->_require_customer();
+        if (!$customer_id) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+
+        $new_password = isset($payload['new_password']) ? (string)$payload['new_password'] : '';
+        $confirm_password = isset($payload['confirm_password']) ? (string)$payload['confirm_password'] : '';
+
+        if ($new_password === '' || $confirm_password === '') {
+            return $this->fail('validation_error', ['new_password and confirm_password are required'], 422);
+        }
+
+        if ($new_password !== $confirm_password) {
+            return $this->fail('validation_error', ['Password confirmation does not match'], 422);
+        }
+
+        $customer = $this->Query_model->get_data_obj('ec_customer', ['customer_id' => $customer_id]);
+        if (!$customer) {
+            return $this->fail('not_found', ['Customer not found'], 404);
+        }
+
+        $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
+
+        $this->Query_model->update_data('ec_customer', ['password' => $hashed_password], ['customer_id' => $customer_id]);
+
+        return $this->ok(['customer_id' => $customer_id, 'password_changed' => true], 'success');
+    }
+}

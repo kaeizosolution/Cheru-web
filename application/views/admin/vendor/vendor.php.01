@@ -1,0 +1,255 @@
+<?php 
+// Load the language dictionary for this page
+$page_lang = get_page_language_data('admin_page_lang'); 
+?>
+
+<div class="page-body">
+    <div class="container-fluid">
+        <div class="page-header">
+            <div class="row">
+                <div class="col-lg-6">
+                    <h3><?= isset($page_lang->update_vendor) ? $page_lang->update_vendor : 'Update Vendor'; ?></h3>
+                </div>
+                <?= $breadcrumbs ?>
+            </div>
+        </div>
+    </div>
+    <div class="container-fluid">
+        <div class="edit-profile">
+            <div class="row ">
+                <div class="col-lg-12">
+                    <?php if (($this->session->flashdata('error')) || validation_errors()!='') { ?>
+                    <div class="alert alert-danger">
+                        <?= validation_errors();?>
+                        <?= $this->session->flashdata('error')?>
+                    </div>
+                    <?php } ?>
+
+                    <?php if($this->session->flashdata('success')){?>
+                       <div class="alert alert-success">
+                           <?= $this->session->flashdata('success')?>
+                       </div>
+                    <?php } ?>
+
+                    <?php echo form_open_multipart("/$TYPE/vendor/$action/$admin_id", array('id' => 'loginForm', 'autocomplete' => 'off', 'method' => 'POST', 'class' => 'card')) ?>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->full_name) ? $page_lang->full_name : 'Full Name'; ?></label>
+                                    <input type="text" class="form-control" name="fname" value="<?= isset($fname) ? $fname : '' ?>" placeholder="<?= isset($page_lang->first_name) ? $page_lang->first_name : 'First Name'; ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->email) ? $page_lang->email : 'Email'; ?></label>
+                                    <input type="text" class="form-control" placeholder="<?= isset($page_lang->email) ? $page_lang->email : 'Email'; ?>" name="email" value="<?= isset($email) ? $email : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->mobile) ? $page_lang->mobile : 'Mobile'; ?></label>
+                                    <input type="text" class="form-control numeric" placeholder="<?= isset($page_lang->mobile) ? $page_lang->mobile : 'Mobile'; ?>" name="mobile" value="<?= isset($mobile) ? $mobile : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->store_name) ? $page_lang->store_name : 'Store Name'; ?></label>
+                                    <input type="text" class="form-control" placeholder="<?= isset($page_lang->store_name) ? $page_lang->store_name : 'Store Name'; ?>" name="store_name" value="<?= isset($store_name) ? $store_name : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->city_name) ? $page_lang->city_name : 'City'; ?></label>
+                                    <input type="text" class="form-control" placeholder="<?= isset($page_lang->city_name) ? $page_lang->city_name : 'City'; ?>" name="city" value="<?= isset($city) ? $city : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                             <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->zip) ? $page_lang->zip : 'Zip'; ?></label>
+                                    <input type="text" class="form-control numeric" placeholder="<?= isset($page_lang->zip) ? $page_lang->zip : 'Zip'; ?>" name="zip" value="<?= isset($zip) ? $zip : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <!-- Added Missing Address & Country Fields as Readonly -->
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label">Address</label>
+                                    <input type="text" class="form-control" placeholder="Address" name="address" value="<?= isset($address) ? $address : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label">Country</label>
+                                    <input type="text" class="form-control" placeholder="Country" name="country" value="<?= isset($country) ? $country : '' ?>" readonly="readonly" />
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label"><?= isset($page_lang->admin_commission) ? $page_lang->admin_commission : 'Commission'; ?></label>
+                                    <input type="text" class="form-control numeric" name="commission" value="<?= isset($commission) ? $commission : '' ?>" <?= (isset($can_edit_commission) && !$can_edit_commission) ? 'disabled="disabled"' : '' ?> />
+                                </div>
+                            </div>
+							<?php if(!isset($admin_id) || !$admin_id){ ?>
+								<div class="col-sm-6 col-md-4">
+									<div class="form-group">
+										<label for="status"><?= isset($page_lang->status) ? $page_lang->status : 'Status'; ?></label> 
+										<select class="form-control" name="status" required="required">
+											<option value=""> <?= isset($page_lang->select_status) ? $page_lang->select_status : 'Select Status'; ?></option>
+											<option value="0" <?php if($status =='0') echo "selected=selected"; ?>><?= isset($page_lang->pending) ? $page_lang->pending : 'Pending'; ?></option>
+											<option value="1" <?php if($status =='1') echo "selected=selected"; ?> ><?= isset($page_lang->approved) ? $page_lang->approved : 'Approved'; ?></option>
+											<option value="2" <?php if($status =='2') echo "selected=selected"; ?>><?= isset($page_lang->rejected) ? $page_lang->rejected : 'Rejected'; ?></option>
+										</select> 
+									</div>
+								</div>
+							<?php } else { ?>
+								<div class="col-sm-6 col-md-4">
+									<div class="form-group">
+										<label><?= isset($page_lang->status) ? $page_lang->status : 'Status'; ?></label>
+										<select class="form-control vendor-status-select" data-id="<?= (int)$admin_id; ?>">
+											<option value="0" <?php if($status =='0') echo "selected=selected"; ?>><?= isset($page_lang->pending) ? $page_lang->pending : 'Pending'; ?></option>
+											<option value="1" <?php if($status =='1') echo "selected=selected"; ?>><?= isset($page_lang->approved) ? $page_lang->approved : 'Approved'; ?></option>
+											<option value="2" <?php if($status =='2') echo "selected=selected"; ?>><?= isset($page_lang->rejected) ? $page_lang->rejected : 'Rejected'; ?></option>
+										</select>
+									</div>
+								</div>
+								<div class="col-sm-6 col-md-4">
+									<div class="form-group">
+										<label>Enable/Disable</label>
+										<div class="d-flex align-items-center" style="gap: 10px;">
+											<div class="custom-control custom-switch mb-0">
+												<input type="checkbox" class="custom-control-input vendor-enabled-switch" id="vendor_enabled" data-id="<?= (int)$admin_id; ?>" <?= (isset($is_enabled) && (string)$is_enabled === '1') ? 'checked' : '' ?> />
+												<label class="custom-control-label" for="vendor_enabled">&nbsp;</label>
+											</div>
+											<span class="text-muted vendor-enabled-state" data-enabled="<?= (isset($is_enabled) && (string)$is_enabled === '1') ? '1' : '0' ?>"><?= (isset($is_enabled) && (string)$is_enabled === '1') ? 'Enabled' : 'Disabled' ?></span>
+										</div>
+									</div>
+								</div>
+							<?php } ?>
+                        </div>
+						<?php if(isset($admin_id) && $admin_id){ ?>
+							<hr />
+							<h5 class="mb-3">Document by admin</h5>
+							<div class="row">
+								<div class="col-sm-6 col-md-4">
+									<div class="form-group">
+										<label class="form-label">Upload Document</label>
+										<input type="file" name="admin_uploaded_doc" class="form-control" />
+									</div>
+								</div>
+							</div>
+						<?php } ?>
+                    </div>
+                    <div class="card-footer text-right">
+                        <button type="button" class="btn btn-light btn_back" onclick="window.history.back();"><?= isset($page_lang->back) ? $page_lang->back : 'Back'; ?></button>
+                        <button type="submit" class="btn btn-primary"><?= isset($page_lang->submit) ? $page_lang->submit : 'Submit'; ?></button>
+                    </div>
+                    <?php echo form_close() ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('select').select2({allowClear: true, placeholder: "Select Status"});
+    $('.btn_back').on('click', function(){
+        window.location.href = "/<?= $TYPE; ?>/vendor";
+    });
+
+	$(document).on('change', '.vendor-status-select', function(){
+		var admin_id = $(this).data('id');
+		var new_status = $(this).val();
+		var admin_note = '';
+		var $sel = $(this);
+
+        // Immediate Commission input toggle
+        if(new_status == '0') {
+            $('input[name="commission"]').prop('disabled', false);
+        } else {
+            $('input[name="commission"]').prop('disabled', true);
+        }
+
+		if (!confirm('Are you sure you want to change this vendor\'s status?')) {
+            // Revert changes if cancelled
+            $sel.val('<?= isset($status) ? $status : '0'; ?>').trigger('change.select2');
+            if('<?= isset($status) ? $status : '0'; ?>' == '0') {
+                $('input[name="commission"]').prop('disabled', false);
+            } else {
+                $('input[name="commission"]').prop('disabled', true);
+            }
+			return;
+		}
+		if(new_status == '2'){
+			admin_note = prompt('Enter rejection note:', '') || '';
+			admin_note = (admin_note || '').trim();
+			if(admin_note === ''){
+				alert('Rejection note is required.');
+				$sel.val('<?= isset($status) ? $status : '0'; ?>').trigger('change.select2');
+				return;
+			}
+		}
+		$sel.prop('disabled', true);
+
+		var postData = {
+			'<?= isset($csrf) ? $csrf->name : '' ?>': '<?= isset($csrf) ? $csrf->hash : '' ?>',
+			admin_id: admin_id,
+			status: new_status,
+			admin_note: admin_note
+		};
+
+		$.ajax({
+			url: "/<?= $TYPE; ?>/vendor/ajax_update_status",
+			type: 'POST',
+			dataType: 'json',
+			data: postData,
+			success: function(resp){
+				if(!(resp && resp.success)){
+					alert((resp && resp.msg) ? resp.msg : 'Failed to update status.');
+				}
+				$sel.prop('disabled', false);
+			},
+			error: function(){
+				alert('An error occurred.');
+				$sel.prop('disabled', false);
+			}
+		});
+	});
+
+	$(document).on('change', '.vendor-enabled-switch', function(){
+		var vendor_id = $(this).data('id');
+		var enabled = $(this).is(':checked') ? '1' : '0';
+		var $chk = $(this);
+		var $state = $('.vendor-enabled-state');
+		$chk.prop('disabled', true);
+		var postData = {
+			'<?= isset($csrf) ? $csrf->name : '' ?>': '<?= isset($csrf) ? $csrf->hash : '' ?>',
+			vendor_id: vendor_id,
+			enabled: enabled
+		};
+		$.ajax({
+			url: "/<?= $TYPE; ?>/vendor/ajax_toggle_vendor_enabled",
+			type: 'POST',
+			dataType: 'json',
+			data: postData,
+			success: function(resp){
+				if(!(resp && resp.success)){
+					alert((resp && resp.msg) ? resp.msg : 'Failed to update.');
+					$chk.prop('checked', ! $chk.is(':checked'));
+					enabled = $chk.is(':checked') ? '1' : '0';
+				}
+				$state.text((enabled === '1') ? 'Enabled' : 'Disabled');
+				$state.attr('data-enabled', enabled);
+				$chk.prop('disabled', false);
+			},
+			error: function(){
+				alert('An error occurred.');
+				enabled = $chk.is(':checked') ? '1' : '0';
+				$state.text((enabled === '1') ? 'Enabled' : 'Disabled');
+				$state.attr('data-enabled', enabled);
+				$chk.prop('disabled', false);
+			}
+		});
+	});
+});
+</script>

@@ -1,0 +1,346 @@
+<?php  if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Admin_model extends MY_Model{
+	
+	var $column_search = array('fname', 'email', 'status', 'last_updated');
+    var $column_alias = array(); //set column field database
+	
+	//administrator section
+	var $admin_column_search = array('fname','status', 'last_updated');
+    var $admin_column_alias = array(); //set column field database
+
+    function __construct() {
+        parent::__construct();
+    }   
+
+    public function insert_data($table_name,$data)
+    {
+        $this->master->insert($table_name,$data);
+        return  $this->master->insert_id();
+    }
+
+    public function update_data($table_name,$data,$condition)
+    {
+        foreach($condition as $column => $value){
+            if(is_array($value)){
+                $this->master->where_in($column, $value);
+            }else{
+                $this->master->where($column, $value);
+            }
+        }
+        $this->master->update($table_name,$data);
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+	
+	
+    public function get_data($table_name,$condition = NULL,$order = NULL,$limit = NULL)
+    {
+        $this->slave->select('*');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        if($order){
+            foreach($order as $column => $value){
+                $this->slave->order_by($column, $value);
+            }
+        }
+        if($limit){
+            if(isset($limit['start'])){
+            $this->slave->limit($limit['length'], $limit['start']);
+            }else{
+                $this->slave->limit($limit['length']);
+            }
+        }
+
+        $obj = $this->slave->get()->result();
+        //echo $this->slave->last_query(); exit;
+        return $obj;
+    }
+
+    public function get_data_obj($table_name,$condition = NULL,$order = NULL,$limit = NULL)
+    {
+        $this->slave->select('*');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        if($order){
+            foreach($order as $column => $value){
+                $this->slave->order_by($column, $value);
+            }
+        }
+        if($limit){
+            if(isset($limit['start'])){
+                $this->slave->limit($limit['length'], $limit['start']);
+            }else{
+                $this->slave->limit($limit['length']);
+            }
+        }
+
+        $obj = $this->slave->get()->result();
+        if($obj && count($obj) == 1){
+            $obj = $obj[0];
+        }
+        return $obj;
+    }
+	
+    public function delete($table_name, $condition)
+    {
+        if($condition){
+        foreach($condition as $column => $value)
+                $this->master->where($column, $value);
+        }
+        $this->master->delete($table_name);
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+	
+    
+    public function count_filtered($table_name = NULL, $condition = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+		$this->get_datatables_query();
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+	
+	
+	public function get_admin()
+    {
+        $this->slave->select('*');		
+        $this->slave->from('ec_admin');
+        $this->slave->where('super_admin !=', 1); // Only sub-admins
+		$this->get_admin_datatables_query();
+		$this->slave->order_by("admin_id", "DESC");
+		$this->slave->limit($_POST['length'], $_POST['start']);	
+        return  $this->slave->get()->result();
+    }  
+
+	public function get_export()
+    {
+        $this->slave->select('*');		
+        $this->slave->from('ec_admin');
+		$this->slave->order_by("admin_id", "DESC");
+        $result = $this->slave->get()->result();
+		//echo "<pre>"; print_r($result); echo "</pre>";die;
+		$i=0;
+	    $data_arr=   array();
+        foreach($result as $data)
+        {
+			
+			$data_arr[$i]['admin_id']=$data->admin_id;
+			$data_arr[$i]['admin_uid']=$data->admin_uid;
+			$data_arr[$i]['fname']=$data->fname;
+			$data_arr[$i]['lname']=$data->lname;
+			$data_arr[$i]['email']=$data->email;
+			$data_arr[$i]['mobile']=$data->mobile;
+			$data_arr[$i]['date_added']=$data->date_added;		
+			$i++;
+		
+		}
+		 return $data_arr;	
+    }  
+	
+	public function admin_count_filtered($table_name = NULL, $condition = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+		$this->get_admin_datatables_query();
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+	
+	public function admin_count_all($table_name = NULL , $condition = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+
+
+
+    public function count_all($table_name = NULL , $condition = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+	
+    public function find_by_id($table_name, $condition = NULL,$order = NULL,$limit = NULL)
+    {
+        $this->slave->select('*');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+
+        $obj = $this->slave->get()->result();
+        //echo $this->slave->last_query(); exit;
+        if($obj && count($obj) == 1){
+            $obj = $obj[0];
+        }
+        return $obj;
+    }
+
+
+    public function delete_query($table = NULL, $condition = NULL)
+    {
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->master->where_in($column, $value);
+                }else{
+                    $this->master->where($column, $value);
+                }
+            }
+        }
+        //$this->master->where('message_id',$message_id);
+        $status = $this->master->delete($table);
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+
+   
+	public function admin_status_change($user_id,$status_val)
+    {	
+		$this->master->where('admin_id',$user_id);		
+		$sql = $this->master->update('ec_admin', array('status' => "$status_val"));		
+		return $sql; 
+    }
+	public function deleteimg($id)
+    {
+		$this->master->where('admin_id',$id);		
+		$sql = $this->master->update('ec_admin', array('logo' => ""));		
+		return $sql;
+    }	
+	 public function delete_user($id)
+    {
+        $this->master->where('admin_id',$id);
+        $status = $this->master->delete('ec_admin');
+        return ($this->master->affected_rows() > 0) ? TRUE : FALSE;
+    }
+	
+	public function update_Password($id,$data){ 			
+		$this->db->where('admin_id', $id);
+		$sql = $this->db->update('ec_admin',$data);  
+		return $sql; 		
+    }
+	
+	public function get_admin_datatables_query()
+    {
+        if(isset($_POST['filter'])){
+            $this->slave->group_start();
+            foreach($_POST['filter'] as $col_name => $col_value){
+                if (in_array($col_name, $this->column_search) && (is_array($col_value) || $col_value != '')) {
+					
+                    $column_name_alias = $col_name;
+                    if(isset($this->admin_column_alias[$col_name])){
+                        $column_name_alias =  $this->admin_column_alias[$col_name].".".$col_name;
+                    }
+                    if(is_array($col_value)){
+                        $this->slave->where_in($column_name_alias, $col_value);
+                    }else{
+                        $this->slave->like($column_name_alias, $col_value); 
+                    }
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+	public function get_datatables_query()
+    {
+        if(isset($_POST['filter'])){
+            $this->slave->group_start();
+            foreach($_POST['filter'] as $col_name => $col_value){
+                if (in_array($col_name, $this->admin_column_search) && (is_array($col_value) || $col_value != '')) {
+                    $column_name_alias = $col_name;
+                    if(isset($this->column_alias[$col_name])){
+                        $column_name_alias =  $this->column_alias[$col_name].".".$col_name;
+                    }
+                    if(is_array($col_value)){
+                        $this->slave->where_in($column_name_alias, $col_value);
+                    }else{
+                        $this->slave->like($column_name_alias, $col_value); 
+                    }
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+	
+
+    public function vendor_order_cnt($table_name = NULL, $condition = NULL)
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from($table_name);
+        if($condition){
+            foreach($condition as $column => $value){
+                if(is_array($value)){
+                    $this->slave->where_in($column, $value);
+                }else{
+                    $this->slave->where($column, $value);
+                }
+            }
+        }
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+
+	
+}

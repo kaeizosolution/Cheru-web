@@ -1,0 +1,89 @@
+.custom-table tbody td:last-child .popover-body btn {padding-left:6px;padding-right:6px;}
+
+.topAction-btn {display: block;text-align: right;margin-bottom: 10px;}
+.topAction-btn .addNew {padding-left: 10px;padding-right: 10px;}
+
+.select2-container .select2-selection--single {height:38px;}
+.select2-container--default .select2-selection--single {border: 1px solid #ced4da;border-radius: 4px !important;}
+.select2-container--default .select2-selection--single .select2-selection__rendered {line-height: 36px;}
+/* for select2 error */
+.selct2error .select2-container--default .select2-selection--single {border: 1px solid #ff5d48 !important;border-radius: 4px !important;}
+
+.ac-box h4 {width:100%;display:block;}
+.ac-box h4 span {display:block;}
+
+
+.display .checkbox label { top: -25px;}
+.picon {position: relative;}
+.picon button { position: absolute; right: 35px; border: 0; background: none; color: #6b47af;  cursor: pointer; }
+.picon button:focus { outline: 0;}
+.col-form-label button { float: right; border: 0; background: none; cursor: pointer; color: #ab8ce4 ;}
+.tm span { position: absolute; left: -10px; top: 10px; font-weight: bold; }
+.c-table { display: inline-table;}
+
+
+.act-box ul li { display: flex; padding-bottom: 32px;position: relative; z-index: 10;}
+.act-box ul li i { font-size: 15px; height: 50px; width: 50px; color: #fff; background: #ffaf00 ; padding: 12px 15px; margin-right: 20px; border-radius: 25px; position: relative; border:5px solid #fff;}
+.act-box ul li h6 { display: inline-block !important; padding-top:15px;}
+.act-box ul li span { margin-left: auto; padding-top:15px;}
+
+.act-box ul li .icon1 { background: #ffaf00;}
+.act-box ul li .icon2 { background: #8862e0;}
+.act-box ul li .icon3 { background: #2196f3;}
+.act-box ul li .icon4 { background: #19d895;}
+.act-box ul li .icon5 { background: #ff6258;}
+
+.act-box ul li img { height: 40px; width: 40px;  margin-right: 20px; border-radius: 25px;}
+.act-box ul li span img { border-radius: 0px; margin-right: 0; margin-left: 10px;}
+.act-box ul {position: relative;}
+.act-box ul:after {
+    width: 2px;
+    background: #e1e1e1;
+    position: absolute;
+    content: '';
+    top: 10px;
+	left: 25px;
+	bottom: 40px;
+	z-index: 1;
+}
+.nnn:after { display: none;}
+
+#datecar {    background: #fff;
+    width: 150px;
+    text-align: center;
+    border: 1px solid #eaeaea;
+    height: 30px;
+    line-height: 25px; border-radius: 2px; position: absolute;
+    right: 16px;
+    top: 26px;
+}
+#datecar .carousel-control-prev-icon, #datecar  .carousel-control-next-icon { width: 40px; height: 40px;}
+#datecar a.carousel-control-next {
+    border-left: 1px solid #d2d2d2;
+}
+#datecar a.carousel-control-prev {
+    border-right: 1px solid #d2d2d2;
+}
+
+
+
+.ftt { font-size: 20px; color:#111; padding: 4px;line-height: 30px;}
+
+@media only screen and (max-width: 1024px) {
+	.act-box { padding: 10px !important;}
+	.act-box ul li i{ margin-right: 2px;}
+	.act-box ul li span {
+    text-align: end;
+}
+#datecar {top: 12px;}
+}
+
+@media only screen and (max-width: 480px) {
+	
+	.picon button { right: 0px; top: 10px; }
+
+	.fir-cb .checkbox label { left:17px;}
+	.c-table { display:block;}
+    #datecar {top: -40px;}
+
+}

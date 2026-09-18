@@ -1,0 +1,522 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+/**
+ * Vendor Authentication API Controller
+ * Handles: login, register, refresh_token, logout
+ *
+ * Routes (add to config/routes.php):
+ *   POST api/v1/vendor/auth/login          -> vendor/VendorAuth/login
+ *   POST api/v1/vendor/auth/register       -> vendor/VendorAuth/register
+ *   POST api/v1/vendor/auth/refresh-token  -> vendor/VendorAuth/refresh_token
+ *   POST api/v1/vendor/auth/logout         -> vendor/VendorAuth/logout
+ */
+class VendorAuth extends API_Controller
+{
+    private $refresh_ttl = 31536000; // 1 year
+    private $access_ttl  = 31536000; // 1 year
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->library('session');
+    }
+
+    // ----------------------------------------------------------------
+    // Token helpers
+    // ----------------------------------------------------------------
+
+    private function _token_store_enabled()
+    {
+        return isset($this->db) && $this->db->table_exists('ec_api_tokens');
+    }
+
+    private function _store_refresh_token($vendor_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            return;
+        }
+        $hash = hash('sha256', $refresh_token);
+        $this->db->insert('ec_api_tokens', [
+            'user_type'  => 'vendor',
+            'user_id'    => (int)$vendor_id,
+            'token_hash' => $hash,
+            'expires_at' => date('Y-m-d H:i:s', time() + $this->refresh_ttl),
+            'revoked'    => 0,
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    private function _is_refresh_token_valid($vendor_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            return true;
+        }
+        $hash = hash('sha256', $refresh_token);
+        $row  = $this->db
+            ->from('ec_api_tokens')
+            ->where('user_type', 'vendor')
+            ->where('user_id', (int)$vendor_id)
+            ->where('token_hash', $hash)
+            ->where('revoked', 0)
+            ->get()->row();
+        return (bool)$row;
+    }
+
+    private function _revoke_refresh_token($vendor_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            return;
+        }
+        $hash = hash('sha256', $refresh_token);
+        $this->db
+            ->where('user_type', 'vendor')
+            ->where('user_id', (int)$vendor_id)
+            ->where('token_hash', $hash)
+            ->update('ec_api_tokens', ['revoked' => 1]);
+    }
+
+    // ----------------------------------------------------------------
+    // Endpoints
+    // ----------------------------------------------------------------
+
+    /**
+     * POST api/v1/vendor/auth/login
+     * Body: { email, password }
+     */
+    public function login()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload  = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $email    = isset($payload['email'])    ? trim((string)$payload['email'])    : '';
+        $password = isset($payload['password']) ? (string)$payload['password']       : '';
+
+        if ($email === '' || $password === '') {
+            return $this->fail('validation_error', ['email and password are required'], 422);
+        }
+
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail('validation_error', ['email format is wrong'], 422);
+        }
+
+        // Vendor panel uses md5 passwords
+        $vendor = $this->Query_model->get_data_obj('ec_vendor', [
+            'email'    => $email,
+            'password' => md5($password),
+        ]);
+
+        if (!$vendor) {
+            return $this->fail('invalid_credentials', ['email password does not match'], 401);
+        }
+
+        if ($this->db->field_exists('is_enabled', 'ec_vendor') && isset($vendor->is_enabled) && (string)$vendor->is_enabled === '0') {
+            return $this->fail('account_disabled', ['Your account is disabled. Please contact admin.'], 403);
+        }
+
+
+
+        $vendor_id = (int)($vendor->vendor_id ?? 0);
+        if ($vendor_id <= 0) {
+            return $this->fail('server_error', ['Invalid vendor record'], 500);
+        }
+
+        $access  = $this->sign_token(['sub' => $vendor_id, 'type' => 'access',  'role' => 'vendor'], $this->access_ttl);
+        $refresh = $this->sign_token(['sub' => $vendor_id, 'type' => 'refresh', 'role' => 'vendor'], $this->refresh_ttl);
+        $this->_store_refresh_token($vendor_id, $refresh);
+
+        // Set session userdata for browser/cookie-based auth fallback
+        $session_data = array(
+            'vendor_id'    => $vendor_id,
+            'login_id'     => $vendor_id,
+            'fname'        => $vendor->name ?? '',
+            'email'        => $vendor->email ?? '',
+            'logged_in'    => TRUE,
+            'access_token' => $access,
+            'refresh_token'=> $refresh,
+        );
+        $this->session->set_userdata('vendor', $session_data);
+        $this->session->set_userdata('type', 'vendor');
+        $this->session->set_userdata('vendor_approved_seen', '1');
+
+        // Restore preferred currency from DB so web panel shows last-chosen currency
+        $preferred_currency_id = 0;
+        if ($this->db->field_exists('preferred_currency_id', 'ec_vendor')) {
+            $vcurr = $this->db
+                ->select('preferred_currency_id')
+                ->from('ec_vendor')
+                ->where('vendor_id', $vendor_id)
+                ->get()
+                ->row();
+            $preferred_currency_id = (int)($vcurr->preferred_currency_id ?? 0);
+        }
+        if ($preferred_currency_id > 0) {
+            $this->session->set_userdata('cur', $preferred_currency_id);
+            $_SESSION['cur'] = $preferred_currency_id;
+        }
+
+        return $this->ok([
+            'access_token'  => $access,
+            'token_type'    => 'Bearer',
+            'expires_in'    => $this->access_ttl,
+            'refresh_token' => $refresh,
+            'redirect_url'  => '/vendor/dashboard',
+            'vendor' => [
+                'vendor_id'            => $vendor_id,
+                'name'                 => $vendor->name       ?? null,
+                'email'                => $vendor->email      ?? null,
+                'mobile'               => $vendor->mobile     ?? null,
+                'store_name'           => $vendor->store_name ?? null,
+                'preferred_currency_id'=> $preferred_currency_id ?: null,
+            ]
+        ], 'success');
+    }
+
+
+    public function register()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload    = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $name       = isset($payload['name'])            ? trim((string)$payload['name'])            : '';
+        $email      = isset($payload['email'])           ? trim((string)$payload['email'])           : '';
+        $mobile     = isset($payload['mobile'])          ? trim((string)$payload['mobile'])          : '';
+        $password   = isset($payload['password'])        ? (string)$payload['password']              : '';
+        $store_name = isset($payload['store_name'])      ? trim((string)$payload['store_name'])      : '';
+        $address    = isset($payload['address'])         ? trim((string)$payload['address'])         : '';
+        $location   = isset($payload['location'])        ? trim((string)$payload['location'])        : '';
+        $house_no   = isset($payload['house_no'])        ? trim((string)$payload['house_no'])        : '';
+        $city       = isset($payload['city'])            ? trim((string)$payload['city'])            : '';
+        $country    = isset($payload['country'])         ? trim((string)$payload['country'])         : '';
+        $zip        = isset($payload['zip'])             ? trim((string)$payload['zip'])             : '';
+        $latitude   = isset($payload['latitude'])        ? (string)$payload['latitude']              : '';
+        $longitude  = isset($payload['longitude'])       ? (string)$payload['longitude']             : '';
+        $doc_front  = isset($payload['document_front'])  ? (string)$payload['document_front']        : '';
+        $doc_back   = isset($payload['document_back'])   ? (string)$payload['document_back']         : '';
+
+        if ($location !== '') {
+            $address = trim($location . ' ' . $address);
+        }
+
+        // Validation
+        if ($name === '' || $email === '' || $mobile === '' || $password === '' || $store_name === '' || $address === '' || $country === '') {
+            return $this->fail('validation_error', ['Required fields: name, email, mobile, password, store_name, address, country'], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail('validation_error', ['Please enter a valid email address.'], 422);
+        }
+
+        // Uniqueness checks
+        if ($this->Query_model->get_data_obj('ec_vendor', ['email' => $email])) {
+            return $this->fail('email_taken', ['This email is already registered.'], 400);
+        }
+
+        if ($mobile !== '' && $this->Query_model->get_data_obj('ec_vendor', ['mobile' => $mobile])) {
+            return $this->fail('mobile_taken', ['This mobile number is already registered.'], 400);
+        }
+
+        // Handle standard multipart file uploads if present in $_FILES
+        $upload_dir = FCPATH . 'uploads/vendor_documents';
+        if (!is_dir($upload_dir)) {
+            @mkdir($upload_dir, 0777, true);
+        }
+
+        $config = array(
+            'upload_path' => $upload_dir,
+            'allowed_types' => 'gif|jpg|png|jpeg|pdf',
+            'max_size' => '20240000',
+        );
+        $this->load->library('upload', $config);
+
+        if (isset($_FILES['document_front']['name']) && $_FILES['document_front']['name'] != '') {
+            $this->upload->initialize($config);
+            if (!$this->upload->do_upload('document_front')) {
+                return $this->fail('upload_error', [strip_tags($this->upload->display_errors())], 422);
+            }
+            $data_file = $this->upload->data();
+            $doc_front = isset($data_file['file_name']) ? $data_file['file_name'] : '';
+        }
+
+        if (isset($_FILES['document_back']['name']) && $_FILES['document_back']['name'] != '') {
+            $this->upload->initialize($config);
+            if (!$this->upload->do_upload('document_back')) {
+                return $this->fail('upload_error', [strip_tags($this->upload->display_errors())], 422);
+            }
+            $data_file = $this->upload->data();
+            $doc_back = isset($data_file['file_name']) ? $data_file['file_name'] : '';
+        }
+
+        $vendor_uid  = substr(uniqid(), 0, 13);
+        $insert_data = [
+            'vendor_uid' => $vendor_uid,
+            'name'       => $name,
+            'email'      => $email,
+            'password'   => md5($password),
+            'mobile'     => $mobile,
+            'store_name' => $store_name,
+            'address'    => $address,
+            'house_no'   => $house_no,
+            'city'       => $city,
+            'country'    => $country,
+            'zip'        => $zip,
+            'latitude'   => $latitude,
+            'longitude'  => $longitude,
+            'status'     => '0',  // pending approval
+        ];
+
+        $vendor_id = $this->Query_model->insert_data('ec_vendor', $insert_data);
+        if (!$vendor_id) {
+            return $this->fail('db_error', ['Failed to create vendor record.'], 500);
+        }
+
+        // Optional document verification record
+        $docs_table = 'ec_vendor_verification';
+        if ($this->db->table_exists($docs_table)) {
+            $now          = date('Y-m-d H:i:s');
+            $docs_payload = [];
+
+            if ($this->db->field_exists('vendor_id', $docs_table)) {
+                $docs_payload['vendor_id'] = $vendor_id;
+            } elseif ($this->db->field_exists('login_id', $docs_table)) {
+                $docs_payload['login_id'] = $vendor_id;
+            } elseif ($this->db->field_exists('admin_id', $docs_table)) {
+                $docs_payload['admin_id'] = $vendor_id;
+            }
+
+            if ($this->db->field_exists('document_front', $docs_table)) $docs_payload['document_front'] = $doc_front;
+            elseif ($this->db->field_exists('doc_front', $docs_table))  $docs_payload['doc_front']       = $doc_front;
+
+            if ($this->db->field_exists('document_back', $docs_table)) $docs_payload['document_back'] = $doc_back;
+            elseif ($this->db->field_exists('doc_back', $docs_table))  $docs_payload['doc_back']       = $doc_back;
+
+            if ($this->db->field_exists('status',     $docs_table)) $docs_payload['status']     = 'pending';
+            if ($this->db->field_exists('created_at', $docs_table)) $docs_payload['created_at'] = $now;
+            if ($this->db->field_exists('updated_at', $docs_table)) $docs_payload['updated_at'] = $now;
+
+            if (!empty($docs_payload)) {
+                $this->Query_model->insert_data($docs_table, $docs_payload);
+            }
+        }
+
+        $access  = $this->sign_token(['sub' => $vendor_id, 'type' => 'access',  'role' => 'vendor'], $this->access_ttl);
+        $refresh = $this->sign_token(['sub' => $vendor_id, 'type' => 'refresh', 'role' => 'vendor'], $this->refresh_ttl);
+        $this->_store_refresh_token($vendor_id, $refresh);
+
+        // Set session userdata for browser/cookie-based auth fallback
+        $session_data = array(
+            'vendor_id'    => $vendor_id,
+            'login_id'     => $vendor_id,
+            'fname'        => $name,
+            'email'        => $email,
+            'logged_in'    => TRUE,
+            'access_token' => $access,
+            'refresh_token'=> $refresh,
+        );
+        $this->session->set_userdata('vendor', $session_data);
+        $this->session->set_userdata('type', 'vendor');
+
+        return $this->ok([
+            'access_token'  => $access,
+            'token_type'    => 'Bearer',
+            'expires_in'    => $this->access_ttl,
+            'refresh_token' => $refresh,
+            'redirect_url'  => '/vendor/profile',
+            'vendor' => [
+                'vendor_id'  => $vendor_id,
+                'name'       => $name,
+                'email'      => $email,
+                'mobile'     => $mobile,
+                'store_name' => $store_name,
+            ]
+        ], 'Registration successful! Your account is under verification.');
+    }
+
+    /**
+     * POST api/v1/vendor/auth/refresh-token
+     * Body: { refresh_token }
+     */
+    public function refresh_token()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $refresh = isset($payload['refresh_token']) ? (string)$payload['refresh_token'] : '';
+        if ($refresh === '') {
+            return $this->fail('validation_error', ['refresh_token is required'], 422);
+        }
+
+        $claims = $this->verify_token($refresh);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'refresh' || ($claims['role'] ?? '') !== 'vendor') {
+            return $this->fail('invalid_token', ['Invalid refresh token'], 401);
+        }
+
+        $vendor_id = (int)$claims['sub'];
+        if ($vendor_id <= 0 || !$this->_is_refresh_token_valid($vendor_id, $refresh)) {
+            return $this->fail('invalid_token', ['Refresh token revoked or invalid'], 401);
+        }
+
+        $access = $this->sign_token(['sub' => $vendor_id, 'type' => 'access', 'role' => 'vendor'], $this->access_ttl);
+        return $this->ok([
+            'access_token' => $access,
+            'token_type'   => 'Bearer',
+            'expires_in'   => $this->access_ttl,
+        ], 'success');
+    }
+
+    /**
+     * POST api/v1/vendor/auth/logout
+     * Body: { refresh_token? }
+     */
+    public function logout()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $refresh = isset($payload['refresh_token']) ? (string)$payload['refresh_token'] : '';
+        if ($refresh !== '') {
+            $claims    = $this->verify_token($refresh);
+            $vendor_id = ($claims && isset($claims['sub'])) ? (int)$claims['sub'] : 0;
+            if ($vendor_id > 0) {
+                $this->_revoke_refresh_token($vendor_id, $refresh);
+            }
+        }
+
+        // Also destroy any web session for this vendor
+        $this->session->unset_userdata('vendor');
+        $this->session->unset_userdata('type');
+
+        return $this->ok((object)[], 'Logged out successfully.');
+    }
+
+    /**
+     * POST api/v1/vendor/auth/forgot-password
+     * Body: { email }
+     */
+    public function forgot_password()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $email   = isset($payload['email']) ? trim((string)$payload['email']) : '';
+
+        if ($email === '') {
+            return $this->fail('validation_error', ['Email is required'], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail('validation_error', ['Please enter a valid email address'], 422);
+        }
+
+        // Only allow active vendors to reset password
+        $vendor = $this->Query_model->get_data_obj('ec_vendor', ['email' => $email]);
+        if (!$vendor) {
+            // Return success even if not found to prevent email enumeration
+            return $this->ok([], 'If that email is registered, a reset link has been sent.');
+        }
+
+        $slug     = md5(uniqid($email, true));
+        $base_url = rtrim((string)base_url(), '/');
+        $site_url = $base_url . '/vendor/auth/reset/' . $slug;
+
+        $reset_data = [
+            'admin_id'   => (int)$vendor->vendor_id,
+            'reset_key'  => $slug,
+            'ip_address' => $this->input->ip_address(),
+            'status'     => 'active',
+        ];
+
+        // Clean old reset keys for this vendor
+        if ($this->db->table_exists('ec_admin_password_reset')) {
+            $this->db->where('admin_id', (int)$vendor->vendor_id)->delete('ec_admin_password_reset');
+        }
+        $this->Query_model->insert_data('ec_admin_password_reset', $reset_data);
+
+        // Send email
+        $this->load->library('mailer');
+        $html_content = '
+            <tr><td style="font-family:Arial;font-size:16px;padding-bottom:5px;font-weight:bold;">Hi, ' . htmlspecialchars($vendor->name ?? 'Vendor', ENT_QUOTES) . '</td></tr>
+            <tr><td style="font-family:Arial;font-size:14px;padding-bottom:20px;color:#555;">
+                You requested a password reset. Click the button below to reset your password:
+            </td></tr>
+            <tr><td align="center" style="padding-bottom:20px;">
+                <a href="' . $site_url . '" style="background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;">Reset Password</a>
+            </td></tr>
+            <tr><td style="font-family:Arial;font-size:13px;color:#888;">
+                If you did not request this, please ignore this email.
+            </td></tr>';
+
+        $this->mailer->smtp([
+            'SUBJECT' => 'Reset your Password',
+            'EMAIL'   => $vendor->email,
+            'CONTENT' => $html_content,
+        ]);
+
+        return $this->ok([], 'If that email is registered, a reset link has been sent.');
+    }
+
+    /**
+     * POST api/v1/vendor/auth/reset-password
+     * Body: { sid, password, confirm_password }
+     */
+    public function reset_password()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload          = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $sid              = isset($payload['sid'])              ? trim((string)$payload['sid'])              : '';
+        $password         = isset($payload['password'])         ? (string)$payload['password']               : '';
+        $confirm_password = isset($payload['confirm_password']) ? (string)$payload['confirm_password']       : '';
+
+        if ($sid === '' || $password === '' || $confirm_password === '') {
+            return $this->fail('validation_error', ['sid, password and confirm_password are required'], 422);
+        }
+
+        if (strlen($password) < 6) {
+            return $this->fail('validation_error', ['Password must be at least 6 characters'], 422);
+        }
+
+        if ($password !== $confirm_password) {
+            return $this->fail('validation_error', ['Passwords do not match'], 422);
+        }
+
+        if (!$this->db->table_exists('ec_admin_password_reset')) {
+            return $this->fail('not_found', ['Reset table not found'], 404);
+        }
+
+        $reset = $this->Query_model->get_data_obj('ec_admin_password_reset', ['reset_key' => $sid, 'status' => 'active']);
+        if (!$reset) {
+            return $this->fail('invalid_token', ['Invalid or expired reset link'], 400);
+        }
+
+        $vendor = $this->Query_model->get_data_obj('ec_vendor', ['vendor_id' => (int)$reset->admin_id]);
+        if (!$vendor) {
+            return $this->fail('not_found', ['Vendor account not found'], 404);
+        }
+
+        // Update password
+        $this->Query_model->update_data('ec_vendor', ['password' => md5($password)], ['vendor_id' => (int)$reset->admin_id]);
+
+        // Mark reset key as used
+        $this->Query_model->update_data('ec_admin_password_reset', ['status' => 'reset'], ['admin_id' => (int)$reset->admin_id]);
+
+        return $this->ok([], 'Password has been reset successfully. You can now login.');
+    }
+}

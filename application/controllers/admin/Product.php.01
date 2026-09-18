@@ -1,0 +1,231 @@
+<?php if( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Product extends MY_Controller {
+
+	function __construct()
+	{
+		parent::__construct();
+		$this->load->model('Query_model');
+		$this->load->model('Category_prod_model');
+		$this->TYPE = $this->session->userdata('type');
+		$this->load->library(['ProductService', 'ProductFormValidation']);	
+	}	
+
+	public function index()
+	{
+		$page_lang = get_page_language_data('admin_page_lang');
+		$crumbs = array( $page_lang->home => "/$this->TYPE/dashboard", $page_lang->coupon => "");
+		$breadcrumbs = $this->breadcrumbs->show($crumbs);
+		$data['breadcrumbs']    = $breadcrumbs;
+
+		$data['csrf'] = csrf_token();
+		$data['TYPE'] = $this->TYPE;
+		$data['page_count'] = page_count();
+
+		$this->load->template("$this->TYPE/product/list",$data);			
+
+	}
+
+	public function ajax_list()
+	{
+	    $this->load->model('Product_model');
+	    $list = $this->Product_model->get_datatables();
+	    $data = [];
+
+	    foreach ($list as $product) {
+	        $images = json_decode($product->images ?? '[]');
+	        $imgTag = isset($images[0]) ? '<img src="' . base_url('uploads/products/' . $images[0]) . '" width="50">' : '';
+	        $is_enabled = ((string)($product->status ?? '0') === '1');
+	        $toggle_icon = $is_enabled ? 'fa fa-toggle-on' : 'fa fa-toggle-off';
+	        $toggle_title = $is_enabled ? 'Disable' : 'Enable';
+			$data[] = [
+	    		'id' => $product->id,
+	    		'name' => htmlspecialchars($product->name),
+	    		'type' => $product->product_type,
+	    		'status' => $product->status ? 'Active' : 'Inactive',
+				'date'=> date('d-M,y', strtotime($product->date_added)),
+	    		'action' => '<button title="' . $toggle_title . '" data-toggle="tooltip" data-placement="top" data-animation="false" data-html="true" class="btn-action-sm btn-toggle" type="button" data-status="' . ($is_enabled ? '1' : '0') . '" data-id="' . (int)$product->id . '"><i class="' . $toggle_icon . '"></i></button>',
+			];	
+	        
+	    }
+
+	    echo json_encode([
+	        "draw" => intval($this->input->post('draw')),
+	        "recordsTotal" => $this->Product_model->count_allp(),
+	        "recordsFiltered" => $this->Product_model->count_filteredp(),
+	        "data" => $data,
+	    ]);
+	}
+
+	public function ajax_toggle_product_status()
+	{
+		$product_id = (int)$this->input->post('product_id');
+		$new_status = $this->input->post('status');
+		$csrf_hash = $this->security->get_csrf_hash();
+
+		if ($product_id <= 0 || !in_array((string)$new_status, ['0', '1'], true)) {
+			echo json_encode(['success' => 0, 'msg' => 'Invalid data provided.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+
+		$exists = $this->db
+			->select('id')
+			->from('products')
+			->where('id', $product_id)
+			->limit(1)
+			->get()->row();
+		if (!$exists || !isset($exists->id)) {
+			echo json_encode(['success' => 0, 'msg' => 'Product not found.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+
+		$updated = $this->Query_model->update_data('products', ['status' => (string)$new_status], ['id' => $product_id]);
+		if ($updated) {
+			echo json_encode(['success' => 1, 'msg' => 'Status updated.', 'csrf_token' => $csrf_hash, 'status' => (string)$new_status]);
+			return;
+		}
+
+		$after = $this->db
+			->select('status')
+			->from('products')
+			->where('id', $product_id)
+			->limit(1)
+			->get()->row();
+		if ($after && isset($after->status) && (string)$after->status === (string)$new_status) {
+			echo json_encode(['success' => 1, 'msg' => 'Status updated.', 'csrf_token' => $csrf_hash, 'status' => (string)$new_status]);
+			return;
+		}
+
+		echo json_encode(['success' => 0, 'msg' => 'Failed to update status.', 'csrf_token' => $csrf_hash]);
+	}
+
+	public function checkall_status_change()
+	{
+		$ids_json = $this->input->post('id');
+		$status = $this->input->post('status');
+		$csrf_hash = $this->security->get_csrf_hash();
+
+		if (!in_array((string)$status, ['0', '1'], true)) {
+			echo json_encode(['success' => 0, 'msg' => 'Invalid status.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+
+		$ids = json_decode($ids_json, true);
+		if (!is_array($ids) || !$ids) {
+			echo json_encode(['success' => 0, 'msg' => 'No products selected.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+
+		$clean_ids = [];
+		foreach ($ids as $id) {
+			$id = (int)$id;
+			if ($id > 0) {
+				$clean_ids[] = $id;
+			}
+		}
+		$clean_ids = array_values(array_unique($clean_ids));
+		if (!$clean_ids) {
+			echo json_encode(['success' => 0, 'msg' => 'No valid products selected.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+
+		$this->db->where_in('id', $clean_ids);
+		$this->db->set('status', (string)$status);
+		$this->db->update('products');
+
+		echo json_encode(['success' => 1, 'msg' => 'Status changed.', 'csrf_token' => $csrf_hash]);
+	}
+
+	public function ajax_set_homepage_trending_limit()
+	{
+		if (!logged_in()) {
+			redirect("$this->TYPE/auth/login");
+		}
+
+		$csrf_hash = $this->security->get_csrf_hash();
+		$limit = (int)$this->input->post('limit');
+		if ($limit <= 0) {
+			echo json_encode(['success' => 0, 'msg' => 'Invalid limit.', 'csrf_token' => $csrf_hash]);
+			return;
+		}
+		if ($limit > 50) {
+			$limit = 50;
+		}
+
+		$widget_id = 2;
+		$now = date('Y-m-d H:i:s');
+		$row = $this->db
+			->from('ec_homepage_widget_settings')
+			->where('widget_id', (int)$widget_id)
+			->limit(1)
+			->get()->row();
+
+		if ($row && isset($row->id)) {
+			$this->db
+				->where('id', (int)$row->id)
+				->update('ec_homepage_widget_settings', [
+					'active_limit' => $limit,
+					'modified' => $now,
+				]);
+		} else {
+			$this->db->insert('ec_homepage_widget_settings', [
+				'widget_id' => (int)$widget_id,
+				'active_limit' => $limit,
+				'created' => $now,
+				'modified' => $now,
+			]);
+		}
+
+		echo json_encode(['success' => 1, 'msg' => 'Trending limit updated.', 'csrf_token' => $csrf_hash, 'limit' => $limit]);
+	}
+
+	public function save()
+	{
+		$data = [];
+		$id = $this->uri->segment('4');
+		$page_lang = get_page_language_data('admin_page_lang');
+		$crumbs = array( $page_lang->home => "/$this->TYPE/dashboard", 'Product'=> "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+		$cat_list = $this->Category_prod_model->find_list_prod_vendor();
+		$data['category']       = $cat_list['parent'];
+		$data['modifiers'] 		= $this->Query_model->get_data('ec_modifiers', ['status'=>'1'], ['id'=>'DESC']);
+		$data['extras'] 		= $this->Query_model->get_data('ec_extras', ['status'=>'1'], ['id'=>'DESC']);
+		$data['id']				= $id ?? '';
+		$data['get_product']	= $this->Query_model->get_data_obj('ec_product', ['id'=>$id]);
+		$data['product_category'] = product_category();
+		$data['food_type'] 		= food_type();
+	
+		$this->load->template("$this->TYPE/product/save",$data);
+	
+	}
+
+	public function ajax_sub_cat()
+    {
+    	$cat_id = $this->input->post('category_id');
+        $sub_cat_arr = $this->Query_model->get_data('ec_categories_prod', array('status'=>'1', 'parent_id'=>$cat_id));
+        if($sub_cat_arr)
+        api_response(array('status'=>1, 'msg'=>'success', 'data'=>$sub_cat_arr));
+        else
+        api_response(array('status'=>0, 'msg'=>'fail', 'data'=>array()));
+
+   	}
+
+	function post_save()
+	{
+		$post_data = $this->input->post();
+		#print_r($post_data);  print_r($_FILES);exit;
+		if (!$this->productformvalidation->run()) {
+			api_response(['status'=>0, 'msg'=>validation_errors(), 'data'=>[]]);
+    	}
+		$id = $post_data['id'] ?? '';
+		$result = $this->productservice->save_product($post_data, $_FILES, $id);
+		if($result)
+		api_response(['status'=>1, 'msg'=>'Product saved successfully!', 'data'=>$result]);
+		else
+		api_response(['status'=>0, 'msg'=>'Failed to save product.', 'data'=>[]]);
+
+	}
+
+
+} //

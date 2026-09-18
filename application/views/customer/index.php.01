@@ -1,0 +1,1427 @@
+<!-- Home Design -->
+    <section class="home-one">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="main-banner-wrapper home1_style bdrs6 ovh">
+              <div class="banner-style-one owl-theme owl-carousel">
+              </div>
+              <div class="carousel-btn-block banner-carousel-btn"><span class="carousel-btn left-btn"><i class="fas fa-chevron-left left"></i></span><span class="carousel-btn right-btn"><i class="fas fa-chevron-right right"></i></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+    (function(){
+        function whenReady(fn){
+            if (document.readyState === 'complete') {
+                fn();
+            } else {
+                window.addEventListener('load', fn);
+            }
+        }
+
+        function waitForJqAndOwl(cb){
+            var tries = 0;
+            var maxTries = 60; // ~6 seconds
+            var t = setInterval(function(){
+                tries++;
+                if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.owlCarousel === 'function') {
+                    clearInterval(t);
+                    cb(window.jQuery);
+                    return;
+                }
+                if (tries >= maxTries) {
+                    clearInterval(t);
+                }
+            }, 100);
+        }
+
+        whenReady(function(){
+            waitForJqAndOwl(function($){
+                var $carousel = $('.banner-style-one');
+                if (!$carousel.length) return;
+
+        function escapeHtml(s){
+            return String(s || '').replace(/[&<>"']/g, function(c){
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]) || c;
+            });
+        }
+
+        function initCarousel(slideCount){
+            if (!$carousel.length || typeof $carousel.owlCarousel !== 'function') return;
+            if ($carousel.hasClass('owl-loaded')) {
+                $carousel.trigger('destroy.owl.carousel');
+                $carousel.removeClass('owl-loaded');
+                $carousel.find('.owl-stage-outer').children().unwrap();
+            }
+            var count = parseInt(slideCount, 10);
+            if (!count || count < 1) count = 1;
+            $carousel.owlCarousel({
+                loop: count > 1,
+                items: 1,
+                margin: 0,
+                dots: count > 1,
+                nav: count > 1,
+                animateOut: 'slideOutDown',
+                animateIn: 'fadeIn',
+                active: true,
+                smartSpeed: 1000,
+                autoplay: false
+            });
+        }
+
+        function renderSlides(banners){
+            if (!Array.isArray(banners) || !banners.length) {
+                banners = [{}];
+            }
+            var html = '';
+            var slideCount = 0;
+            for (var i=0;i<banners.length;i++) {
+                var b = banners[i] || {};
+                var img = b.image_large_url || b.image_url || b.image_thumb_url || '';
+                if (!img) {
+                    img = "<?= base_url('assets/customer/images/home/1.jpg'); ?>";
+                }
+                // Avoid mixed-content blocks if the site runs on https but API returned http URLs
+                if (typeof img === 'string' && img.indexOf('//') > -1) {
+                    img = img.replace(/^https?:\/\//i, window.location.protocol + '//');
+                }
+                var tag = b.tag ? escapeHtml(b.tag) : '';
+                var desc = b.description ? escapeHtml(b.description) : '';
+                var title = b.title ? String(b.title) : '';
+                var url = b.url ? String(b.url) : '#';
+                if (typeof url === 'string' && url.indexOf('//') > -1) {
+                    url = url.replace(/^https?:\/\//i, window.location.protocol + '//');
+                }
+
+                slideCount++;
+                html += '<div class="slide slide-one" style="background-image:url(' + escapeHtml(img) + ');background-size:contain!important;background-repeat:no-repeat!important;background-position:right center!important;height:568px!important;min-height:568px;max-height:568px">'
+                    + '<div class="container">'
+                    +   '<div class="row home-content">'
+                    +     '<div class="col-lg-6 offset-lg-1 col-xl-5">'
+                    +       (tag ? ('<span class="tag">' + tag + '</span>') : '')
+                    +       '<h3 class="banner-title">' + title + '</h3>'
+                    +       (desc ? ('<p>' + desc + '</p>') : '')
+                    +       '<a href="' + escapeHtml(url) + '" class="btn banner-btn btn-thm">Shop Now</a>'
+                    +     '</div>'
+                    +   '</div>'
+                    + '</div>'
+                    + '</div>';
+            }
+            if (!html) return;
+            $carousel.html(html);
+            $carousel.css('display', 'block');
+            initCarousel(slideCount);
+        }
+
+                $.ajax({
+                    url: "<?= base_url('api/v1/homepage/banners'); ?>",
+                    type: 'POST',
+                    contentType: 'application/json; charset=utf-8',
+                    data: JSON.stringify({type: 1}),
+                    dataType: 'json'
+                }).done(function(resp){
+                    if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.banners) {
+                        renderSlides([]);
+                        return;
+                    }
+                    renderSlides(resp.data.banners);
+                }).fail(function(){
+                    renderSlides([]);
+                });
+            });
+        });
+    })();
+    </script>
+    <!-- Extra Features -->
+    <section class="features pt30 pb20">
+      <div class="container bb1">
+        <div class="row ovh">
+          <div class="col-sm-6 col-xl-3">
+            <div class="icon_boxes d-flex wow fadeInUp" data-wow-duration="1.0s">
+              <div class="icon"><span class="flaticon-fast-delivery"></span></div>
+              <div class="details">
+                <h5 class="title">Free Shipping</h5>
+                <p class="para">Free Shipping for orders over $200</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="icon_boxes d-flex wow fadeInUp" data-wow-duration="1.2s">
+              <div class="icon"><span class="flaticon-shield"></span></div>
+              <div class="details">
+                <h5 class="title">Money Guarantee</h5>
+                <p class="para">Within 30 days for an exchange.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="icon_boxes d-flex wow fadeInUp" data-wow-duration="1.4s">
+              <div class="icon"><span class="flaticon-headphones"></span></div>
+              <div class="details">
+                <h5 class="title">Online Support</h5>
+                <p class="para">24 hours a day, 7 days a week</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="icon_boxes d-flex wow fadeInUp" data-wow-duration="1.6s">
+              <div class="icon"><span class="flaticon-credit-card"></span></div>
+              <div class="details">
+                <h5 class="title">Flexible Payment</h5>
+                <p class="para">Pay with Multiple Credit Cards</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Delivery Divider -->
+    <section class="deliver-divider pb60" id="deal-of-the-day">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="d-flex justify-content-between">
+              <div class="main-title mb0-500 d-block d-lg-flex">
+                <h2 class="">Deal of the Day</h2>
+                <div class="deal_countdown">
+                  <style>
+                    #dealTimer .deal-days-val,
+                    #dealTimer .deal-hours-val,
+                    #dealTimer .deal-minutes-val,
+                    #dealTimer .deal-seconds-val {
+                      display: inline !important;
+                    }
+
+                    .top-category .banner_one.home1_style {
+                      min-height: 230px;
+                    }
+
+                    .top-category .banner_one.home1_style .details {
+                      padding-bottom: 34px;
+                    }
+
+                    .top-category .banner_one.home1_style .shop_btn {
+                      display: inline-block;
+                      padding-top: 10px;
+                      padding-bottom: 10px;
+                      line-height: 1.2;
+                      margin-top: 10px;
+                    }
+
+                    .best-seller-section .shop_item,
+                    .random-products-section .shop_item,
+                    .deliver-divider .shop_item {
+                      height: 100%;
+                      display: flex;
+                      flex-direction: column;
+                    }
+
+                    .best-seller-section .owl-stage,
+                    .best-seller-section .owl-item,
+                    .best-seller-section .owl-item .item {
+                      height: 100%;
+                    }
+
+                    .best-seller-section .owl-item {
+                      display: flex;
+                    }
+
+                    .best-seller-section .owl-item .item {
+                      display: flex;
+                      width: 100%;
+                    }
+
+                    .best-seller-section .shop_item,
+                    .random-products-section .shop_item {
+                      min-height: 420px;
+                      width: 100%;
+                    }
+
+                    .best-seller-section .shop_item .thumb,
+                    .random-products-section .shop_item .thumb,
+                    .deliver-divider .shop_item .thumb {
+                      height: 220px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      overflow: hidden;
+                    }
+
+                    .best-seller-section .shop_item .thumb img,
+                    .random-products-section .shop_item .thumb img,
+                    .deliver-divider .shop_item .thumb img {
+                      height: 200px;
+                      width: 100%;
+                      object-fit: contain;
+                    }
+
+                    .best-seller-section .shop_item .details,
+                    .random-products-section .shop_item .details,
+                    .deliver-divider .shop_item .details {
+                      flex: 1 1 auto;
+                      display: flex;
+                      flex-direction: column;
+                    }
+
+                    .best-seller-section .shop_item .details,
+                    .random-products-section .shop_item .details {
+                      min-height: 170px;
+                    }
+
+                    .best-seller-section .shop_item .details .title,
+                    .random-products-section .shop_item .details .title,
+                    .deliver-divider .shop_item .details .title {
+                      min-height: 54px;
+                      line-height: 1.4;
+                      overflow: hidden;
+                      display: -webkit-box;
+                      -webkit-line-clamp: 2;
+                      -webkit-box-orient: vertical;
+                      margin-bottom: 8px;
+                    }
+
+                    .best-seller-section .shop_item .si_footer,
+                    .random-products-section .shop_item .si_footer,
+                    .deliver-divider .shop_item .si_footer {
+                      margin-top: auto;
+                    }
+
+                    .random-products-section .random-products-grid {
+                      display: flex;
+                      flex-wrap: wrap;
+                      margin-left: -6px;
+                      margin-right: -6px;
+                    }
+
+                    .random-products-section .random-products-item {
+                      width: 25%;
+                      padding-left: 6px;
+                      padding-right: 6px;
+                      margin-bottom: 12px;
+                      display: flex;
+                    }
+
+                    .random-products-section .random-products-item > .shop_item {
+                      width: 100%;
+                    }
+
+                    @media (max-width: 991.98px) {
+                      .random-products-section .random-products-item { width: 50%; }
+                    }
+                    @media (max-width: 767.98px) {
+                      .random-products-section .random-products-item { width: 100%; }
+                    }
+                  </style>
+                  <ul class="deal_counter ml0-md" id="dealTimer">
+                    <li class="list-inline-item days deal-days"><span class="deal-days-val">00</span></li>
+                    <li class="list-inline-item"><span class="title">Days :</span></li>
+                    <li class="list-inline-item hours deal-hours"><span class="deal-hours-val">00</span></li>
+                    <li class="list-inline-item"><span class="title">Hours :</span></li>
+                    <li class="list-inline-item minutes deal-minutes"><span class="deal-minutes-val">00</span></li>
+                    <li class="list-inline-item"><span class="title">Minutes :</span></li>
+                    <li class="list-inline-item seconds deal-seconds"><span class="deal-seconds-val">00</span></li>
+                    <li class="list-inline-item"><span class="title">Seconds</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="main-title mb-5"> <a class="title_more_btn mt10" href="page-shop-list-v2.html">View All</a> </div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="shop_item_5grid_slider slider_dib_sm nav_none_400 dots_none owl-carousel owl-theme" id="deal-of-the-day-items"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+    (function(){
+        function escapeHtml(s){
+            return String(s || '').replace(/[&<>"']/g, function(c){
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]) || c;
+            });
+        }
+
+        function pad2(n){
+            n = parseInt(n, 10);
+            if (isNaN(n) || n < 0) n = 0;
+            return (n < 10 ? '0' : '') + n;
+        }
+
+        function updateTimer($timer, remainingMs){
+            if (!$timer.find('.deal-days-val').length) {
+                $timer.html(''
+                    + '<li class="list-inline-item days deal-days"><span class="deal-days-val">00</span></li>'
+                    + '<li class="list-inline-item"><span class="title">Days :</span></li>'
+                    + '<li class="list-inline-item hours deal-hours"><span class="deal-hours-val">00</span></li>'
+                    + '<li class="list-inline-item"><span class="title">Hours :</span></li>'
+                    + '<li class="list-inline-item minutes deal-minutes"><span class="deal-minutes-val">00</span></li>'
+                    + '<li class="list-inline-item"><span class="title">Minutes :</span></li>'
+                    + '<li class="list-inline-item seconds deal-seconds"><span class="deal-seconds-val">00</span></li>'
+                    + '<li class="list-inline-item"><span class="title">Seconds</span></li>'
+                );
+            }
+            var totalSec = Math.floor(remainingMs / 1000);
+            if (totalSec < 0) totalSec = 0;
+            var days = Math.floor(totalSec / 86400);
+            var rem = totalSec % 86400;
+            var hours = Math.floor(rem / 3600);
+            rem = rem % 3600;
+            var minutes = Math.floor(rem / 60);
+            var seconds = rem % 60;
+            $timer.find('.deal-days-val').text(pad2(days));
+            $timer.find('.deal-hours-val').text(pad2(hours));
+            $timer.find('.deal-minutes-val').text(pad2(minutes));
+            $timer.find('.deal-seconds-val').text(pad2(seconds));
+        }
+
+        function initDealOwl($, $carousel){
+            if (!$carousel.length || typeof $carousel.owlCarousel !== 'function') return;
+            if ($carousel.hasClass('owl-loaded')) {
+                $carousel.trigger('destroy.owl.carousel');
+                $carousel.removeClass('owl-loaded');
+                $carousel.find('.owl-stage-outer').children().unwrap();
+            }
+            $carousel.owlCarousel({
+                loop: false,
+                margin: 0,
+                dots: false,
+                nav: true,
+                navText: ['<i class="fas fa-chevron-left"></i>', '<i class="fas fa-chevron-right"></i>'],
+                responsive: {
+                    0: { items: 1 },
+                    576: { items: 2 },
+                    768: { items: 3 },
+                    992: { items: 4 },
+                    1200: { items: 5 }
+                }
+            });
+        }
+
+        function renderDealItems($, items){
+            var $container = $('#deal-of-the-day-items');
+            var $carousel = $container.closest('.owl-carousel');
+            if (!Array.isArray(items) || !items.length) {
+                $container.empty();
+                $carousel.closest('section.deliver-divider').hide();
+                return;
+            }
+
+            var html = '';
+            for (var i=0;i<items.length;i++) {
+                var it = items[i] || {};
+                var p = it.product || {};
+                var pid = parseInt(it.product_id, 10) || 0;
+                var name = p.name || '';
+                var img = p.image_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+                if (typeof img === 'string' && img.indexOf('//') > -1) {
+                    img = img.replace(/^https?:\/\//i, window.location.protocol + '//');
+                }
+                var dealPrice = parseFloat(it.deal_price || 0);
+                var basePrice = parseFloat(it.base_price || 0);
+                var pct = parseFloat(it.discount_percent || 0);
+
+                var priceHtml = '';
+                var _dSym  = window.currentCurrencySymbol || '$';
+                // API already returns converted prices — do NOT multiply by rate again
+                if (pct > 0 && basePrice > 0) {
+                    priceHtml = '<span>' + _dSym + dealPrice.toFixed(2) + '</span> <del class="ms-2">' + _dSym + basePrice.toFixed(2) + '</del>';
+                } else if (basePrice > 0) {
+                    priceHtml = '<span>' + _dSym + basePrice.toFixed(2) + '</span>';
+                } else {
+                    priceHtml = '<span>' + _dSym + '0.00</span>';
+                }
+
+                var avg = parseFloat(it.rating || it.avg_rating || p.rating || p.avg_rating || 0);
+                var count = parseInt(it.review || it.review_count || p.review || p.review_count || 0);
+                var starsHtml = '<div class="review d-flex db-500 mb-2"><ul class="mb0 me-2">';
+                for(var s=1; s<=5; s++) {
+                    starsHtml += '<li class="list-inline-item"><i class="' + (s <= avg ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>';
+                }
+                starsHtml += '</ul><div class="review_count" style="font-size:12px;">'+count+' review'+(count!==1?'s':'')+'</div></div>';
+
+                html += ''
+                    + '<div class="item ovh">'
+                    +   '<div class="shop_item bdrtrb1 px-2 px-sm-3 wow fadeIn" data-wow-duration="1.2s">'
+                    +     '<div class="thumb pb30">'
+                    +       '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(name) + '" style="height: 200px; width: 100%; object-fit: contain;">'
+                    +       '<div class="thumb_info">'
+                    +         '<ul class="mb0">'
+                    +           '<li><a href="javascript:void(0);" class="wishlist-toggle" data-product-id="' + pid + '"><i class="far fa-heart"></i></a></li>'
+                    +           '<li><a href="<?= base_url('product/details/'); ?>' + pid + '"><span class="flaticon-show"></span></a></li>'
+                    +         '</ul>'
+                    +       '</div>'
+                    +       '<div class="shop_item_cart_btn d-grid">'
+                    +         '<button type="button" class="btn btn-thm add-to-cart-btn" data-product_id="' + pid + '" data-product_type="' + escapeHtml(p.product_type || 'simple') + '" data-vendor_id="0" data-quantity="1">Add to Cart</button>'
+                    +       '</div>'
+                    +     '</div>'
+                    +     '<div class="details">'
+                    +       '<div class="title"><a href="<?= base_url('product/details/'); ?>' + pid + '">' + escapeHtml(name) + '</a></div>'
+                    +       starsHtml
+                    +       '<div class="si_footer">'
+                    +         '<div class="price">' + priceHtml + '</div>'
+                    +         '<div class="line mt20"></div>'
+                    +         '<div class="sell_stock mt10"><div class="sell">Status: In Stock</div></div>'
+                    +       '</div>'
+                    +     '</div>'
+                    +   '</div>'
+                    + '</div>';
+            }
+            $container.html(html);
+            $carousel.closest('section.deliver-divider').show();
+            initDealOwl($, $carousel);
+        }
+
+        function startDealTimer($, deal, serverNowUtc){
+            var $timer = $('#dealTimer');
+            if (!$timer.length || !deal) return;
+            if (!deal.ends_at_utc && !deal.starts_at_utc && !deal.start_at_utc) return;
+
+            // Some themes run their own countdown logic and overwrite .days/.hours/.minutes/.seconds.
+            // Keep our UI stable by observing DOM changes and restoring our own values.
+            if (!window.__dealTimerObserver && window.MutationObserver) {
+                window.__dealTimerObserver = new MutationObserver(function(){
+                    if (window.__dealTimerApplying) return;
+                    if (typeof window.__dealTimerLastRemainingMs !== 'number' || !isFinite(window.__dealTimerLastRemainingMs)) return;
+
+                    // Only restore if the theme overwrote/removed our internal spans or produced negative/invalid values.
+                    var $d = $timer.find('.deal-days-val');
+                    var $h = $timer.find('.deal-hours-val');
+                    var $m = $timer.find('.deal-minutes-val');
+                    var $s = $timer.find('.deal-seconds-val');
+                    if (!$d.length || !$h.length || !$m.length || !$s.length) {
+                        updateTimer($timer, window.__dealTimerLastRemainingMs);
+                        return;
+                    }
+
+                    function bad($el){
+                        var t = ($el.text() || '').trim();
+                        if (t === '') return true;
+                        var n = parseInt(t, 10);
+                        return !isFinite(n) || isNaN(n) || n < 0;
+                    }
+
+                    if (bad($d) || bad($h) || bad($m) || bad($s)) {
+                        updateTimer($timer, window.__dealTimerLastRemainingMs);
+                    }
+                });
+                try {
+                    window.__dealTimerObserver.observe($timer.get(0), {
+                        childList: true,
+                        subtree: true,
+                        characterData: true
+                    });
+                } catch (e) {
+                    window.__dealTimerObserver = null;
+                }
+            }
+
+            // ensure only one interval runs (prevents blinking / jumping)
+            if (window.__dealTimerInterval) {
+                clearInterval(window.__dealTimerInterval);
+                window.__dealTimerInterval = null;
+            }
+
+            // Always ensure the numeric spans exist before any theme script mutates the DOM.
+            // This prevents cases where only the labels remain visible.
+            if (typeof window.__dealTimerLastRemainingMs !== 'number' || !isFinite(window.__dealTimerLastRemainingMs)) {
+                window.__dealTimerLastRemainingMs = 0;
+            }
+            window.__dealTimerApplying = true;
+            updateTimer($timer, window.__dealTimerLastRemainingMs);
+            window.__dealTimerApplying = false;
+
+            function parseUtcMysql(s){
+                s = String(s || '').trim();
+                var m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+                if (!m) return NaN;
+                return Date.UTC(
+                    parseInt(m[1],10),
+                    parseInt(m[2],10)-1,
+                    parseInt(m[3],10),
+                    parseInt(m[4],10),
+                    parseInt(m[5],10),
+                    parseInt(m[6] || '0',10)
+                );
+            }
+
+            var endStr = deal.ends_at_utc;
+            if (!endStr && deal.ends_at_utc === '') {
+                endStr = '';
+            }
+
+            // Fallback: compute end from start + 24h if ends_at_utc is missing/invalid
+            var endMs = parseUtcMysql(endStr);
+            if (!isFinite(endMs)) {
+                var startMs = parseUtcMysql(deal.starts_at_utc || deal.start_at_utc || '');
+                if (isFinite(startMs)) {
+                    endMs = startMs + (24 * 60 * 60 * 1000);
+                }
+            }
+
+            var serverNowMs = parseUtcMysql(serverNowUtc);
+            if (!isFinite(serverNowMs)) {
+                serverNowMs = Date.now();
+            }
+
+            if (!isFinite(endMs)) return;
+
+            var clientStartMs = Date.now();
+
+            function tick(){
+                var elapsed = Date.now() - clientStartMs;
+                var nowMs = serverNowMs + elapsed;
+                var remaining = endMs - nowMs;
+                window.__dealTimerLastRemainingMs = remaining;
+                window.__dealTimerApplying = true;
+                updateTimer($timer, remaining);
+                window.__dealTimerApplying = false;
+                if (remaining <= 0) {
+                    clearInterval(window.__dealTimerInterval);
+                    window.__dealTimerInterval = null;
+                }
+            }
+            tick();
+            window.__dealTimerInterval = setInterval(tick, 1000);
+        }
+
+        function boot(){
+            if (!window.jQuery) return;
+            var $ = window.jQuery;
+            var $container = $('#deal-of-the-day-items');
+            if (!$container.length) return;
+
+            $.ajax({
+                url: "<?= base_url('api/v1/homepage/deal-of-the-day'); ?>",
+                type: 'GET',
+                dataType: 'json'
+            }).done(function(resp){
+                if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data) {
+                    $container.closest('section.deliver-divider').hide();
+                    return;
+                }
+                var deal = resp.data.deal;
+                var items = resp.data.items || [];
+                renderDealItems($, items);
+                startDealTimer($, deal, resp.data.server_now_utc);
+            }).fail(function(){
+                $container.closest('section.deliver-divider').hide();
+            });
+        }
+
+        if (document.readyState === 'complete') {
+            boot();
+        } else {
+            window.addEventListener('load', boot);
+        }
+    })();
+    </script>
+
+    <!-- Top Category -->
+    <section class="top-category pb30 pt20">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="d-flex justify-content-between">
+              <div class="main-title">
+                <h2>Shop by Category</h2>
+              </div>
+              <div class="main-title mb-5"><a class="title_more_btn mt10" href="/products/all-categories">View All Categories</a></div>
+            </div>
+          </div>
+        </div>
+		<?php if(isset($shop_categories) && $shop_categories){ ?>
+		  <div class="row ovh mb20 g-3" id="shop-by-category-items">
+			<?php foreach($shop_categories as $c){ ?>
+			  <div class="col-6 col-sm-4 col-md-3 col-lg-2 wow fadeInUp" data-wow-duration=".7s">
+				<a href="<?= base_url('products/category/'.(string)$c->slug); ?>">
+				  <div class="iconbox">
+					<div class="icon">
+					  <img src="<?= !empty($c->thumbnail) ? base_url('assets/categories/'.$c->thumbnail) : base_url('assets/default_images/product.jpg'); ?>" alt="Category">
+					</div>
+					<div class="details">
+					  <h5 class="title"><?= htmlspecialchars((string)$c->name); ?></h5>
+					</div>
+				  </div>
+				</a>
+			  </div>
+			<?php } ?>
+		  </div>
+		<?php } ?>
+		<script>
+		(function(){
+		  function esc(s){
+			return String(s === undefined || s === null ? '' : s)
+			  .replace(/&/g,'&amp;')
+			  .replace(/</g,'&lt;')
+			  .replace(/>/g,'&gt;')
+			  .replace(/"/g,'&quot;')
+			  .replace(/'/g,'&#39;');
+		  }
+		  function render($row, cats){
+			if (!$row || !$row.length) return;
+			if (!Array.isArray(cats) || !cats.length) return;
+			var html = '';
+			for (var i=0;i<cats.length;i++){
+			  var c = cats[i] || {};
+			  var url = c.url || '#';
+			  var img = c.thumbnail_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+			  var name = c.name || '';
+			  html += '<div class="col-6 col-sm-4 col-md-3 col-lg-2 wow fadeInUp" data-wow-duration=".7s">'
+				+ '<a href="' + esc(url) + '">'
+				+   '<div class="iconbox">'
+				+     '<div class="icon">'
+				+       '<img src="' + esc(img) + '" alt="Category">'
+				+     '</div>'
+				+     '<div class="details">'
+				+       '<h5 class="title">' + esc(name) + '</h5>'
+				+     '</div>'
+				+   '</div>'
+				+ '</a>'
+				+ '</div>';
+			}
+			if (html) {
+			  $row.html(html);
+			}
+		  }
+		  function boot(){
+			var $row = window.jQuery ? window.jQuery('#shop-by-category-items') : null;
+			if (!$row || !$row.length) return;
+			window.jQuery.ajax({
+			  url: "<?= base_url('api/v1/homepage/shop-by-category'); ?>",
+			  type: 'POST',
+			  contentType: 'application/json; charset=utf-8',
+			  data: JSON.stringify({limit: 12}),
+			  dataType: 'json'
+			}).done(function(resp){
+			  if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.categories) return;
+			  render($row, resp.data.categories);
+			});
+		  }
+		  if (document.readyState === 'complete') {
+			boot();
+		  } else {
+			window.addEventListener('load', boot);
+		  }
+		})();
+		</script>
+		<?php if(isset($homepage_ads) && is_array($homepage_ads) && $homepage_ads){ ?>
+        <div class="row ovh mt70" id="homepage-advertisements-items">
+			<?php $ad_colors = ['color1','color2','color3']; $adi = 0; foreach($homepage_ads as $ad){ ?>
+				<?php
+					$ad_title = isset($ad->advertisement_name) ? (string)$ad->advertisement_name : '';
+					$ad_tag = isset($ad->advertisement_tag) ? (string)$ad->advertisement_tag : '';
+					$ad_link = isset($ad->advertisement_link) ? (string)$ad->advertisement_link : '';
+					$ad_img = isset($ad->advertisement_image) ? (string)$ad->advertisement_image : '';
+					$ad_img_url = $ad_img !== '' ? base_url('uploads/advertisements/'.$ad_img) : base_url('assets/default_images/product.jpg');
+					$color = $ad_colors[$adi % 3];
+					$adi++;
+				?>
+          <div class="col-lg-6 col-xl-4 wow fadeInUp" data-wow-duration=".7s">
+            <div class="banner_one home1_style <?= $color; ?> mb30">
+              <div class="thumb style1"><img class="float-end" src="<?= $ad_img_url; ?>" alt="Advertisement" style="max-height: 170px; width: auto; object-fit: contain;"></div>
+              <div class="details">
+                <?php if($ad_tag !== ''){ ?>
+                <p class="para color-light-blue"><?= htmlspecialchars($ad_tag); ?></p>
+                <?php } ?>
+                <h3 class="title"><?= htmlspecialchars($ad_title); ?></h3>
+				<?php if($ad_link !== ''){ ?>
+                <a href="<?= htmlspecialchars($ad_link); ?>" class="shop_btn" target="_blank" rel="noopener">Shop Now</a>
+				<?php } ?>
+			  </div>
+            </div>
+          </div>
+			<?php } ?>
+        </div>
+		<script>
+		(function(){
+		  function esc(s){
+			return String(s === undefined || s === null ? '' : s)
+			  .replace(/&/g,'&amp;')
+			  .replace(/</g,'&lt;')
+			  .replace(/>/g,'&gt;')
+			  .replace(/"/g,'&quot;')
+			  .replace(/'/g,'&#39;');
+		  }
+		  function render($row, ads){
+			if (!$row || !$row.length) return;
+			if (!Array.isArray(ads) || !ads.length) return;
+			var colors = ['color1','color2','color3'];
+			var html = '';
+			for (var i=0;i<ads.length;i++){
+			  var ad = ads[i] || {};
+			  var title = ad.title || '';
+			  var tag = ad.tag || '';
+			  var link = ad.link || '';
+			  var img = ad.image_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+			  var color = colors[i % colors.length];
+			  html += '<div class="col-lg-6 col-xl-4 wow fadeInUp" data-wow-duration=".7s">'
+				+ '<div class="banner_one home1_style ' + esc(color) + ' mb30">'
+				+   '<div class="thumb style1"><img class="float-end" src="' + esc(img) + '" alt="Advertisement" style="max-height: 170px; width: auto; object-fit: contain;"></div>'
+				+   '<div class="details">'
+				+     (tag ? ('<p class="para color-light-blue">' + esc(tag) + '</p>') : '')
+				+     '<h3 class="title">' + esc(title) + '</h3>'
+				+     (link ? ('<a href="' + esc(link) + '" class="shop_btn" target="_blank" rel="noopener">Shop Now</a>') : '')
+				+   '</div>'
+				+ '</div>'
+				+ '</div>';
+			}
+			if (html) {
+			  $row.html(html);
+			}
+		  }
+		  function boot(){
+			var $row = window.jQuery ? window.jQuery('#homepage-advertisements-items') : null;
+			if (!$row || !$row.length) return;
+			window.jQuery.ajax({
+			  url: "<?= base_url('api/v1/homepage/advertisements'); ?>",
+			  type: 'POST',
+			  contentType: 'application/json; charset=utf-8',
+			  data: JSON.stringify({limit: 3}),
+			  dataType: 'json'
+			}).done(function(resp){
+			  if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.advertisements) return;
+			  render($row, resp.data.advertisements);
+			});
+		  }
+		  if (document.readyState === 'complete') {
+			boot();
+		  } else {
+			window.addEventListener('load', boot);
+		  }
+		})();
+		</script>
+		<?php } ?>
+      </div>
+    </section>
+    
+    <?php
+    // One-time currency setup for PHP-rendered homepage prices
+    if (!isset($_hp_cur_id)) {
+        // Use session currency so PHP-rendered prices match selected currency
+        $_hp_cur_sess_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+        $_hp_cur_id  = $_hp_cur_sess_id > 0 ? $_hp_cur_sess_id : (function_exists('default_currency') ? default_currency() : null);
+        $_hp_cur_obj = ($_hp_cur_id && function_exists('get_currency')) ? get_currency($_hp_cur_id) : null;
+        $_hp_cur_symbol = $_hp_cur_obj ? html_entity_decode((string)$_hp_cur_obj->symbol) : '$';
+        // Rate is 1.0 here because API already returns converted prices; PHP fallback prices also use converted data
+        $_hp_cur_rate   = 1.0;
+    }
+    ?>
+    <!-- Best Seller Product  -->
+    <section class="featured-product pt0 pb90 best-seller-section" id="best-sellers">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="main-title mb0-sm">
+              <h2>Best seller in the last month</h2>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="popular_listing_sliders ui_kit_tab style2">
+              <div class="nav nav-tabs mb30 justify-content-start justify-content-lg-end" role="tablist">
+                <button class="nav-link active me-0" id="nav-home-tab" data-bs-toggle="tab" data-bs-target="#nav-home" role="tab" aria-controls="nav-home" aria-selected="true">All</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="popular_listing_sliders row ui_kit_tab style2"> 
+              <!-- Tab panes -->
+              <div class="tab-content col-lg-12" id="nav-tabContent">
+                <div class="tab-pane fade show active" id="nav-home" role="tabpanel" aria-labelledby="nav-home-tab">
+                  <div class="best_item_slider_shop_lising_page shop_item_5grid_slider slider_dib_sm nav_none_400 dots_none owl-theme owl-carousel" id="best-sellers-last-month-items">
+                    <?php if(isset($best_sellers_last_month) && $best_sellers_last_month){ ?>
+                      <?php foreach($best_sellers_last_month as $bs){ ?>
+                        <div class="item ovh">
+                          <div class="shop_item bdrtrb1 px-2 px-sm-3 wow fadeIn" data-wow-duration="1.1s">
+                            <div class="thumb pb30">
+                              <a href="<?= base_url('product/details/'.(int)$bs->id); ?>">
+                                <img src="<?= isset($bs->image_url) ? htmlspecialchars((string)$bs->image_url) : '/assets/default_images/product.jpg'; ?>" alt="Best Seller Item">
+                              </a>
+                              <div class="thumb_info">
+                                <ul class="mb0">
+                                  <li><a href="javascript:void(0);" class="wishlist-toggle" data-product-id="<?= (int)$bs->id; ?>"><i class="far fa-heart"></i></a></li>
+                                  <li><a href="<?= base_url('product/details/'.(int)$bs->id); ?>"><span class="flaticon-show"></span></a></li>
+                                </ul>
+                              </div>
+                              <div class="shop_item_cart_btn d-grid"> <button type="button" class="btn btn-thm add-to-cart-btn" data-product_id="<?= (int)$bs->id; ?>" data-product_type="<?= htmlspecialchars(isset($bs->product_type) ? (string)$bs->product_type : 'simple'); ?>" data-vendor_id="0" data-quantity="1">Add to Cart</button> </div>
+                            </div>
+                            <div class="details">
+                              <div class="sub_title"></div>
+                              <div class="title"><a href="<?= base_url('product/details/'.(int)$bs->id); ?>"><?= htmlspecialchars($bs->name); ?></a></div>
+                              <div class="review d-flex db-500 mb-2">
+                                <ul class="mb0 me-2">
+                                  <?php 
+                                    $bs_avg = isset($bs->avg_rating) ? (float)$bs->avg_rating : 0;
+                                    $bs_count = isset($bs->review_count) ? (int)$bs->review_count : 0;
+                                    for($s=1; $s<=5; $s++) {
+                                        $s_cls = $s <= $bs_avg ? 'fas fa-star' : 'far fa-star';
+                                        echo '<li class="list-inline-item"><i class="'.$s_cls.'" style="color:#f5a623; font-size:12px;"></i></li>';
+                                    }
+                                  ?>
+                                </ul>
+                                <div class="review_count" style="font-size:12px;">
+                                    <?= $bs_count ?> review<?= $bs_count !== 1 ? 's' : '' ?>
+                                </div>
+                              </div>
+                              <div class="si_footer">
+                                <div class="price">
+                                  <?php
+                                    $price_data = isset($bs->prices) ? json_decode($bs->prices, true) : array();
+                                    if(!empty($price_data) && is_array($price_data) && isset($price_data[0]['regular_price'])){
+                                        echo $_hp_cur_symbol.number_format((float)$price_data[0]['regular_price'] * $_hp_cur_rate, 2);
+                                    }else{
+                                        echo $_hp_cur_symbol.'0.00';
+                                    }
+                                  ?>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      <?php } ?>
+                    <?php } ?>
+                  </div>
+                  <script>
+                  (function(){
+                    function esc(s){
+                      return String(s === undefined || s === null ? '' : s)
+                        .replace(/&/g,'&amp;')
+                        .replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;')
+                        .replace(/'/g,'&#39;');
+                    }
+                    function priceText(prices){
+                      try {
+                        // API already returns converted prices — do NOT multiply by rate again
+                        var sym  = window.currentCurrencySymbol || '$';
+                        if (!Array.isArray(prices) || !prices.length) return sym + '0.00';
+                        var p = prices[0] || {};
+                        var v = (p.regular_price !== undefined ? p.regular_price : (p.sale_price !== undefined ? p.sale_price : (p.sales_price !== undefined ? p.sales_price : 0)));
+                        return sym + parseFloat(v || 0).toFixed(2);
+                      } catch(e){
+                        return (window.currentCurrencySymbol || '$') + '0.00';
+                      }
+                    }
+                    function render($owl, items){
+                      if (!$owl || !$owl.length) return;
+                      if (!Array.isArray(items) || !items.length) return;
+                      var html = '';
+                      for (var i=0;i<items.length;i++){
+                        var it = items[i] || {};
+                        var id = parseInt(it.id || 0, 10);
+                        if (!id) continue;
+                        var name = it.name || '';
+                        var url = it.url || ("<?= base_url('product/details/'); ?>" + id);
+                        url = String(url || '');
+                        url = url.replace(/\/product\/detail\/(\d+)$/i, '/product/details/$1');
+                        var img = it.image_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+                        var price = priceText(it.prices);
+                        html += '<div class="item ovh">'
+                          + '<div class="shop_item bdrtrb1 px-2 px-sm-3 wow fadeIn" data-wow-duration="1.1s">'
+                          +   '<div class="thumb pb30">'
+                          +     '<a href="' + esc(url) + '">' + '<img src="' + esc(img) + '" alt="Best Seller Item">' + '</a>'
+                          +     '<div class="thumb_info">'
+                          +       '<ul class="mb0">'
+                          +         '<li><a href="javascript:void(0);" class="wishlist-toggle" data-product-id="' + id + '"><i class="far fa-heart"></i></a></li>'
+                          +         '<li><a href="' + esc(url) + '"><span class="flaticon-show"></span></a></li>'
+                          +       '</ul>'
+                          +     '</div>'
+                          +     '<div class="shop_item_cart_btn d-grid"> <button type="button" class="btn btn-thm add-to-cart-btn" data-product_id="' + id + '" data-product_type="' + esc(it.product_type || 'simple') + '" data-vendor_id="0" data-quantity="1">Add to Cart</button> </div>'
+                          +   '</div>'
+                          +   '<div class="details">'
+                          +     '<div class="sub_title"></div>'
+                          +     '<div class="title"><a href="' + esc(url) + '">' + esc(name) + '</a></div>'
+                          +     '<div class="review d-flex db-500 mb-2">'
+                          +       '<ul class="mb0 me-2">'
+                          +         '<li class="list-inline-item"><i class="' + (1 <= (parseFloat(it.rating||it.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+                          +         '<li class="list-inline-item"><i class="' + (2 <= (parseFloat(it.rating||it.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+                          +         '<li class="list-inline-item"><i class="' + (3 <= (parseFloat(it.rating||it.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+                          +         '<li class="list-inline-item"><i class="' + (4 <= (parseFloat(it.rating||it.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+                          +         '<li class="list-inline-item"><i class="' + (5 <= (parseFloat(it.rating||it.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+                          +       '</ul>'
+                          +       '<div class="review_count" style="font-size:12px;">' + (parseInt(it.review||it.review_count)||0) + ' review' + ((parseInt(it.review||it.review_count)||0)!==1?'s':'') + '</div>'
+                          +     '</div>'
+                          +     '<div class="si_footer"><div class="price">' + esc(price) + '</div></div>'
+                          +   '</div>'
+                          + '</div>'
+                          + '</div>';
+                      }
+                      if (!html) return;
+                      var wasOwl = $owl.hasClass('owl-loaded');
+                      if (wasOwl) {
+                        try {
+                          $owl.trigger('replace.owl.carousel', [html]).trigger('refresh.owl.carousel');
+                          return;
+                        } catch(e) {}
+                      }
+                      $owl.html(html);
+                    }
+                    function boot(){
+                      var $owl = window.jQuery ? window.jQuery('#best-sellers-last-month-items') : null;
+                      if (!$owl || !$owl.length) return;
+                      window.jQuery.ajax({
+                        url: "<?= base_url('api/v1/homepage/best-sellers'); ?>",
+                        type: 'POST',
+                        contentType: 'application/json; charset=utf-8',
+                        data: JSON.stringify({limit: 20}),
+                        dataType: 'json'
+                      }).done(function(resp){
+                        if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.best_sellers) return;
+                        render($owl, resp.data.best_sellers);
+                      });
+                    }
+                    if (document.readyState === 'complete') {
+                      boot();
+                    } else {
+                      window.addEventListener('load', boot);
+                    }
+                  })();
+                  </script>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Delivery Divider -->
+    <section class="deliver-divider pt0 pb90">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="online_delivery text-center">
+              <h5 class="title">Members get free shipping* with no order minimum!*Restrictions apply.Try free 30-day trial</h5>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Random Products  -->
+    <section class="featured-product pt0 random-products-section">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="d-flex align-items-center justify-content-between flex-wrap main-title mb0-sm">
+              <h2 class="mb-2 mb-sm-0">Trending Products</h2>
+              <div class="d-flex align-items-center">
+                <label for="trendingLimitSelect" class="me-2 mb-0" style="white-space:nowrap;">Show</label>
+                <select id="trendingLimitSelect" class="form-control" style="width:auto; min-width:90px;">
+                  <?php $tl_default = (int)($homepage_trending_limit ?? 12); ?>
+                  <option value="8" <?= ($tl_default === 8) ? 'selected' : '' ?>>8</option>
+                  <option value="12" <?= ($tl_default === 12) ? 'selected' : '' ?>>12</option>
+                  <option value="16" <?= ($tl_default === 16) ? 'selected' : '' ?>>16</option>
+                  <option value="20" <?= ($tl_default === 20) ? 'selected' : '' ?>>20</option>
+                  <option value="24" <?= ($tl_default === 24) ? 'selected' : '' ?>>24</option>
+                </select>
+              </div>
+            </div>
+            <div class="random-products-grid" id="homepage-random-products-items">
+              <?php if(isset($homepage_random_products) && is_array($homepage_random_products) && $homepage_random_products){ ?>
+                <?php $rp_i = 0; foreach($homepage_random_products as $rp){ $rp_i++; ?>
+                  <div class="random-products-item">
+                    <div class="shop_item bdrtrb1 px-2 px-sm-3 wow fadeIn" data-wow-duration="<?= number_format(0.9 + (0.2 * $rp_i), 1); ?>s">
+                      <div class="thumb pb30">
+                        <a href="<?= base_url('product/details/'.(int)$rp->id); ?>">
+                          <img src="<?= isset($rp->image_url) ? htmlspecialchars((string)$rp->image_url) : base_url('assets/default_images/product.jpg'); ?>" alt="Product">
+                        </a>
+                        <div class="thumb_info">
+                          <ul class="mb0">
+                            <li><a href="javascript:void(0);" class="wishlist-toggle" data-product-id="<?= (int)$rp->id; ?>"><i class="far fa-heart"></i></a></li>
+                            <li><a href="<?= base_url('product/details/'.(int)$rp->id); ?>"><span class="flaticon-show"></span></a></li>
+                          </ul>
+                        </div>
+                        <div class="shop_item_cart_btn d-grid"> <button type="button" class="btn btn-thm add-to-cart-btn" data-product_id="<?= (int)$rp->id; ?>" data-product_type="<?= htmlspecialchars(isset($rp->product_type) ? (string)$rp->product_type : 'simple'); ?>" data-vendor_id="0" data-quantity="1">Add to Cart</button> </div>
+                      </div>
+                      <div class="details">
+                        <div class="sub_title"></div>
+                        <div class="title"><a href="<?= base_url('product/details/'.(int)$rp->id); ?>"><?= htmlspecialchars((string)$rp->name); ?></a></div>
+                        <div class="review d-flex db-500 mb-2">
+                          <ul class="mb0 me-2">
+                            <?php 
+                              $rp_avg = isset($rp->avg_rating) ? (float)$rp->avg_rating : 0;
+                              $rp_count = isset($rp->review_count) ? (int)$rp->review_count : 0;
+                              for($s=1; $s<=5; $s++) {
+                                  $s_cls = $s <= $rp_avg ? 'fas fa-star' : 'far fa-star';
+                                  echo '<li class="list-inline-item"><i class="'.$s_cls.'" style="color:#f5a623; font-size:12px;"></i></li>';
+                              }
+                            ?>
+                          </ul>
+                          <div class="review_count" style="font-size:12px;">
+                              <?= $rp_count ?> review<?= $rp_count !== 1 ? 's' : '' ?>
+                          </div>
+                        </div>
+                        <div class="si_footer">
+                          <div class="price"><?= $_hp_cur_symbol ?><?= number_format((float)($rp->display_price ?? 0) * $_hp_cur_rate, 2); ?></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                <?php } ?>
+              <?php } ?>
+            </div>
+			<script>
+			(function(){
+			  function esc(s){
+				return String(s === undefined || s === null ? '' : s)
+				  .replace(/&/g,'&amp;')
+				  .replace(/</g,'&lt;')
+				  .replace(/>/g,'&gt;')
+				  .replace(/"/g,'&quot;')
+				  .replace(/'/g,'&#39;');
+			  }
+			  function fmtPrice(n){
+				// API already returns converted prices — do NOT multiply by rate again
+				var v = parseFloat(n || 0);
+				if (isNaN(v)) v = 0;
+				return (window.currentCurrencySymbol || '$') + v.toFixed(2);
+			  }
+			  function render($grid, items){
+				if (!$grid || !$grid.length) return;
+				if (!Array.isArray(items) || !items.length) return;
+				var html = '';
+				for (var i=0;i<items.length;i++){
+				  var p = items[i] || {};
+				  var id = parseInt(p.id || 0, 10);
+				  if (!id) continue;
+				  var name = p.name || '';
+				  var url = p.url || ("<?= base_url('product/details/'); ?>" + id);
+				  url = String(url || '');
+				  url = url.replace(/\/product\/detail\/(\d+)$/i, '/product/details/$1');
+				  var img = p.image_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+				  var price = fmtPrice(p.display_price);
+				  html += '<div class="random-products-item">'
+					+ '<div class="shop_item bdrtrb1 px-2 px-sm-3 wow fadeIn" data-wow-duration="1.1s">'
+					+   '<div class="thumb pb30">'
+					+     '<a href="' + esc(url) + '"><img src="' + esc(img) + '" alt="Product"></a>'
+					+     '<div class="thumb_info">'
+					+       '<ul class="mb0">'
+					+         '<li><a href="javascript:void(0);" class="wishlist-toggle" data-product-id="' + id + '"><i class="far fa-heart"></i></a></li>'
+					+         '<li><a href="' + esc(url) + '"><span class="flaticon-show"></span></a></li>'
+					+       '</ul>'
+					+     '</div>'
+					+     '<div class="shop_item_cart_btn d-grid"> <button type="button" class="btn btn-thm add-to-cart-btn" data-product_id="' + id + '" data-product_type="' + esc(p.product_type || 'simple') + '" data-vendor_id="0" data-quantity="1">Add to Cart</button> </div>'
+					+   '</div>'
+					+   '<div class="details">'
+					+     '<div class="sub_title"></div>'
+					+     '<div class="title"><a href="' + esc(url) + '">' + esc(name) + '</a></div>'
+					+     '<div class="review d-flex db-500 mb-2">'
+					+       '<ul class="mb0 me-2">'
+					+         '<li class="list-inline-item"><i class="' + (1 <= (parseFloat(p.rating||p.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+					+         '<li class="list-inline-item"><i class="' + (2 <= (parseFloat(p.rating||p.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+					+         '<li class="list-inline-item"><i class="' + (3 <= (parseFloat(p.rating||p.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+					+         '<li class="list-inline-item"><i class="' + (4 <= (parseFloat(p.rating||p.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+					+         '<li class="list-inline-item"><i class="' + (5 <= (parseFloat(p.rating||p.avg_rating)||0) ? 'fas' : 'far') + ' fa-star" style="color:#f5a623; font-size:12px;"></i></li>'
+					+       '</ul>'
+					+       '<div class="review_count" style="font-size:12px;">' + (parseInt(p.review||p.review_count)||0) + ' review' + ((parseInt(p.review||p.review_count)||0)!==1?'s':'') + '</div>'
+					+     '</div>'
+					+     '<div class="si_footer"><div class="price">' + esc(price) + '</div></div>'
+					+   '</div>'
+					+ '</div>'
+					+ '</div>';
+				}
+				if (html) $grid.html(html);
+				if (typeof window.__applyWishlistToDom === 'function') {
+				  window.__applyWishlistToDom();
+				}
+			  }
+			  function boot(){
+				var $grid = window.jQuery ? window.jQuery('#homepage-random-products-items') : null;
+				if (!$grid || !$grid.length) return;
+				var $sel = window.jQuery ? window.jQuery('#trendingLimitSelect') : null;
+				var limit = <?= (int)($homepage_trending_limit ?? 12); ?>;
+				try {
+					var saved = window.localStorage ? window.localStorage.getItem('homepage_trending_limit') : null;
+					if (saved !== null && saved !== '') {
+						var sv = parseInt(saved, 10);
+						if (!isNaN(sv) && sv > 0) limit = sv;
+					}
+				} catch(e) {}
+				if ($sel && $sel.length) {
+					var cur = parseInt($sel.val(), 10);
+					if (!isNaN(cur) && cur > 0) limit = cur;
+					try { $sel.val(String(limit)); } catch(e) {}
+				}
+				if (limit > 50) limit = 50;
+				window.jQuery.ajax({
+				  url: "<?= base_url('api/v1/homepage/products'); ?>",
+				  type: 'POST',
+				  contentType: 'application/json; charset=utf-8',
+				  data: JSON.stringify({limit: limit}),
+				  dataType: 'json'
+				}).done(function(resp){
+				  if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.products) return;
+				  render($grid, resp.data.products);
+				});
+			  }
+			  function bindLimit(){
+				var $sel = window.jQuery ? window.jQuery('#trendingLimitSelect') : null;
+				if (!$sel || !$sel.length) return;
+				$sel.off('change.homeTrending').on('change.homeTrending', function(){
+					var v = parseInt(window.jQuery(this).val(), 10);
+					if (isNaN(v) || v <= 0) return;
+					if (v > 50) v = 50;
+					try { if (window.localStorage) window.localStorage.setItem('homepage_trending_limit', String(v)); } catch(e) {}
+					boot();
+				});
+			  }
+			  if (document.readyState === 'complete') {
+				bindLimit();
+				boot();
+			  } else {
+				window.addEventListener('load', function(){ bindLimit(); boot(); });
+			  }
+			})();
+			</script>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+ 
+    
+      </div>
+    </section>
+    <!-- Hot New Arrival Product  -->
+    
+    <section class="featured-product pt0" id="new-arrivals">
+      <style>
+        #hot-new-arrivals-items .shop_item.tiny_style {
+          padding: 15px !important;
+          border: 1px solid #eaeaea !important;
+          border-radius: 10px !important;
+          background: #ffffff !important;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02) !important;
+          transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+          height: 100% !important;
+        }
+        #hot-new-arrivals-items .shop_item.tiny_style:hover {
+          border-color: #f5c34b !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06) !important;
+          transform: translateY(-4px) !important;
+        }
+        #hot-new-arrivals-items .shop_item.tiny_style .flex-shrink-0 {
+          transition: transform 0.35s ease;
+        }
+        #hot-new-arrivals-items .shop_item.tiny_style:hover .flex-shrink-0 {
+          transform: scale(1.05);
+        }
+      </style>
+      <div class="container">
+        <div class="row">
+          <div class="col-md-12">
+            <div class="main-title mb0-sm">
+              <h2>Hot New Arrivals</h2>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-lg-12">
+            <div class="row popular_listing_sliders style2 ui_kit_tab">
+              <div class="col-lg-12 tab-content" id="nav-tabContent4">
+                <div class="fade tab-pane active show" id="nav-hnat20" aria-labelledby="nav-hnat20-tab" role="tabpanel">
+                  <div class="row" id="hot-new-arrivals-items">
+                    <?php if(isset($hot_new_arrivals_last_30_days) && is_array($hot_new_arrivals_last_30_days) && $hot_new_arrivals_last_30_days){ ?>
+                      <?php $hna_i = 0; foreach($hot_new_arrivals_last_30_days as $hna){ $hna_i++; ?>
+                        <div class="col-lg-4 col-sm-6 mb-3 px-2 fadeInUp wow d-flex align-items-stretch" data-wow-duration="<?= number_format(0.1 + (0.2 * $hna_i), 1); ?>s">
+                          <div class="align-items-center d-flex shop_item tiny_style w-100">
+                            <div class="flex-shrink-0" style="width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; border-radius: 6px; border: 1px solid #f0f0f0;"><img alt="Hot New Arrival Product" src="<?= isset($hna->image_url) ? htmlspecialchars((string)$hna->image_url) : base_url('assets/default_images/product.jpg'); ?>" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div>
+                            <div class="flex-grow-1 ms-3">
+                              <div class="mb-2 title" style="margin-bottom: 5px !important;"><a href="<?= base_url('product/details/'.(int)$hna->id); ?>" style="font-weight: 600; font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px; color: #041e42;"><?= htmlspecialchars((string)$hna->name); ?></a></div>
+                              <div class="para text-thm1" style="font-size: 15px; font-weight: 700; color: #ff5a5f;"><?= $_hp_cur_symbol ?><?= number_format((float)($hna->display_price ?? 0) * $_hp_cur_rate, 2); ?></div>
+                            </div>
+                          </div>
+                        </div>
+                      <?php } ?>
+                    <?php }else{ ?>
+                    <div class="col-lg-4 col-sm-6 mb-3 px-2 fadeInUp wow d-flex align-items-stretch" data-wow-duration="0.3s">
+                      <div class="align-items-center d-flex shop_item tiny_style w-100">
+                        <div class="flex-shrink-0" style="width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; border-radius: 6px; border: 1px solid #f0f0f0;"><img alt="Hot New Arrival Product" src="/assets/customer/images/shop-items/hnap1.png" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div>
+                        <div class="flex-grow-1 ms-3">
+                          <div class="mb-2 title" style="margin-bottom: 5px !important;"><a href="#" style="font-weight: 600; font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px; color: #041e42;">Sony DJ Headphones 4334205465, Black, Standard</a></div>
+                          <div class="para text-thm1" style="font-size: 15px; font-weight: 700; color: #ff5a5f;">$32.50</div>
+                        </div>
+                      </div>
+                    </div>
+                    <?php } ?>
+                  </div>
+                  <script>
+                  (function(){
+                    function esc(s){
+                      return String(s === undefined || s === null ? '' : s)
+                        .replace(/&/g,'&amp;')
+                        .replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;')
+                        .replace(/'/g,'&#39;');
+                    }
+                    function fmtPrice(n){
+                      // API already returns converted prices — do NOT multiply by rate again
+                      var v = parseFloat(n || 0);
+                      if (isNaN(v)) v = 0;
+                      return (window.currentCurrencySymbol || '$') + v.toFixed(2);
+                    }
+                    function render($row, items){
+                      if (!$row || !$row.length) return;
+                      if (!Array.isArray(items) || !items.length) return;
+                      var html = '';
+                      for (var i=0;i<items.length;i++){
+                        var p = items[i] || {};
+                        var id = parseInt(p.id || 0, 10);
+                        if (!id) continue;
+                        var name = p.name || '';
+                        var url = p.url || ("<?= base_url('product/details/'); ?>" + id);
+                        url = String(url || '');
+                        url = url.replace(/\/product\/detail\/(\d+)$/i, '/product/details/$1');
+                        var img = p.image_url || "<?= base_url('assets/default_images/product.jpg'); ?>";
+                        var price = fmtPrice(p.display_price);
+                        html += '<div class="col-lg-4 col-sm-6 mb-3 px-2 fadeInUp wow d-flex align-items-stretch" data-wow-duration="0.3s">'
+                          + '<div class="align-items-center d-flex shop_item tiny_style w-100">'
+                          +   '<div class="flex-shrink-0" style="width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; border-radius: 6px; border: 1px solid #f0f0f0;"><img alt="Hot New Arrival Product" src="' + esc(img) + '" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div>'
+                          +   '<div class="flex-grow-1 ms-3">'
+                          +     '<div class="mb-2 title" style="margin-bottom: 5px !important;"><a href="' + esc(url) + '" style="font-weight: 600; font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px; color: #041e42;">' + esc(name) + '</a></div>'
+                          +     '<div class="para text-thm1" style="font-size: 15px; font-weight: 700; color: #ff5a5f;">' + esc(price) + '</div>'
+                          +   '</div>'
+                          + '</div>'
+                          + '</div>';
+                      }
+                      if (html) $row.html(html);
+                    }
+                    function boot(){
+                      var $row = window.jQuery ? window.jQuery('#hot-new-arrivals-items') : null;
+                      if (!$row || !$row.length) return;
+                      window.jQuery.ajax({
+                        url: "<?= base_url('api/v1/homepage/hot-new-arrivals'); ?>",
+                        type: 'POST',
+                        contentType: 'application/json; charset=utf-8',
+                        data: JSON.stringify({limit: 12}),
+                        dataType: 'json'
+                      }).done(function(resp){
+                        if (!resp || parseInt(resp.status, 10) !== 1 || !resp.data || !resp.data.hot_new_arrivals) return;
+                        render($row, resp.data.hot_new_arrivals);
+                      });
+                    }
+                    if (document.readyState === 'complete') {
+                      boot();
+                    } else {
+                      window.addEventListener('load', boot);
+                    }
+                  })();
+                  </script>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <script>
+(function(){
+    function isLoggedIn(){
+        return Boolean(<?= !empty($this->session->userdata('customer')) ? 'true' : 'false'; ?>);
+    }
+
+    function setHeartActive($el, active){
+        if(!$el || !$el.length) return;
+        $el.toggleClass('active', !!active);
+        var $icon = $el.find('i.fa-heart');
+        if($icon.length){
+            if(active){
+                $icon.removeClass('far').addClass('fas').css('color', '#dc3545');
+            } else {
+                $icon.removeClass('fas').addClass('far').css('color', '');
+            }
+        }
+    }
+
+    function loadWishlistIds(){
+        if(!isLoggedIn()) return;
+        if(!window.jQuery) return;
+        $.ajax({
+            url: '<?= base_url("customer/wishlist/ids"); ?>',
+            type: 'POST',
+            dataType: 'json',
+            data: (typeof window.csrf_token_name !== 'undefined' && typeof window.csrf_hash !== 'undefined')
+                ? { [window.csrf_token_name]: window.csrf_hash }
+                : {},
+            success: function(resp){
+                var STATUS = (typeof resp.STATUS !== 'undefined') ? resp.STATUS : resp.status;
+                var DATA = (typeof resp.DATA !== 'undefined') ? resp.DATA : resp.data;
+                if(STATUS !== 1 || !Array.isArray(DATA)) return;
+                var map = {};
+                DATA.forEach(function(id){ map[String(id)] = true; });
+                window.__wishlistIdsMap = map;
+                window.__applyWishlistToDom = function(){
+                    if(!window.jQuery || !window.__wishlistIdsMap) return;
+                    $('.wishlist-toggle').each(function(){
+                        var pid = String($(this).data('product-id') || '');
+                        setHeartActive($(this), !!window.__wishlistIdsMap[pid]);
+                    });
+                };
+                window.__applyWishlistToDom();
+            }
+        });
+    }
+
+    function toggleWishlist($btn){
+        if(!isLoggedIn()){
+            window.location.href = '<?= base_url("login"); ?>';
+            return;
+        }
+        var productId = $btn.data('product-id');
+        if(!productId) return;
+        var postData = { product_id: productId };
+        if (typeof window.csrf_token_name !== 'undefined' && typeof window.csrf_hash !== 'undefined') {
+            postData[window.csrf_token_name] = window.csrf_hash;
+        }
+        $.ajax({
+            url: '<?= base_url("customer/wishlist/toggle"); ?>',
+            type: 'POST',
+            dataType: 'json',
+            data: postData,
+            success: function(resp){
+                var STATUS = (typeof resp.STATUS !== 'undefined') ? resp.STATUS : resp.status;
+                var DATA = (typeof resp.DATA !== 'undefined') ? resp.DATA : resp.data;
+                if(STATUS === 1 && DATA && typeof DATA.in_wishlist !== 'undefined'){
+                    var active = Number(DATA.in_wishlist) === 1;
+                    setHeartActive($btn, active);
+                    if (typeof window.__wishlistIdsMap === 'object' && window.__wishlistIdsMap !== null) {
+                        var key = String(productId);
+                        if (active) {
+                            window.__wishlistIdsMap[key] = true;
+                        } else {
+                            try { delete window.__wishlistIdsMap[key]; } catch(e) { window.__wishlistIdsMap[key] = false; }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function waitForJq(cb){
+        if(window.jQuery) return cb();
+        setTimeout(function(){ waitForJq(cb); }, 50);
+    }
+
+    waitForJq(function(){
+        loadWishlistIds();
+        $(document).on('click', '.wishlist-toggle', function(e){
+            e.preventDefault();
+            toggleWishlist($(this));
+        });
+    });
+})();
+</script>
+    <script></script>

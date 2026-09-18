@@ -1,0 +1,82 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Product_enquiries extends MY_Controller {
+
+    function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->TYPE = $this->session->userdata('type');
+        $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+
+        // Ensure status fields exist on ec_product_enquiry
+        if ($this->db->table_exists('ec_product_enquiry') && !$this->db->field_exists('is_contacted', 'ec_product_enquiry')) {
+            $this->load->dbforge();
+            $fields = array(
+                'is_contacted' => array('type' => 'TINYINT', 'constraint' => 1, 'default' => 0),
+                'contacted_at' => array('type' => 'DATETIME', 'null' => TRUE)
+            );
+            $this->dbforge->add_column('ec_product_enquiry', $fields);
+        }
+    
+        $this->check_module_permission('product_enquiries');
+    }
+
+    public function index()
+    {
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", "Product Enquiries" => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+
+        // Fetch all product enquiries, join products, customer, and vendor tables
+        $data['enquiries'] = $this->db
+            ->select('e.*, p.name as db_product_name, p.id as db_product_id, p.vendor_id')
+            ->select("CONCAT(COALESCE(c.fname,''), ' ', COALESCE(c.lname,'')) AS db_customer_name", false)
+            ->select("COALESCE(v.store_name, v.name, '') AS db_vendor_name", false)
+            ->from('ec_product_enquiry e')
+            ->join('products p', 'p.id = e.product_id', 'left')
+            ->join('ec_customer c', 'c.customer_id = e.customer_id', 'left')
+            ->join('ec_vendor v', 'v.vendor_id = p.vendor_id', 'left')
+            ->order_by('e.created_at', 'DESC')
+            ->get()->result();
+
+        $this->load->template("$this->TYPE/product_enquiries/index", $data);
+
+    }
+
+    public function toggle_status()
+    {
+        if (!logged_in()) {
+            echo json_encode(['status' => 0, 'message' => 'Unauthorized']);
+            return;
+        }
+
+        $id = (int)$this->input->post('id');
+        $status = (int)$this->input->post('status');
+
+        if (!$id) {
+            echo json_encode(['status' => 0, 'message' => 'Invalid Enquiry ID']);
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $update_data = array(
+            'is_contacted' => $status,
+            'contacted_at' => ($status == 1) ? $now : NULL
+        );
+
+        $this->Query_model->update_data('ec_product_enquiry', $update_data, array('id' => $id));
+
+        echo json_encode(array(
+            'status' => 1,
+            'message' => ($status == 1) ? 'Enquiry marked as Contacted' : 'Enquiry marked as Not Contacted',
+            'is_contacted' => $status,
+            'contacted_at' => ($status == 1) ? date('d-M-Y H:i', strtotime($now)) : ''
+        ));
+    }
+}
+

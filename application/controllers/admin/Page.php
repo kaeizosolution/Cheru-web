@@ -1,0 +1,311 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Page extends MY_Controller {
+
+	function __construct()
+	{
+		parent::__construct();
+	    $this->load->model('Query_model');
+		$this->load->model('Page_model'); 
+        $this->TYPE = $this->session->userdata('type');
+		$this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+	
+        $this->check_module_permission('page');
+    }
+	
+	public function index()
+    {
+		if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $page_lang = get_page_language_data('admin_page_lang');
+	    $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->page => ""); 
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count();		
+        $this->load->template("$this->TYPE/page/index_post",$data);
+	}
+		
+	public function index_ajax_post()
+    {
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+        $type_array = array(1 => 'Fixed', 2 => 'Percentage');
+		$type_status = array(1 => 'Active', 0 => 'Inactive');
+		
+        $list = $this->Page_model->get_datatable();		
+		
+        $data = array();
+        foreach ($list as $obj) {
+			
+            $row = array();
+			$author = $this->Query_model->get_author($obj->user_id);
+			$autho_name = !empty($author->fname) ? $author->fname : $author->admin_uid;
+			$post_title = !empty($obj->post_title) ? '<a href="/page/'.$obj->post_slug.'">'.$obj->post_title.'</a>' : $obj->post_title;
+			$date=date_create($obj->modified);
+			$date_new = date_format($date,"Y-m-d");
+			if (array_key_exists($obj->enabled, $type_status)) {
+			   $enabled = $type_status[$obj->enabled];
+			}	
+			
+			$row['page_id']   = $obj->page_id;			
+			$row['post_title']   = $post_title;
+			$row['user_id']      = $autho_name;
+			$row['comment']      = '-';
+			$row['date']     	 = $date_new;
+			$row['enabled']       = $enabled;	 		
+            $data[] = $row;
+        }
+		
+        $output = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsTotal" => $this->Page_model->count_all(),
+                "recordsFiltered" => $this->Page_model->count_filtered(),
+                "data" => $data,
+                );	
+
+		
+		//echo "<pre>"; print_r($output); echo "</pre>";die;  
+        echo json_encode($output);
+    }
+		
+	public function add()
+    {
+		if(!logged_in()) redirect("$this->TYPE/auth/login");       
+	   $this->post();
+    }
+
+	public function update($page_id)
+    {
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+		$this->post($page_id);
+    }
+
+	function post($page_id = NULL)
+    {
+		$data =array();	
+		$data = $this->input->post(NULL, FALSE);
+		$user = $this->session->userdata();	
+		//echo "<pre>"; print_r( $data);	echo "</pre>"; die;		
+		$current_id =$user['admin']['login_id'];
+		$has_footer_section = $this->db->field_exists('footer_section', 'ec_page');
+				
+		$this->load->library('form_validation');
+		$this->form_validation->set_rules('post_title', 'Post Title', 'trim|required');        
+		if($has_footer_section){
+			$this->form_validation->set_rules('footer_section', 'Footer Section', 'trim');
+		}
+		
+        if(isset($page_id)){
+			
+            $page_obj = $this->Query_model->get_data_obj('ec_page',array('page_id' => $page_id)); 
+			
+            if(!$page_obj){
+                $this->session->set_flashdata('error', 'Invalid Error.');
+                redirect("$this->TYPE/page");
+            }
+			
+			if($_POST) {
+					
+				$db_data =  array(
+						'post_title'        => $this->input->post('post_title', FALSE),
+						'post_title_es'     => $this->input->post('post_title_es', FALSE),
+						'post_slug'         => $this->input->post('post_slug'),
+						'post_content'  	=> $this->input->post('post_content', FALSE),
+						'post_content_es'  	=> $this->input->post('post_content_es', FALSE),
+						//'featured_image' 	=> $this->input->post('featured_image'),
+						'enabled'   		=> $this->input->post('enabled') ? '1' : '0'
+					);					
+					if($has_footer_section){
+						$db_data['footer_section'] = $this->input->post('footer_section', FALSE);
+					}
+					
+				}else{
+					
+					if(isset($page_obj)){
+						$data =  array(
+							'post_title'          => $page_obj->post_title,
+							'post_title_es'       => $page_obj->post_title_es,
+							'post_slug'           => $page_obj->post_slug,
+							'post_content'  	  => $page_obj->post_content,
+							'post_content_es'  	  => $page_obj->post_content_es,
+							'featured_image'   	  => $page_obj->featured_image,
+							'enabled'  			  => $page_obj->enabled,
+							'footer_section'      => ($has_footer_section && isset($page_obj->footer_section)) ? $page_obj->footer_section : ''
+						);
+					}
+				}
+		
+			
+		
+        }
+		
+		
+        if ($this->form_validation->run() == FALSE){
+            $page_lang = get_page_language_data('admin_page_lang');
+            $action_bc = isset($page_id) ? $page_lang->update : $page_lang->add;	
+            $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->page => "/$this->TYPE/page/", "$action_bc" => 'action');
+            $breadcrumbs = $this->breadcrumbs->show($crumbs);
+            $data['breadcrumbs']    = $breadcrumbs;
+
+            $data['csrf'] = csrf_token();
+            $data['TYPE'] = $this->TYPE;
+            $data['action'] = isset($page_id) ? $page_lang->update : $page_lang->add;
+            $data['page_id'] = isset($page_id) ? $page_id : NULL;			
+			//echo $this->TYPE;die;			
+            $this->load->template("$this->TYPE/page/post_form",$data);
+			
+        }else{
+		
+			 
+		if( isset($_FILES['featured_image']['name']) && !empty($_FILES['featured_image']['name'])){
+					
+            $config = array(				
+				'upload_path' => "./assets/images",	
+				'allowed_types' => "gif|jpg|png|jpeg|pdf",
+				'max_size' => "20240000",
+				'encrypt_name' => true,
+			);	
+		
+			$this->load->library('upload', $config);
+            $this->upload->initialize($config);
+			
+			if ( $this->upload->do_upload('featured_image') ) {   
+				$data_file = $this->upload->data();	
+				$config2 = array(
+					'image_library' =>	'gd2',
+					'source_image' 	=> "./assets/images/".$data_file['file_name'],
+					'maintain_ratio'=> TRUE,
+					'width' 		=>800,
+					'height' 		=>800,
+					'new_image' 	=> "./assets/images/".'thumb_'.$data_file['file_name'],						
+				);	
+				$this->load->library('image_lib');
+				$this->image_lib->initialize($config2);
+				$this->image_lib->resize();
+				$this->image_lib->clear();
+				$img_url = 'thumb_'.$data_file['file_name'];
+			}else{
+				$this->session->set_flashdata('error', strip_tags($this->upload->display_errors()));
+				redirect(current_url());
+			}
+				
+			$db_data =  array(
+				'post_title'       => isset($data['post_title']) ? $data['post_title'] : '',
+				'post_title_es'    => isset($data['post_title_es']) ? $data['post_title_es'] : '',
+				'post_slug'        => get_slug( isset($data['post_title']) ? $data['post_title'] : '' ),
+				'post_content'     => isset($data['post_content']) ? $data['post_content'] : '',
+				'post_content_es'  => isset($data['post_content_es']) ? $data['post_content_es'] : '',
+				'featured_image'   => $img_url,
+				'post_type'        => 'page',
+				'enabled'          => isset($data['enabled']) ? '1' : '0',
+				'user_id'          => $current_id
+            );	
+			if($has_footer_section){
+				$db_data['footer_section'] = isset($data['footer_section']) ? $data['footer_section'] : '';
+			}
+			
+			
+			
+		}else{ 
+		
+            $db_data =  array(
+				'post_title'       => $this->input->post('post_title', FALSE),
+				'post_title_es'    => $this->input->post('post_title_es', FALSE),
+				'post_slug'        => get_slug( $this->input->post('post_title', FALSE) ),
+				'post_content'     => $this->input->post('post_content', FALSE),				
+				'post_content_es'  => $this->input->post('post_content_es', FALSE),
+				'post_type'        => 'page',
+				'enabled'          => $this->input->post('enabled') ? '1' : '0',
+				'user_id'          => $current_id
+            );
+			if($has_footer_section){
+				$db_data['footer_section'] = $this->input->post('footer_section', FALSE);
+			}
+			
+		}
+			
+            if(isset($page_id)){	
+				
+                $this->Query_model->update_data('ec_page',$db_data,array('page_id' => $page_id));
+                $this->session->set_flashdata('success', 'Updated Successfully.');			
+				
+            }else{
+				//echo "<pre>";  print_r($db_data); echo "</pre>";die;
+                $this->Query_model->insert_data('ec_page',$db_data);
+                $this->session->set_flashdata('success', 'Inserted Successfully.');
+            }
+            redirect("$this->TYPE/page");
+        }
+	}
+	public function checkall_status_change(){
+
+	    $id = $this->input->post('id');
+		$status = $this->input->post('status');		
+		$ids = json_decode($id);
+		//echo "<pre>"; print_r($_POST);exit;
+		if($status == 'active'){
+			$status_val = 0;
+		}elseif($status == 'inactive'){
+			$status_val = 1;
+		}		
+        $data = array();
+        //$update = $this->User_model->checkall_supplier_status_change($id,$status);
+		if($ids && $this->LOGIN_ID && $this->TYPE == 'admin'){
+			$update = $this->Query_model->update_data('ec_page',array('enabled' => $status),array('page_id' => $ids));
+		}
+		
+        echo json_encode(array('success' => $update));
+		
+    }
+	public function del()
+    {
+
+		$data['csrf'] = csrf_token();
+	    $id = $this->input->post('id');
+		$data['csrf'] = csrf_token();
+        $data = array();
+        $delete = $this->Page_model->delete_post($id);
+        echo json_encode(array('success' => $delete));
+		
+    }
+	
+	public function delimg()
+    {
+        $data['csrf'] = csrf_token();
+        $id = $this->input->post('id');			
+        $data['csrf'] = csrf_token();
+        $data = array();
+        $delete = 0;
+        if($id){
+            $delete = $this->Page_model->delete_image($id);
+        }		
+        echo json_encode(array('success' => $delete));
+    }
+
+	public function export_csv(){ 
+	  
+		$filename = 'page_report_'.date('Ymd').'.csv'; 
+		header("Content-Description: File Transfer"); 
+		header("Content-Disposition: attachment; filename=$filename"); 
+		header("Content-Type: application/csv; ");	
+		$data = $this->Page_model->get_export();		
+		
+		//echo "<pre>"; print_r($list); echo "</pre>";	die;
+		
+		
+	   // file creation  
+	    $file = fopen('php://output', 'w'); 
+		$header = array("page_id","post_title","post_content","created");   
+	  
+	    fputcsv($file, $header);
+	      
+	    foreach ($data as $key=>$line){ 
+	   	   fputcsv($file,$line); 
+	    }
+	   fclose($file); 
+	   exit; 
+	}		 
+}

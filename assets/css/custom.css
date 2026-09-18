@@ -1,0 +1,41 @@
+.navbar .logo {
+    height: calc(56px + 14*(100vw - 320px) / 1600);
+}
+.home-wrapper  h1 {background: #DDA853; -webkit-background-clip: text;}
+.flag-lf {width:100%;max-width: 100px; margin:20px auto 0 auto;}
+.page-head-section::before {
+    content: "";
+    background-image: url(../images/background/home-bg.jpg);
+    background-position: top;
+    background-repeat: no-repeat;
+    background-size: cover;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: -1;
+  }
+  .vertical-product-box .vertical-product-body .product-items {border-bottom: 0;}
+  .status-badge {
+    border: 2px solid #28a745;
+    color: #28a745;
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-weight: 600;
+  }
+  .card {
+    border-radius: 15px;
+  }
+  .section-title {
+    font-weight: 600;
+  }
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .item-row small {
+    display: block;
+    color: #6c757d;
+  }

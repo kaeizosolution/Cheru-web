@@ -1,0 +1,104 @@
+b, strong {font-weight: bold;}
+.breadcrumb {font-size:14px;}
+.logo {width:100%;height: auto;max-width: 250px;}
+.select2-container--default.select2-container--focus .select2-selection--multiple, .form-control {border:1px solid #bfbfbf;}
+.form-file {border-radius:1rem;padding:4px;height:40px;border:1px solid #bfbfbf;}
+.form-file .form-control {background:none;}
+.actionbtn {font-size: 16px;}
+.invoice-num span {font-size: 12px;}
+.card .icon .iconBase {width:60px;height:60px;border-radius:30px;font-size: 30px;line-height: 50px;text-align: center;color:#fff;}
+.card .icon .iconBase.lightOrange {background:#f7931a;}
+.card .icon .iconBase.darkOrange {background:#ff6600;}
+.card .icon .iconBase.lightBlue {background:#627eea;}
+.card .icon .iconBase.darkBlue {background:#345d9d;}
+.copyright {margin-top:180px;}
+textarea.form-control {min-height: unset;height:unset;}
+.customBtn {height:40px;}
+.customTableProduct {position:relative;}
+.customTableProduct tbody tr td a {font-weight: normal;}
+.transactionBtn {text-align: right;}
+.customTableProduct tbody tr td a.attri {height: 40px;padding:3px;font-weight: 300;font-size: 12px;color:#345d9d;}
+.customTableProduct tbody tr td a.addmore {height: 40px;border:1px solid #345d9d;padding:3px;font-weight: 300;font-size: 12px;border-radius: 4px;color:#345d9d;}
+.customHeader {position: relative;padding:1rem 1.875rem 1rem;}
+.customHeader .card-title {display: inline-block;}
+.customHeader .transactionBtn {display: inline-block;}
+.card-body {padding:1rem 1.875rem;}
+.customNavPills {position: relative;}
+.customNavPills .nav-item {width:20%;padding:2px;}
+.customNavPills .nav-link {background-color: #f1f1f1;padding:15px 5px;border-radius:5px;text-align: center;}
+.customTabs {position: relative;}
+.customTabs .tab-pane .scroll {}
+.customTabs .tab-pane .orderID {position: relative;}
+.customTabs .tab-pane .orderID ul {margin: 0px;padding:10px;}
+.customTabs .tab-pane .orderID li {list-style: none;display: inline-block;font-size: 16px;font-weight: bold;color:#000;padding:0px 0px 10px 0px;}
+.customTabs .tab-pane .orderID li:first-child {color:#f7931a;}
+.customTabs .tab-pane .orderID li:last-child {color:#627eea;}
+.customTabs .tab-pane .orderID li span {color:#999;font-size: 11px;font-weight: normal;display: block;}
+.customTabs .tab-pane .orderID li:first-child {text-align: left;width:70%;}
+.customTabs .tab-pane .orderID li:last-child {text-align: right;width:30%;}
+
+.customTabs .tab-pane .itemOrders {position: relative;}
+.customTabs .tab-pane .itemOrders ul {margin: 0px;padding:0px 10px 10px 10px;}
+.customTabs .tab-pane .itemOrders li {list-style: none;display: inline-block;font-size: 13px;font-weight: bold;color:#333;border-bottom: 1px dotted #bfbfbf;padding:0px 0px 10px 0px;}
+.customTabs .tab-pane .itemOrders li span {color:#999;font-size: 11px;font-weight: normal;display: block;}
+.customTabs .tab-pane .itemOrders li:first-child {text-align: left;width:70%;}
+.customTabs .tab-pane .itemOrders li:last-child {text-align: right;width:30%;}
+.customTabs .tab-pane .itemOrders ul:last-child  li {border-bottom: 0px;}
+.customTabs .tab-pane .itemOrders ul:last-child  li:first-child {padding-right:7px;}
+.customTabs .tab-pane .itemOrders ul:last-child  li:last-child {padding-left:7px;}
+.customTabs .tab-pane .itemOrders li a {margin-top: 10px;}
+.customTabs .tab-pane .itemOrders li .btnAccept {background: lightseagreen;color:#fff;text-align: center;font-size: 16px;padding: 10px;border-radius:10px;width:100%;display: block;}
+.customTabs .tab-pane .itemOrders li .btnAccept2 {background: white;color:lightseagreen;text-align: center;font-size: 16px;padding: 10px;border-radius:10px;width:100%;display: block;border:1px solid lightseagreen;}
+.customTabs .tab-pane .itemOrders li .btnCancel {background: crimson;color:#fff;text-align: center;font-size: 16px;padding: 10px;border-radius:10px;width:100%;display: block;}
+.customTabs .tab-pane .itemOrders ul.actionBtns li {width:100%;}
+.customTabs .tab-pane .itemOrders ul.actionBtns2 li {width:100%;}
+.scroll {overflow: scroll;overflow-x: hidden;max-height: 500px;}
+
+.text-left {text-align: left;}
+.text-right {text-align: right;}
+.text-center {text-align: center;}
+
+.txtBlue {color:#345d9d;}
+
+.content-body {padding:0px !important;height:auto !important; min-height:auto !important;}
+.dz-scroll {overflow: scroll;overflow-x: hidden;}
+
+.sadow {position: relative;margin-bottom: 20px;}
+
+.varient_files {height: 33px;padding-left: 12px;margin: 7px 0px;}
+
+.form-control {min-height:40px !important;border-radius: 25px;height:40px;}
+
+[data-sidebar-style="full"][data-layout="vertical"] .menu-toggle .nav-header .nav-control {width: 40px;height: 40px;line-height: 49px;background: #fff;border: 1px solid #c7c7c7;
+border-radius: 30px;text-align: center;right:-1.3rem;}
+
+[data-sidebar-style="overlay"] .content-body {margin-left:0rem;}
+[data-sidebar-position="fixed"][data-layout="vertical"] .nav-header {background: #fff;}
+@media (max-width:786px)
+{
+    .customCard .card-body {padding:1rem .875rem;}
+    .customNavPills .nav-link {background-color: #f1f1f1;padding:15px 5px;border-radius:5px;font-size: 12px;text-align: center;}
+    .mb-sm-4  h2 {padding-left:120px;}
+    .nav-control {right:-3.05rem;}
+}   
+
+@media only screen and (max-width: 575px)
+{
+    .nav-header .logo-abbr {width:unset;}
+    .text-head h2, .text-head .h2 {margin-top: .5rem;}
+    .btn {padding: 0.125rem 0.4rem; font-size: 0.650rem;}
+    .custom-tab-1 .nav-tabs {overflow-x: scroll !important; white-space: nowrap; display: block; overflow-y: hidden;}
+    .custom-tab-1 .nav-tabs li {width: auto; display: inline-block;}
+}
+
+@media(max-width:550px)
+{
+    .customCard .card-body {padding:1rem .875rem;}
+    .customNavPills .nav-link {background-color: #f1f1f1;padding:15px 5px;border-radius:5px;font-size: 12px;text-align: center;}
+}    
+
+
+.imagesVarient {margin:0px;padding:0px;overflow:scroll;overflow-y:hidden;width:100%;position:relative;}
+.imagesVarient li {list-style:none;display:inline-block;box-sizing:border-box;padding:5px;position:relative;}
+.imagesVarient li img {width:100%;max-width:90px;height:90px;object-fit:cover;}
+.imagesVarient li button {position:absolute;right: 10px;top: 10px;background: #fff !important;text-align: center;line-height:10px;color: #000 !important;width: 20px;height: 20px;border: 0px;border-radius: 5px;} 

@@ -1,0 +1,404 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Categories_prod extends MY_Controller {
+
+    public function __construct(){
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Category_prod_model');
+        $this->TYPE = $this->session->userdata('type');		
+    }
+
+    public function index(){
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $data = array();
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array($page_lang->product => "/$this->TYPE/product", $page_lang->category => ""); 
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count();		
+        $this->load->template("$this->TYPE/categories_prod/index",$data); 	
+    }
+
+    function multilevel_child($data, &$results, $hyphen='')
+    {
+        $type_status = array(1 => 'active', 0 => 'inactive');
+        foreach($data as $menu)
+        {
+            $row['name'] = $hyphen.' '.$menu->name;
+            $row['filter_name'] = $menu->name;
+            $row['slug'] = $menu->slug;
+            $row['status'] = $type_status[$menu->status];
+            $row['id'] = $menu->id;
+            $results[] = $row;
+            if(!empty($menu->sub))
+            {
+                $this->multilevel_child($menu->sub, $results, $hyphen.' ━ ');
+            }
+        }
+    }
+
+    public function index_ajax_cat()
+    {
+        $length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+        
+        $data = array(); $results = array();
+        $cat_obj =  $this->Category_prod_model->get_categories_new();
+        $alld = $this->multilevel_child($cat_obj, $results, '');
+
+        $new_array = array_chunk($results,10);
+        $start  = (isset( $_POST['start']))?$_POST['start']: 0;
+        if($start){
+            $start = ceil($start/$length);
+        }
+        $rs = $new_array[$start];
+        $output = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsTotal" => $this->Category_prod_model->count_all(),
+                "recordsFiltered" => $this->Category_prod_model->count_filtered(),
+                "data" => $rs,
+                );		
+        echo json_encode($output);
+    }
+
+    public function add($id = NULL){
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        $data = array();
+        $data['admin'] = 1;
+
+        $crumbs = array("Home" => "/$this->TYPE/dashboard", "Category" => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;       
+		$name = $this->input->post('name');
+		$this->form_validation->set_rules('name', 'Name', 'trim|required|xss_clean|callback_unique_cat['.$id.']');
+        $this->form_validation->set_rules('status', 'status', 'required');
+
+        if($this->form_validation->run() == true){
+            $t=time();
+            if($_FILES['thumbnail_image']['name']){				
+                $file_name = $_FILES['thumbnail_image']['name'];
+                $fileSize = $_FILES["thumbnail_image"]["size"]/1024;
+                $fileType = $_FILES["thumbnail_image"]["type"];
+                $new_file = '';
+                $new_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($file_name) );
+                $config = array(
+                        'file_name' => $new_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+                $this->load->library('Upload', $config);
+                $this->upload->initialize($config);     
+                if (!$this->upload->do_upload('thumbnail_image')) {
+                    echo $this->upload->display_errors();
+                }
+                $thumbnail = $this->upload->data();
+                $thumbnail_img = $thumbnail['file_name'];
+            }
+
+            if($_FILES['icon']['name']){				
+                $icon_name = $_FILES['icon']['name'];
+                $fileSize = $_FILES["icon"]["size"]/1024;
+                $fileType = $_FILES["icon"]["type"];
+                $new_file = '';
+                $new_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($icon_name) );	
+                $config = array(
+                        'file_name' => $new_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+                $this->load->library('Upload', $config);
+
+                $this->upload->initialize($config);     
+                if (!$this->upload->do_upload('icon')) {
+                    echo $this->upload->display_errors();
+                }
+                $icon_img = $this->upload->data();
+                $icon = $icon_img['file_name'];
+            }
+			
+			if($_FILES['banner_image']['name']){				
+                $banner_image = $_FILES['banner_image']['name'];
+                $fileSize = $_FILES["banner_image"]["size"]/1024;
+                $fileType = $_FILES["banner_image"]["type"];
+                $new_file = '';
+                $new_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($banner_image) );	
+                $config = array(
+                        'file_name' => $new_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+                $this->load->library('Upload', $config);
+
+                $this->upload->initialize($config);     
+                if (!$this->upload->do_upload('banner_image')) {
+                    echo $this->upload->display_errors();
+                }
+                $banner_image = $this->upload->data();
+                $banner_image = $banner_image['file_name'];
+            }
+			
+			$cat_name = '';
+            $parent_id = ($this->input->post('parent_id')) ? $this->input->post('parent_id') : 0;
+			if($parent_id==0){
+				$cat_name = $this->input->post('name');
+				$cat_slug = url_title($cat_name,'-',true);
+			}else{
+				$cat_name = $this->input->post('name');	
+				$catslug = url_title($cat_name,'-',true);				
+				$parent_id = $this->input->post('parent_id');				
+				$cat = $this->Category_prod_model->find_by_id($parent_id);				
+				$cat_slug= $catslug.'-'.$cat['slug'];							
+			}
+            $category = array(
+                    'name' => $this->input->post('name'),
+                    'name_es' => $this->input->post('name_es'),
+					'slug' => $cat_slug,
+                    'status' => $this->input->post('status'),
+                    'parent_id' => $parent_id,
+                    );
+
+            if(isset($_FILES['thumbnail_image']['name']) && $_FILES['thumbnail_image']['name']!=''){
+                $category['thumbnail'] = isset($thumbnail_img)?$thumbnail_img:'';
+            }
+            if(isset($_FILES['icon']['name'])  && $_FILES['icon']['name']!='' ){
+                $category['icon'] = isset($icon)? $icon:'';
+            }
+			if(isset($_FILES['banner_image']['name'])  && $_FILES['banner_image']['name']!='' ){
+                $category['banner_image'] = isset($banner_image)? $banner_image:'';
+            }
+			
+            $this->Category_prod_model->create($category);
+
+            $this->session->set_flashdata('message',message_box('Category has been saved','success'));
+            redirect("$this->TYPE/categories_prod");
+        }
+
+        $cat_array = array();
+        $cat_obj = $this->Query_model->get_data('ec_categories_prod', array('status' => 1));
+        if($cat_obj){
+            foreach($cat_obj as $row){
+                $cat_array[$row->id] = $row->name;
+            }
+        }
+        $data['cat_array'] = $cat_array;
+        $this->load->template("$this->TYPE/categories_prod/add",$data); 	
+    }
+
+    public function update($id = null){
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+
+        $data = array();
+        $crumbs = array("Home" => "/$this->TYPE/dashboard", "Category" => ""); 
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+
+        $data['admin'] = 1;                
+        if($id == null){
+            $id = $this->input->post('id');
+        }
+        //$this->form_validation->set_rules('name', 'name', 'required');
+		$this->form_validation->set_rules('name', 'Name', 'trim|required|xss_clean|callback_unique_cat['.$id.']');  
+        $this->form_validation->set_rules('status', 'status', 'required');
+
+        if($this->form_validation->run() == true){
+            $t=time();
+            if($_FILES['thumbnail_image']['name']){				
+                $file_name = $_FILES['thumbnail_image']['name'];
+                $fileSize = $_FILES["thumbnail_image"]["size"]/1024;
+                $fileType = $_FILES["thumbnail_image"]["type"];
+                $thumbnail_file = '';
+                $thumbnail_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($file_name) );
+                $config = array(
+                        'file_name' => $thumbnail_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+
+                $this->load->library('Upload', $config);
+                $this->upload->initialize($config);  								
+                if (!$this->upload->do_upload('thumbnail_image')) {
+                    echo $this->upload->display_errors();					
+                }				
+                $thumbnail = $this->upload->data();
+                $thumbnail_img = $thumbnail['file_name'];
+            }
+
+            if($_FILES['icon']['name']){				
+                $icon_name = $_FILES['icon']['name'];
+                $fileSize = $_FILES["icon"]["size"]/1024;
+                $fileType = $_FILES["icon"]["type"];
+                $icon_file = '';
+                $icon_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($icon_name) );	
+                $config = array(
+                        'file_name' => $icon_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+                $this->load->library('Upload', $config);				
+                $this->upload->initialize($config);     
+                if (!$this->upload->do_upload('icon')) {
+                    echo $this->upload->display_errors();
+                }
+                $icon_img = $this->upload->data();
+                $icon = $icon_img['file_name'];
+            }
+			if($_FILES['banner_image']['name']){				
+                $banner_image = $_FILES['banner_image']['name'];
+                $fileSize = $_FILES["banner_image"]["size"]/1024;
+                $fileType = $_FILES["banner_image"]["type"];
+                $new_file = '';
+                $new_file =  $t.'_'.preg_replace( "/[^a-z0-9\._]+/", "-", strtolower($banner_image) );	
+                $config = array(
+                        'file_name' => $new_file,
+                        'upload_path' => "./assets/categories",
+                        'allowed_types' => "gif|jpg|png|jpeg|webp",
+                        'overwrite' => False,
+                        //'max_size' => "20240000", // Can be set to particular file size , here it is 2 MB(2048 Kb)
+                        //'max_height' => "600",
+                        //'max_width' => "600"
+                        );
+                $this->load->library('Upload', $config);
+
+                $this->upload->initialize($config);     
+                if (!$this->upload->do_upload('banner_image')) {
+                    echo $this->upload->display_errors();
+                }
+                $banner_image = $this->upload->data();
+                $banner_image = $banner_image['file_name'];
+            }
+
+            $parent_id = ($this->input->post('parent_id')) ? $this->input->post('parent_id') : 0;		
+			if($parent_id==0){
+				$cat_name = $this->input->post('name');
+				$cat_slug = url_title($cat_name,'-',true);
+			}else{
+				$cat_name = $this->input->post('name');	
+				$catslug = url_title($cat_name,'-',true);				
+				$parent_id = $this->input->post('parent_id');				
+				$cat = $this->Category_prod_model->find_by_id($parent_id);				
+				$cat_slug= $catslug.'-'.$cat['slug'];							
+			}
+            $category = array(
+                    'name' => $this->input->post('name'),
+                    'name_es' => $this->input->post('name_es'),
+					'slug' => $cat_slug,
+                    'status' => $this->input->post('status'),
+                    'parent_id' => $parent_id,
+                    );
+           
+            if(isset($_FILES['thumbnail_image']['name']) && $_FILES['thumbnail_image']['name']!=''){
+                $category['thumbnail'] = isset($thumbnail_img)?$thumbnail_img:'';
+            }
+            if(isset($_FILES['icon']['name'])  && $_FILES['icon']['name']!='' ){
+                $category['icon'] = isset($icon)? $icon:'';
+            }
+			if(isset($_FILES['banner_image']['name'])  && $_FILES['banner_image']['name']!='' ){
+                $category['banner_image'] = isset($banner_image)? $banner_image:'';
+            }
+
+            $this->Category_prod_model->update($category, $id);
+            $this->session->set_flashdata('message',message_box('Category has been saved','success'));
+            redirect("$this->TYPE/categories_prod");
+        }
+
+        $data['category'] = $this->Category_prod_model->find_by_id($id);
+        $cat_array = array();
+        $cat_obj = $this->Query_model->get_data('ec_categories_prod', array('status' => 1));
+        if($cat_obj){
+            foreach($cat_obj as $row){
+                $cat_array[$row->id] = $row->name;
+            }
+        }
+        $data['cat_array'] = $cat_array;
+        $this->load->template("$this->TYPE/categories_prod/edit", $data);
+
+    }
+
+    public function delete($id = null){
+        if(!logged_in()) redirect("$this->TYPE/auth/login");
+        if(!empty($id)){
+            $this->Category_prod_model->delete($id);
+            $this->session->set_flashdata('message',message_box('Category has been deleted','success'));
+            redirect("$this->TYPE/categories_prod");
+        }else{
+            $this->session->set_flashdata('message',message_box('Invalid id','danger'));
+            redirect("$this->TYPE/categories_prod");
+        }
+    }
+	function unique_cat($value, $cat_id)
+    {
+		$cat_name = '';
+            $parent_id = ($this->input->post('parent_id')) ? $this->input->post('parent_id') : 0;
+			if($parent_id==0){
+				$cat_name = $this->input->post('name');
+				$cat_slug = url_title($cat_name,'-',true);
+			}else{
+				$cat_name = $this->input->post('name');	
+				$catslug = url_title($cat_name,'-',true);				
+				$parent_id = $this->input->post('parent_id');				
+				$cat = $this->Category_prod_model->find_by_id($parent_id);				
+				$cat_slug= $catslug.'-'.$cat['slug'];							
+			}
+		$name = $cat_slug;	
+        $args = array('slug' => $name); 
+        if($cat_id){
+            $args['id!='] = $cat_id;
+        }
+        $cat_obj = $this->Query_model->get_data_obj('ec_categories_prod',$args);
+
+        $status   = TRUE;
+        $message  = '';
+        if($cat_obj) {
+            $status   = FALSE;
+            $message  = 'Category must be unique <br/>';
+            $this->form_validation->set_message('unique_cat', $message);
+        }
+        return $status;
+    }
+	public function delimg()
+    {
+        $data['csrf'] = csrf_token();
+        $img_id = $this->input->post('id');	
+		$cat_id = $this->input->post('cat_id');			
+        $data['csrf'] = csrf_token();
+        $data = array();
+        $delete = 0;
+        if($cat_id){
+            $delete = $this->Category_prod_model->delete_image($cat_id,$img_id);
+        }
+		//echo '==='.$delete;
+		//die;
+        echo json_encode(array('success' => $delete));
+    }
+}

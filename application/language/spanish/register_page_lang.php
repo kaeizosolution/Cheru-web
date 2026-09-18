@@ -1,0 +1,47 @@
+<?php 
+$lang['track_your_orders']					=	'TRACK YOUR ORDERS';
+$lang['track_orders_manage']				=	'Track orders, manage cancellations &amp; returns.';
+$lang['shortlist_items_you_love']			=	'SHORTLIST ITEMS YOU LOVE';
+$lang['keep_items_you_love']				=	'Keep items you love on a watchlist.';
+$lang['awesome_offers_updates_for_you']		=	'AWESOME OFFERS UPDATES FOR YOU';
+$lang['be_first_to_know_about']				=	'Be first to know about great offers and save.';
+$lang['create_account']						=	'Create Account';
+$lang['first_name']							=	'First Name';
+$lang['last_name']							=	'Last Name';
+$lang['email_id']							=	'Email ID';
+$lang['mobile_number']						=	'Mobile Number';
+$lang['password']							=	'Password';
+$lang['i_want_to_receive_newsletters']		=	'I want to receive Newsletters with the offers.';
+$lang['register']							=	'Register';
+$lang['or_register_with']					=	'OR Register WITH';
+$lang['already_have_an_account']			=	'Already have an account ?';
+$lang['log_in']								=	'Log In';
+$lang['forgot_password']					=	'Forgot password';
+$lang['back_to_login']						=	'Back to Login?';
+$lang['submit']								=	'Submit';
+$lang['no_account_yet_register_now']		=	'No account yet ? Register Now';
+$lang['log_in_on_klentano_shop']			=	'Log in on klentano shop';
+$lang['lost_your_password']					=	'Lost your password?';
+$lang['or_login_with']						=	'Or login with';
+$lang['street']					        	=	'Address';
+$lang['city']					        	=	'City';
+$lang['zip_code']				        	=	'Zip Code';
+$lang['country']				        	=	'Country';
+$lang['address_detail']			        	=	'Landmark';
+$lang['country_name']                       =   'Select Country Name';
+$lang['full_address']                       =   'Landmark / Building / Apartment No. / Floor';
+$lang['shipping_address']                   =   'Shipping Address';
+$lang['add']                                =   'Add';
+$lang['update']                             =   'Update';
+$lang['submit']                             =   'Save';
+
+$lang['login'] = 'Login';
+$lang['home'] = 'Home';
+$lang['my_account'] = 'My Account';
+$lang['sign_in'] = 'Sign in';
+$lang['email_mobile'] = 'Email / Mobile';
+$lang['enter_password'] = 'Enter your password';
+$lang['continue'] = 'CONTINUE';
+$lang['terms_accept'] = 'By creating an account, I accept the';
+$lang['terms_privacy'] = 'Terms & Conditions & Privacy Policy';
+?>

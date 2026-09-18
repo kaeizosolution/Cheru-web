@@ -1,0 +1,83 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Coupon extends MY_Controller {
+
+    function __construct() {
+
+      parent::__construct();
+	  
+		$this->load->model('Coupon_model');
+		$this->load->model('Query_model');
+        $this->load->model('Product_model');
+        $this->load->library('session');
+        $this->master = $this->load->database('master', TRUE);
+		$this->TYPE = $this->session->userdata('type');
+    }
+
+
+    public function index($data=null)
+    {
+		$data=array();
+		$data['msg'] = $data;
+		$data['csrf'] = csrf_token();	
+		$data['homepage'] = 1;
+		$data['top_offers'] = $this->top_offers();
+		$this->load->template("$this->TYPE/coupon_index",$data);
+    } 
+	public function top_offers($data=null)	
+	{
+		$coupon_obj = $this->Coupon_model->coupon_data_for_home();
+        if(is_api())
+        {   
+            $symbol = '$';
+            $cur_rate = 1.0;
+            $cc_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+            if ($cc_id > 0) {
+                $cur = $this->db
+                    ->select('currency_id, symbol, rate')
+                    ->from('ec_currency')
+                    ->where('currency_id', $cc_id)
+                    ->where('status', '1')
+                    ->get()->row();
+                if ($cur) {
+                    $symbol = (string)$cur->symbol;
+                    if ((float)$cur->rate > 0) {
+                        $cur_rate = (float)$cur->rate;
+                    }
+                }
+            }
+
+            $getbrand     = get_brand();
+            $getcategories = categories_name();
+            $offerctype    = offer_ctype();
+
+            if($coupon_obj){
+                $data = array();
+                foreach($coupon_obj as $coupondata)
+                {
+                    $row = array();
+                    $row['coupon_name']  = $coupondata->name;  
+                    $row['dis_type']     = $coupondata->type == 1 ? 'Flat' : '%';  
+                    $row['symbol_add']   = $coupondata->type == 1 ? $symbol : '';  
+                    $discount_val        = $coupondata->type == 1 ? number_format($coupondata->discount * $cur_rate, 2) : $coupondata->discount;
+                    $row['discount']     = $row['symbol_add'].' '.$discount_val.' '.$row['dis_type'];  
+                    $row['prod_image']   = base_url().'/assets/images/no-image.png';  
+                    $row['getbrand']     = isset($coupondata->brand_id) ? getbrand($coupondata->brand_id)->name : '';  
+                    $data[] = $row;
+                }
+                return $data;
+            }
+           
+            return []; 
+
+        }else{
+            //print_r($coupon_obj); exit;
+            if($coupon_obj)
+                return $coupon_obj;
+            else
+                return [];
+        }
+	}	
+}
+

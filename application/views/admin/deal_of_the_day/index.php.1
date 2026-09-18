@@ -1,0 +1,126 @@
+<?php $page_lang = get_page_language_data('admin_page_lang'); ?>
+
+<div class="page-body">
+    <div class="container-fluid">
+        <div class="page-header">
+            <div class="row">
+                <div class="col-lg-6">
+                    <h3>Deal of the Day</h3>
+                </div>
+                <?= $breadcrumbs ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card">
+                    <?php if ($this->session->flashdata('error')) { ?>
+                    <div class="alert alert-danger m-3 rounded"><?= $this->session->flashdata('error')?><?php $this->session->unset_userdata('error');?></div>
+                    <?php } ?>
+                    <?php if($this->session->flashdata('success')){?>
+                    <div class="alert alert-success m-3 rounded"><?= $this->session->flashdata('success')?><?php $this->session->unset_userdata('success');?></div>
+                    <?php } ?>
+
+                    <div class="card-body">
+                        <div class="topAction-btn" style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                            <a href="/<?= $TYPE?>/deal_of_the_day/add" class="btn btn-primary addNew" title="Add Deal" data-toggle="tooltip" data-placement="top" data-animation="false">
+                                <i class="fa fa-plus"></i> Add Deal
+                            </a>
+                        </div>
+
+                        <div class="dt-ext table-responsive">
+                            <table id="table" class="display dataTable table-striped table-bordered table-hover custom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Sales Price</th>
+                                        <th>Discount Type</th>
+                                        <th>Discount Per</th>
+                                        <th>Discount Amount</th>
+                                        <th>Deal Price</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th width="50px" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var table;
+$(document).ready(function() {
+    dataTable();
+});
+
+function dataTable()
+{
+    var postData = {"<?= $csrf->name;?>" : "<?= $csrf->hash; ?>"};
+    table = $('#table').DataTable({
+        "processing": true,
+        "serverSide": true,
+        "responsive": true,
+        "searching": false,
+        "ordering": false,
+        "lengthChange": false,
+        "orderCellsTop": true,
+        "destroy": true,
+        "pageLength": <?= $page_count ?>,
+        "ajax": {
+            "url": "/<?= $TYPE; ?>/deal_of_the_day/ajax_list",
+            "data": postData,
+            "type": "POST",
+            "dataType": 'json',
+            complete: function () { $('[data-toggle="tooltip"]').tooltip(); },
+        },
+        "dom": '<"top"i>t<"bottom"flp><"clear">',
+        "columnDefs": [
+            {
+                "targets": -1,
+                "data": null,
+                "className": "text-center",
+                "render": function ( data, type, row ) {
+                    var actionTemplate = '<button title="Edit" data-toggle="tooltip" data-placement="top" data-animation="false" data-html="true" class="btn custom-popover-btn btn-edit btncolor" type="button" data-id="'+row.id+'"><i class="fa fa-edit"></i></button>';
+                    return actionTemplate;
+                },
+                "defaultContent": ''
+            }
+        ],
+        "columns": [
+            {"data": "product_name"},
+            {"data": "sales_price"},
+            {"data": "discount_type"},
+            {"data": "discount_percent"},
+            {"data": "discount_amount"},
+            {"data": "deal_price"},
+            {"data": "start_date"},
+            {"data": "end_date"},
+            {"data": "action"},
+        ]
+    });
+}
+
+$(document).on('click','.btn-edit', function(e){
+    var uid=$(this).attr('data-id');
+    var url="/<?php echo $TYPE ?>/deal_of_the_day/update/"+uid;
+    url_new_tab(e,url);
+});
+
+function url_new_tab(e,url)
+{
+    if(e.ctrlKey){
+        window.open(url);
+    }else{
+        $(location).attr('href', url);
+    }
+}
+</script>
+

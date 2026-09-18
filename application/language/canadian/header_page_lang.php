@@ -1,0 +1,54 @@
+<?php
+$lang['about_us']           = 'About Us';
+$lang['contact_us']         = 'Contact Us';
+$lang['help_faqs']          = 'Help & FAQs';
+$lang['login']              = 'Login';
+$lang['cart']               = 'Cart';
+$lang['register']           = 'Register';
+$lang['my_account']         = 'My Account';
+$lang['logout']             = 'Logout';
+$lang['search_product']     = 'Search product';
+$lang['browse_categories']  = 'Browse Categories';
+$lang['coupon_code']        = 'Coupon PORTO10<span> 10% Off</span>';
+$lang['hi']                 = 'Hi';
+$lang['profile']            = 'Profile';
+$lang['my_orders']          = 'My Orders';
+$lang['saved_address']      = 'Saved Address';
+$lang['home']               = 'Home';
+$lang['wishlist']           = 'Wishlist';
+
+// New header keys
+$lang['all_category']       = 'All Category';
+$lang['search_products']     = 'Search products…';
+$lang['my_items']           = 'My Items';
+$lang['hello']              = 'Hello,';
+$lang['dashboard']          = 'Dashboard';
+$lang['account_details']    = 'Account Details';
+$lang['sign_in']            = 'Sign In';
+$lang['account']            = 'Account';
+$lang['items']              = 'Items:';
+$lang['total']              = 'Total';
+$lang['deal_of_the_day']    = 'Deal of the Day';
+$lang['best_sellers']       = 'Best Sellers';
+$lang['new_arrivals']       = 'New Arrivals';
+$lang['mobile_number']      = 'Mobile number';
+$lang['use_email_instead']  = 'Use email instead';
+$lang['password']           = 'Password';
+$lang['remember_me']        = 'Remember me';
+$lang['lost_your_password'] = 'Lost your password?';
+$lang['dont_have_account']  = "Don't have an account?";
+$lang['create_account']     = 'Create Account';
+$lang['or']                 = 'or';
+$lang['your_cart']          = 'Your Cart';
+$lang['cart_empty']         = 'Your cart is empty';
+$lang['buy_more_for_free_shipping'] = 'Buy %s more for FREE Shipping';
+$lang['free_shipping']      = 'You have FREE Shipping!';
+$lang['view_cart']          = 'View Cart';
+$lang['checkout_now']       = 'Checkout Now';
+$lang['create_your_account'] = 'Create Your Account';
+$lang['your_name']          = 'Your Name';
+$lang['placeholder_name']   = 'Ali Tufan';
+$lang['email']              = 'Email';
+$lang['placeholder_email']  = 'Email address';
+$lang['already_have_account'] = 'Already have an account?';
+?>

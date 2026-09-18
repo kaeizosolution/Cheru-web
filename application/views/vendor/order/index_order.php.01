@@ -1,0 +1,353 @@
+<?php $path = base_url(); ?>
+<?php $page_lang = get_page_language_data('admin_page_lang'); ?>
+<?php
+// Currency safe fallbacks
+$display_symbol        = isset($display_symbol) ? $display_symbol : (isset($currency_symbol) ? $currency_symbol : '$');
+$display_currency_code = isset($display_currency_code) ? $display_currency_code : 'USD';
+?>
+<style>
+    :root {
+        --primary: #6366f1;
+        --secondary: #ec4899;
+        --success: #10b981;
+        --info: #3b82f6;
+        --warning: #f59e0b;
+        --dark: #1e293b;
+        --light: #f3f4f6;
+        --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        --border-color: #e2e8f0;
+    }
+
+    /* --- 3D COMPACT CARDS (Top Stats) --- */
+    .dashboard-card {
+        background: #fff;
+        border: none;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: var(--card-shadow);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--hover-shadow);
+        z-index: 10;
+    }
+
+    .card-icon-wrapper {
+        width: 50px; height: 50px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; margin-right: 15px;
+        flex-shrink: 0;
+    }
+    
+    .bg-light-secondary { background: rgba(236, 72, 153, 0.1); color: var(--secondary); }
+    .bg-light-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .bg-light-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+
+    .card-value {
+        font-family: 'Poppins', sans-serif;
+        font-size: 24px; font-weight: 700;
+        color: var(--dark); margin: 0; line-height: 1.1;
+    }
+    .card-label {
+        font-size: 12px; color: #94a3b8;
+        font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.5px; margin-bottom: 2px;
+    }
+
+    /* --- MAIN CARD (Order List) --- */
+    .card.customCard {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        background: #fff;
+        overflow: visible !important; /* Prevents dropdown cutting */
+        margin-bottom: 30px;
+    }
+    
+    .card-header {
+        padding: 20px 25px;
+        background: #fff;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    
+    .card-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--dark); font-family: 'Poppins', sans-serif; }
+
+    /* --- NAV PILLS (TABS) --- */
+    .customNavPills {
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .customNavPills .nav-link {
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: 600;
+        color: #64748b;
+        background: transparent;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+        margin-right: 10px;
+        margin-bottom: 5px;
+    }
+    
+    .customNavPills .nav-link:hover {
+        background: #f8fafc;
+        color: var(--primary);
+    }
+    
+    .customNavPills .nav-link.active {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+    }
+    
+    /* Tab Icons */
+    .nav-link i { margin-right: 8px; }
+    
+    /* --- BUTTONS --- */
+    .btn-outline-primary {
+        color: var(--primary); border-color: var(--primary);
+        border-radius: 8px; padding: 8px 15px; font-weight: 500;
+    }
+    .btn-outline-primary:hover { background: var(--primary); color: #fff; }
+    
+    .btn-primary {
+        background: var(--primary); border-color: var(--primary);
+        border-radius: 8px; padding: 8px 15px; font-weight: 500;
+        box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2);
+    }
+</style>
+
+<div class="content-body" style="padding-top: 100px;">
+    <div class="container-fluid">
+        
+        <div class="mb-sm-4 d-flex flex-wrap align-items-center text-head">
+            <h2 class="font-w600 mb-2 me-auto" style="font-family: 'Poppins', sans-serif; color: #1e293b;">Orders</h2>
+            <span class="badge badge-primary ms-2" style="font-size:13px; padding:6px 12px; border-radius:6px;">
+                Displaying in: <?= htmlspecialchars($display_currency_code) ?> <?= htmlspecialchars($display_symbol) ?>
+            </span>
+        </div>  
+        
+        <div class="row d-flex align-items-stretch mb-4">
+            <div class="col-md-4 col-sm-6 mb-30">
+                <div class="dashboard-card">
+                    <div class="card-icon-wrapper bg-light-warning">
+                        <i class="fa fa-shopping-bag"></i>
+                    </div>
+                    <div>
+                        <h2 class="card-value" id="total_order_count"><?= isset($total_order) ? $total_order : 0 ?></h2>
+                        <p class="card-label text-warning">Total Orders</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-sm-6 mb-30">
+                <div class="dashboard-card">
+                    <div class="card-icon-wrapper bg-light-secondary">
+                        <i class="fa fa-money"></i>
+                    </div>
+                    <div>
+                        <h2 class="card-value" id="total_amount_count"><?= htmlspecialchars($display_symbol) ?><?= isset($total_amount) ? number_format((float)$total_amount, 2) : '0.00' ?></h2>
+                        <p class="card-label text-secondary">Total Amount</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-sm-6 mb-30">
+                <div class="dashboard-card">
+                    <div class="card-icon-wrapper bg-light-success">
+                        <i class="fa fa-check-circle"></i>
+                    </div>
+                    <div>
+                        <h2 class="card-value" id="delivered_order_count"><?= isset($delivered_order) ? $delivered_order : 0 ?></h2>
+                        <p class="card-label text-success">Total Delivered</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12 col-sm-12">
+                <div class="card customCard">
+                    <div class="card-header">
+                        <h4 class="card-title">Manage Orders</h4>
+                        
+                        <div class="transactionBtn" style="display:flex; gap:10px;">
+                            <a onclick="window.location.href = '<?php echo base_url();?>vendor/order/export_pending_csv';" href="javascript:void(0)" class="btn btn-outline-primary">
+                                <i class="fa fa-cloud-download"></i> Export CSV
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <ul class="nav nav-pills customNavPills mb-4 light">
+                            <li class="nav-item">
+                                <a href="#navpills-1" class="nav-link active pending_order_btn" data-bs-toggle="tab" aria-expanded="false">
+                                    <i class="fa fa-clock-o"></i> Pending
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="#navpills-1" class="nav-link inprocess_order_btn" data-bs-toggle="tab" aria-expanded="false">
+                                    <i class="fa fa-spinner"></i> In Process
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="#navpills-1" class="nav-link shipped_order_btn" data-bs-toggle="tab" aria-expanded="false">
+                                    <i class="fa fa-truck"></i> Shipped
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="#navpills-1" class="nav-link complete_order_btn" data-bs-toggle="tab" aria-expanded="true">
+                                    <i class="fa fa-check"></i> Completed
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="#navpills-1" class="nav-link cancel_order_btn" data-bs-toggle="tab" aria-expanded="true">
+                                    <i class="fa fa-times"></i> Canceled
+                                </a>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content customTabs">
+                            <div id="navpills-1" class="tab-pane active">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="scroll order_list_div">
+                                            </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<!-- Order Detail Modal -->
+<div class="modal fade" id="orderDetailModal" tabindex="-1" aria-labelledby="orderDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 15px 30px rgba(0,0,0,0.15);">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--primary), #818cf8); color: #fff; border-radius: 16px 16px 0 0; border-bottom: none; padding: 20px;">
+                <h5 class="modal-title font-weight-bold" id="orderDetailModalLabel" style="font-family: 'Poppins', sans-serif;">
+                    <i class="fa fa-file-text-o mr-2"></i> Order Invoice #<span id="mdOrderUid"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="filter: brightness(0) invert(1);"></button>
+            </div>
+            <div class="modal-body" style="padding: 25px; max-height: 75vh; overflow-y: auto;">
+                <!-- Loader -->
+                <div id="orderDetailLoader" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Fetching invoice details...</p>
+                </div>
+
+                <!-- Content (Hidden initially) -->
+                <div id="orderDetailContent" style="display: none;">
+                    <!-- Top section: Order summary & Dates -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted text-uppercase small font-weight-bold">Order Information</h6>
+                            <p class="mb-1"><strong>Status:</strong> <span class="badge" id="mdStatusBadge" style="padding: 6px 12px; font-size: 12px;"></span></p>
+                            <p class="mb-1"><strong>Placed On:</strong> <span id="mdOrderDate"></span></p>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <h6 class="text-muted text-uppercase small font-weight-bold">Payment & Delivery</h6>
+                            <p class="mb-1"><strong>Payment Method:</strong> <span id="mdPaymentMethod"></span></p>
+                            <p class="mb-1"><strong>Payment Status:</strong> <span id="mdPaymentStatus"></span></p>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-3" style="border-color: var(--border-color);">
+
+                    <!-- Customer & Shipping info -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h6 class="text-muted text-uppercase small font-weight-bold"><i class="fa fa-map-marker mr-1"></i> Shipping Address</h6>
+                            <div class="p-3 bg-light rounded" style="border-left: 4px solid var(--primary); font-size: 14px;">
+                                <p class="mb-1"><strong>Name:</strong> <span id="mdShippingName"></span></p>
+                                <p class="mb-1"><strong>Mobile:</strong> <span id="mdShippingMobile"></span></p>
+                                <p class="mb-1"><strong>Address:</strong> <span id="mdShippingAddress"></span></p>
+                                <p class="mb-1"><strong>City / Postcode:</strong> <span id="mdShippingCity"></span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Items Table -->
+                    <h6 class="text-muted text-uppercase small font-weight-bold mb-3"><i class="fa fa-shopping-basket mr-1"></i> Invoice Items</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table align-middle" style="font-size: 14px;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col" style="width: 80px;">Item</th>
+                                    <th scope="col">Product Name</th>
+                                    <th scope="col" class="text-center">Status</th>
+                                    <th scope="col" class="text-end">Price</th>
+                                    <th scope="col" class="text-center" style="width: 60px;">Qty</th>
+                                    <th scope="col" class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mdItemsList">
+                                <!-- Dynamic -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Totals Section -->
+                    <div class="row justify-content-end">
+                        <div class="col-md-5">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted">Subtotal:</span>
+                                <span class="font-weight-bold" id="mdSubtotal"></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted">Shipping:</span>
+                                <span class="font-weight-bold" id="mdShipping"></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted">Tax:</span>
+                                <span class="font-weight-bold" id="mdTax"></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2" id="mdDiscountRow">
+                                <span class="text-muted">Discount:</span>
+                                <span class="text-danger font-weight-bold" id="mdDiscount"></span>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="h6 mb-0 font-weight-bold">Grand Total:</span>
+                                <span class="h5 mb-0 text-primary font-weight-bold" id="mdTotal"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: none; padding: 15px 20px;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius: 8px;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+var csrf = <?=json_encode($csrf);?>;
+var use_api = <?=isset($use_api) && $use_api ? 'true' : 'false';?>;
+var access_token = '<?=isset($access_token) ? $access_token : '';?>';
+var active_cur = '<?= isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : ($this->session->userdata('cur') ?: 0) ?>';
+</script>       
+<script src="/assets/js/vendor/pages/index_order.js?r=26"></script>
+

@@ -1,0 +1,126 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Hot_new_arrivals extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+    }
+
+    public function index()
+    {
+        $method = strtoupper((string)$this->input->method());
+        if ($method !== 'GET' && $method !== 'POST') {
+            return $this->fail('method_not_allowed', ['Only GET and POST are allowed'], 405);
+        }
+
+        $limit_raw = null;
+        if ($method === 'POST') {
+            $payload = [];
+            $raw = (string)$this->input->raw_input_stream;
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $payload = $decoded;
+                }
+            }
+            if (isset($payload['limit'])) {
+                $limit_raw = $payload['limit'];
+            } else {
+                $limit_raw = $this->input->post('limit');
+            }
+        } else {
+            $limit_raw = $this->input->get('limit');
+        }
+
+        $limit = ($limit_raw !== null && $limit_raw !== '') ? (int)$limit_raw : 12;
+        if ($limit <= 0) {
+            $limit = 12;
+        }
+        if ($limit > 50) {
+            $limit = 50;
+        }
+
+        $out = [];
+        $cur_rate_hna = 1.0;
+        if (function_exists('current_currency') && function_exists('get_currency')) {
+            $cc_hna = current_currency();
+            $cur_hna = $cc_hna ? get_currency($cc_hna) : null;
+            if ($cur_hna && isset($cur_hna->rate) && is_numeric($cur_hna->rate)) {
+                $cur_rate_hna = (float)$cur_hna->rate;
+            }
+        }
+        try {
+            $since = date('Y-m-d H:i:s', strtotime('-30 days'));
+            $rows = $this->db
+                ->select('id, name, date_added, vendor_id, product_type')
+                ->from('products')
+                ->where('status', '1')
+                ->where('date_added >=', $since)
+                ->order_by('date_added', 'DESC')
+                ->limit($limit)
+                ->get()->result();
+
+            if (is_array($rows) && $rows) {
+                foreach ($rows as $p) {
+                    if (!is_object($p) || empty($p->id)) {
+                        continue;
+                    }
+
+                    $pid = (int)$p->id;
+
+                    $image_url = base_url('assets/default_images/product.jpg');
+                    $img = $this->db
+                        ->select('product_variation_images.image_path')
+                        ->from('product_variations')
+                        ->join('product_variation_images', 'product_variation_images.variation_id = product_variations.id')
+                        ->where('product_variations.product_id', $pid)
+                        ->order_by('product_variation_images.id', 'ASC')
+                        ->limit(1)
+                        ->get()->row();
+                    if ($img && !empty($img->image_path)) {
+                        $image_url = base_url('uploads/products/' . (string)$img->image_path);
+                    }
+
+                    $min_price = 0;
+                    $minp = $this->db
+                        ->select('pvp.price')
+                        ->from('product_variation_price pvp')
+                        ->join('product_variations pv', 'pv.id = pvp.variation_id')
+                        ->where('pv.product_id', $pid)
+                        ->order_by('COALESCE(pvp.min_qty, 0)', 'ASC', false)
+                        ->limit(1)
+                        ->get()->row();
+                    if ($minp && isset($minp->price)) {
+                        $min_price = (float)$minp->price * $cur_rate_hna;
+                    }
+
+                    $out[] = [
+                        'id' => $pid,
+                        'name' => isset($p->name) ? (string)$p->name : '',
+                        'vendor_id' => isset($p->vendor_id) ? (int)$p->vendor_id : null,
+                        'product_type' => isset($p->product_type) ? (string)$p->product_type : 'simple',
+                        'image_url' => $image_url,
+                        'display_price' => $min_price,
+                        'prices' => [
+                            [
+                                'regular_price' => $min_price,
+                                'sale_price' => $min_price,
+                            ]
+                        ],
+                        'url' => base_url('product/detail/' . $pid),
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            $out = [];
+        }
+
+        return $this->ok(['hot_new_arrivals' => $out], 'success');
+    }
+}

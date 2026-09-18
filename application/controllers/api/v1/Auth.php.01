@@ -1,0 +1,362 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Auth extends API_Controller
+{
+    private $refresh_ttl = 2592000; // 30 days
+    private $access_ttl = 86400; // 24 hours
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Auth_model');
+        $this->load->library('session');
+    }
+
+    public function login()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $login_id = isset($payload['email_mobile']) ? trim((string)$payload['email_mobile']) : '';
+        $password = isset($payload['password']) ? (string)$payload['password'] : '';
+
+        if ($login_id === '' || $password === '') {
+            return $this->fail('validation_error', ['email/mobile and password are required'], 422);
+        }
+
+        // Detect if login_id is email or mobile format for better error messages
+        $is_email = filter_var($login_id, FILTER_VALIDATE_EMAIL) !== false;
+        $is_mobile = preg_match('/^[0-9+]{8,15}$/', $login_id) === 1;
+
+        if (!$is_email && !$is_mobile) {
+            // Invalid format - return generic message
+            if (strpos($login_id, '@') !== false) {
+                return $this->fail('validation_error', ['Please enter correct email to login'], 422);
+            }
+            return $this->fail('validation_error', ['Please enter correct mobile number to login'], 422);
+        }
+
+        $auth_result = $this->Auth_model->check_customer_login($login_id, $password);
+        if ($auth_result === 'no_user') {
+            if ($is_email) {
+                return $this->fail('invalid_credentials', ['No account found with this email address'], 401);
+            }
+            return $this->fail('invalid_credentials', ['No account found with this mobile number'], 401);
+        }
+        if ($auth_result === 'wrong_password') {
+            return $this->fail('invalid_credentials', ['Password is not correct please try again'], 401);
+        }
+        if ($auth_result === 'inactive') {
+            return $this->fail('account_inactive', ['Account is inactive'], 403);
+        }
+        if (!is_object($auth_result)) {
+            return $this->fail('invalid_credentials', ['Invalid credentials'], 401);
+        }
+
+        $customer_id = isset($auth_result->customer_id) ? (int)$auth_result->customer_id : 0;
+        if (!$customer_id) {
+            return $this->fail('server_error', ['Invalid user record'], 500);
+        }
+
+        $access = $this->sign_token(['sub' => $customer_id, 'type' => 'access', 'role' => 'customer'], $this->access_ttl);
+        $refresh = $this->sign_token(['sub' => $customer_id, 'type' => 'refresh', 'role' => 'customer'], $this->refresh_ttl);
+
+        $this->_store_refresh_token($customer_id, $refresh);
+
+		// If API is called from the same web origin, also set the normal session
+		// so existing web pages continue to work without changes.
+		$this->session->set_userdata('customer', [
+			'name' => (string)(isset($auth_result->fname) ? $auth_result->fname : (isset($auth_result->full_name) ? $auth_result->full_name : '')),
+			'mobile' => (string)(isset($auth_result->mobile) ? $auth_result->mobile : ''),
+			'email' => (string)(isset($auth_result->email) ? $auth_result->email : ''),
+			'login_id' => (int)$customer_id,
+			'logged_in' => true,
+			'access_token' => (string)$access,
+			'refresh_token' => (string)$refresh,
+		]);
+
+		// Always clear any stale currency from a previous customer's session, then
+		// restore this customer's own preferred currency from the DB.
+		$this->session->unset_userdata('cur');
+		unset($_SESSION['cur']);
+		$pref = $this->db
+		    ->select('preferred_currency_id')
+		    ->from('ec_customer')
+		    ->where('customer_id', $customer_id)
+		    ->get()->row();
+		if ($pref && !empty($pref->preferred_currency_id)) {
+		    $this->session->set_userdata('cur', (int)$pref->preferred_currency_id);
+		    $_SESSION['cur'] = (int)$pref->preferred_currency_id;
+		}
+
+        return $this->ok([
+            'access_token' => $access,
+            'token_type' => 'Bearer',
+            'expires_in' => $this->access_ttl,
+            'refresh_token' => $refresh,
+            'user' => [
+                'customer_id' => $customer_id,
+                'email' => isset($auth_result->email) ? $auth_result->email : null,
+                'mobile' => isset($auth_result->mobile) ? $auth_result->mobile : null,
+                'fname' => isset($auth_result->fname) ? $auth_result->fname : (isset($auth_result->full_name) ? $auth_result->full_name : null),
+            ]
+        ]);
+    }
+
+    public function register()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+
+        $email = isset($payload['email']) ? trim((string)$payload['email']) : '';
+        $mobile = isset($payload['mobile']) ? trim((string)$payload['mobile']) : '';
+        $password = isset($payload['password']) ? (string)$payload['password'] : '';
+        $fname = isset($payload['fname']) ? trim((string)$payload['fname']) : (isset($payload['full_name']) ? trim((string)$payload['full_name']) : '');
+
+        if ($email === '' || $mobile === '' || $password === '' || $fname === '') {
+            return $this->fail('validation_error', ['fname, email, mobile and password are required'], 422);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail('validation_error', ['Please provide a valid email address'], 422);
+        }
+
+        $exists = $this->Auth_model->is_exist_email_or_mobile($email, $mobile);
+        if ($exists) {
+            return $this->fail('already_exists', ['Account already exists with this Email/Mobile'], 409);
+        }
+
+        $insert_data = [
+            'customer_uid' => uniqid(),
+            'fname' => $fname,
+            'password' => password_hash($password, PASSWORD_BCRYPT),
+            'status' => '1',
+            'role' => 'customer',
+            'date_added' => date('Y-m-d H:i:s'),
+            'ip_address' => $this->input->ip_address(),
+        ];
+
+        $insert_data['email'] = $email;
+        $insert_data['mobile'] = $mobile;
+
+        $new_id = $this->Query_model->insert_data('ec_customer', $insert_data);
+        if (!$new_id) {
+            return $this->fail('server_error', ['Registration failed'], 500);
+        }
+
+        return $this->ok([
+            'customer_id' => (int)$new_id,
+            'message' => 'Account created successfully'
+        ], 'success');
+    }
+
+    public function refresh_token()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $refresh = isset($payload['refresh_token']) ? (string)$payload['refresh_token'] : '';
+        if ($refresh === '') {
+            return $this->fail('validation_error', ['refresh_token is required'], 422);
+        }
+
+        $claims = $this->verify_token($refresh);
+        if (!$claims || !isset($claims['sub']) || ($claims['type'] ?? '') !== 'refresh') {
+            return $this->fail('invalid_token', ['Invalid refresh token'], 401);
+        }
+
+        $customer_id = (int)$claims['sub'];
+        if (!$customer_id) {
+            return $this->fail('invalid_token', ['Invalid refresh token'], 401);
+        }
+
+        if (!$this->_is_refresh_token_valid($customer_id, $refresh)) {
+            return $this->fail('invalid_token', ['Refresh token revoked'], 401);
+        }
+
+        $access = $this->sign_token(['sub' => $customer_id, 'type' => 'access', 'role' => 'customer'], $this->access_ttl);
+        return $this->ok([
+            'access_token' => $access,
+            'token_type' => 'Bearer',
+            'expires_in' => $this->access_ttl,
+        ]);
+    }
+
+    public function logout()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $refresh = isset($payload['refresh_token']) ? (string)$payload['refresh_token'] : '';
+
+        // If token store exists, revoke refresh token.
+        if ($refresh !== '') {
+            $claims = $this->verify_token($refresh);
+            $customer_id = ($claims && isset($claims['sub'])) ? (int)$claims['sub'] : 0;
+            if ($customer_id) {
+                $this->_revoke_refresh_token($customer_id, $refresh);
+            }
+        }
+
+        // Clear PHP session: remove customer identity and currency so the next
+        // customer who logs in from the same browser starts with a clean slate.
+        $this->session->unset_userdata('customer');
+        $this->session->unset_userdata('cur');
+        unset($_SESSION['cur']);
+        $this->session->sess_regenerate(TRUE);
+
+        return $this->ok((object)[], 'success');
+    }
+
+    /**
+     * POST /api/v1/auth/forgot-password
+     * Body: { "email": "user@example.com" }
+     * Sends a password reset link to the given email.
+     */
+    public function forgot_password()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $email   = isset($payload['email']) ? trim((string)$payload['email']) : '';
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail('validation_error', ['A valid email address is required'], 422);
+        }
+
+        $user = $this->Query_model->get_data_obj('ec_customer', ['email' => $email]);
+        if (!$user) {
+            return $this->fail('not_found', ['Email not found'], 404);
+        }
+
+        $this->load->helper('string');
+        $token  = random_string('alnum', 50);
+        $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+
+        // Use master DB to write the reset token
+        $this->db->where('email', $email)
+                 ->update('ec_customer', ['reset_token' => $token, 'reset_expiry' => $expiry]);
+
+        // Send the reset email via the existing mail system
+        $this->load->model('Login_model');
+        $reset_link = base_url('customer/forgot-password/reset-password-form?token=' . $token);
+        $this->Login_model->transactional_mail_send([
+            'template_uid' => '679b255869791',
+            'to'           => $user->email,
+            'LINK'         => $reset_link,
+            'func_name'    => 'forgot_func'
+        ]);
+
+        return $this->ok((object)[], 'If this email exists, a reset link has been sent.');
+    }
+
+    /**
+     * POST /api/v1/auth/reset-password
+     * Body: { "token": "...", "new_password": "..." }
+     * Resets the customer password using the token from the email link.
+     */
+    public function reset_password()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        $payload     = array_merge($this->get_json_input(), $this->input->post(NULL, true) ?: []);
+        $token       = isset($payload['token']) ? trim((string)$payload['token']) : '';
+        $new_password = isset($payload['new_password']) ? (string)$payload['new_password'] : '';
+
+        if ($token === '' || $new_password === '') {
+            return $this->fail('validation_error', ['token and new_password are required'], 422);
+        }
+
+        if (strlen($new_password) < 6) {
+            return $this->fail('validation_error', ['Password must be at least 6 characters'], 422);
+        }
+
+        $user = $this->Query_model->get_data_obj('ec_customer', ['reset_token' => $token]);
+        if (!$user || !isset($user->reset_expiry) || strtotime($user->reset_expiry) < time()) {
+            return $this->fail('invalid_token', ['Invalid or expired reset token'], 400);
+        }
+
+        // Use password_hash for compatibility with API login (which uses password_verify)
+        $this->db->where('customer_id', (int)$user->customer_id)
+                 ->update('ec_customer', [
+                     'password'     => password_hash($new_password, PASSWORD_BCRYPT),
+                     'reset_token'  => null,
+                     'reset_expiry' => null,
+                 ]);
+
+        return $this->ok((object)[], 'Password has been reset successfully.');
+    }
+
+    private function _token_store_enabled()
+    {
+        return isset($this->db) && $this->db->table_exists('ec_api_tokens');
+    }
+
+    private function _store_refresh_token($customer_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            return;
+        }
+
+        $hash = hash('sha256', $refresh_token);
+        $data = [
+            'user_type' => 'customer',
+            'user_id' => (int)$customer_id,
+            'token_hash' => $hash,
+            'expires_at' => date('Y-m-d H:i:s', time() + $this->refresh_ttl),
+            'revoked' => 0,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+        $this->db->insert('ec_api_tokens', $data);
+    }
+
+    private function _is_refresh_token_valid($customer_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            // Stateless mode: signature+exp already checked.
+            return true;
+        }
+
+        $hash = hash('sha256', $refresh_token);
+        $row = $this->db
+            ->from('ec_api_tokens')
+            ->where('user_type', 'customer')
+            ->where('user_id', (int)$customer_id)
+            ->where('token_hash', $hash)
+            ->where('revoked', 0)
+            ->get()->row();
+        return (bool)$row;
+    }
+
+    private function _revoke_refresh_token($customer_id, $refresh_token)
+    {
+        if (!$this->_token_store_enabled()) {
+            return;
+        }
+
+        $hash = hash('sha256', $refresh_token);
+        $this->db
+            ->where('user_type', 'customer')
+            ->where('user_id', (int)$customer_id)
+            ->where('token_hash', $hash)
+            ->update('ec_api_tokens', ['revoked' => 1]);
+    }
+}

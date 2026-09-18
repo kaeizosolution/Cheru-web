@@ -1,0 +1,143 @@
+<?php 
+   $register_lang = get_page_language_data('register_page_lang');
+?> 
+ <section>
+	  	<img src="/assets/frontend/images/p_banner.jpg" class="img-fluid w-100" alt="">
+	  </section>
+	
+	  <section>
+		  
+		  <div class="container">
+		
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb text-uppercase">
+            <li class="breadcrumb-item"><a href="<?php echo base_url();?>"><?= $register_lang->home ?? 'Home' ?></a></li>
+            <li class="breadcrumb-item active" aria-current="page"><?= $register_lang->my_account ?? 'My Account' ?></li>
+        </ol>
+
+     </nav>
+			 
+	<div class="row">
+	
+  <?php include('profile_left_menu.php');?>
+
+	<div class="col-md-9">
+		<div class=" card border ac-detail">
+			<h3><?php if($shipping_address_id !='') { echo $register_lang->update; }else{ echo "$register_lang->add "; } ?> <?= $register_lang->shipping_address; ?> </h3>
+			<div class="row">
+				<div class="col-md-12">
+          <div id="SubmitShippingFrom"></div>
+          <?php if ((isset($message) && $message['error']!='') || validation_errors()!='') { ?>
+            <div class="alert alert-danger">
+                <?= validation_errors();
+                    if($message['error']!=''){
+                        echo $message['error'];
+                    }
+                ?>
+            </div>
+            <?php } ?>
+					<div class="ac-box border my-form">
+          <form class="form-group" method="POST" id="AddShippingFrom">
+          <input type="hidden" name="shipping_address_id" value="<?= isset($shipping_address_id) ? $shipping_address_id : ''; ?>" />
+          <div class="form-row">
+            <div class="form-group col-md-4">
+              <label for="FirstName"><?= $register_lang->first_name; ?></label>
+              <input type="text" name="fname" class="form-control" id="FirstName" placeholder="<?= $register_lang->first_name; ?>" value="<?= isset($shippingaddress->fname) ? $shippingaddress->fname : ''?>" required maxlength="30" />
+            </div>
+            <div class="form-group col-md-4">
+              <label for="LastName"><?= $register_lang->last_name; ?></label>
+              <input type="text" name="lname" class="form-control" id="LastName" placeholder="<?= $register_lang->last_name; ?>" value="<?= isset($shippingaddress->lname) ? $shippingaddress->lname : ''?>"  required maxlength="30" />
+            </div>
+            <div class="form-group col-md-4">
+              <label for="MobileNo"><?= $register_lang->mobile_number; ?></label>
+              <input type="text" name="mobile" class="form-control" placeholder="<?= $register_lang->mobile_number; ?>" value="<?= isset($shippingaddress->mobile) ? $shippingaddress->mobile : ''?>" onkeypress="return isNumberKey(event)" data-parsley-pattern="^((5|6|7|8|9)[0-9]{9})$" data-parsley-error-message="Please enter valid mobile number." data-parsley-errors-container="#mobile_error" maxlength="10" required />
+            </div>
+            <div class="form-group col-md-6">
+              <input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>" />
+              <label for="Street"><?= $register_lang->street; ?></label>
+              <input type="text" name="street" placeholder="<?= $register_lang->street; ?>" class="form-control" id="Street"  value="<?= isset($shippingaddress->street) ? $shippingaddress->street : ''?>" required maxlength="50" />
+            </div>
+            <div class="form-group col-md-6">
+              <label for="CityName"><?= $register_lang->city; ?></label>
+              <input type="text" class="form-control" placeholder="<?= $register_lang->city; ?>" name="city" id="CityName" value="<?= isset($shippingaddress->city) ? $shippingaddress->city : ''?>" required maxlength="50" />
+            </div>
+           <div class="form-group col-md-6">
+                <label for="ZipCode"><?= $register_lang->zip_code; ?></label>
+                <input type="text" name="postcode" class="form-control" placeholder="<?= $register_lang->zip_code; ?>" id="ZipCode" value="<?= isset($shippingaddress->postcode) ? $shippingaddress->postcode : ''?>" required maxlength="6" />
+            </div>
+            <div class="form-group col-md-6">
+                <label for="CountryName"><?= $register_lang->country; ?></label>
+                <select name="country" id="CountryName" class="form-control" required />
+                  <option value=""><?= $register_lang->country_name; ?></option>
+                  <?php foreach($country_list as $countrydata){
+                      if($shippingaddress->country == $countrydata->country_id) {?>
+                      
+                      <option value="<?= $countrydata->country_id; ?>" selected ><?= $countrydata->name; ?></option>
+
+                  <?php }else{ ?>
+
+                    <option value="<?= $countrydata->country_id; ?>" ><?= $countrydata->name; ?></option>
+
+                  <?php } } ?>
+
+                </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="AddressDetail"><?= $register_lang->address_detail; ?></label>
+        	  <textarea class="form-control add" name="address_1" id="AddressDetail" placeholder="<?= $register_lang->full_address; ?>" maxlength="100" ><?= isset($shippingaddress->address_1) ? $shippingaddress->address_1 : ''?></textarea>
+          </div>
+
+					<div class="form-group">
+						<button class="btn btn-primary w-100" type="submit" name="submit"><?php if($shipping_address_id==''){ echo $register_lang->submit; }else{ echo $register_lang->update; }?> </button>
+					</div>
+					</div>
+        </form>
+				</div>
+	
+			</div>
+		</div>
+	</div>
+	</div>
+</div>
+</section>	  
+<script type="text/javascript">
+function isNumberKey(evt)
+{
+    var charCode = (evt.which) ? evt.which : event.keyCode;
+    if (charCode > 31 && (charCode < 48 || charCode > 57))
+    {
+        return false;
+    }
+    return true;
+}
+
+$(document).on('ready', function() {
+$('#SubmitShippingFrom').hide();
+$('#AddShippingFrom').on('submit', function (e) {
+    e.preventDefault();
+      $.ajax({
+        type: 'POST',
+        url: '/customer/profile/add-shipping-address',
+        data: $('#AddShippingFrom').serialize(),
+        dataType:"json",
+        success: function (response) {          
+                if(response.status == '1'){
+                    $('#SubmitShippingFrom').html(response.message);
+                    $("#AddShippingFrom").trigger("reset");
+                    location.href = '<?=base_url();?>customer/profile/customer-address';
+                    //$('#SubmitShippingFrom').addClass('alert alert-success').show();
+                    //window.setTimeout(function() {
+                         // window.location.href = '<?=base_url();?>customer/profile/customer-address';
+                     // }, 5000);
+                }else{
+                    $('#SubmitShippingFrom').show();
+                    $('#SubmitShippingFrom').addClass('alert alert-danger').html(response.message);
+                    //location.href = '<?=base_url();?>customer/profile/shipping-address';
+                }
+            }
+        });
+    });
+});
+
+</script>

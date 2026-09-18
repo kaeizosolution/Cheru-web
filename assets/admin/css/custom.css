@@ -1,0 +1,128 @@
+.custom-table tbody tr td:last-child .popover-body .btn {padding-left:6px !important;padding-right:6px !important;}
+.topAction-btn {display: block;text-align: right;margin-bottom: 10px;}
+.topAction-btn .addNew {padding-left: 10px;padding-right: 10px;}
+.popover-body {padding:0px;}
+.popover-body .btn {padding:2px 8px;border-radius:0px;}
+.bs-popover-top .arrow::after, .bs-popover-auto[x-placement^="top"] .arrow::after {border-top-color:#f0f0f0;}
+.custom-popover-btn:hover {background:#cccbcb;}
+
+.select2-container .select2-selection--single {height:38px;}
+.select2-container--default .select2-selection--single {border: 1px solid #ced4da;border-radius: 4px !important;}
+.select2-container--default .select2-selection--single .select2-selection__rendered {line-height: 36px;}
+
+.selct2error .select2-container--default .select2-selection--single {border: 1px solid #ff5d48 !important;border-radius: 4px !important;}
+
+.table_btn_add{display: inline-block;padding: 2px 7px;border-radius: 5px;border: 1px solid #bfbfbf;background: #fff;font-size: 12px;}
+.add-product .card-header  { padding: 15px !important;}
+.add-product h5 { font-size: 15px !important;}
+.add-product h5 label:first-child {    border-right: 1px solid #dfdfdf;}
+.add-product h5 label { padding: 0 15px; ;}
+
+.add-product .card-body  { padding: 15px !important;}
+.form-menu { width: 24%;float: left; line-height: 2em; padding: 0 0 10px; position: relative; background-color: #fafafa; border-right: 1px solid #eee; height: 100%;}
+.form-menu .nav-pills .nav-link { border-radius: 0;}
+
+.form-detail { width:75%; float: left; padding: 0 15px;}
+.form-detail i:hover { cursor: pointer;}
+.form-menu .nav-pills .nav-link.active, .nav-pills .show > .nav-link { background-color: #eee; color: #212121;}
+.tooltip-inner {font-size:13px; max-width:200px; padding:3px 8px; color:#fff; text-align:center; background-color:#000; border-radius: .25rem;}
+
+.add-product .card-footer { text-align: right;}
+
+
+
+.single_add_to_cart_button {
+    background: #ee1fa4;
+}
+
+/* Style the Image Used to Trigger the Modal */
+#myImg {
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+#myImg:hover {opacity: 0.5;}
+
+/* The Modal (background) */
+/*.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    padding-top: 100px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; 
+    background-color: rgb(0,0,0); 
+   background-color: rgba(0,0,0,0.9);
+}*/
+
+/* Modal Content (Image) */
+/*.modal-content {
+    margin: auto;
+    display: block;
+    width: 50%;
+    max-width: 500px;
+}*/
+
+/* Caption of Modal Image (Image Text) - Same Width as the Image */
+#caption {
+    margin: auto;
+    display: block;
+    width: 50%;
+    max-width: 500px;
+    text-align: center;
+    color: #ccc;
+    padding: 10px 0;
+    height: 100px;
+}
+
+/* Add Animation - Zoom in the Modal */
+.modal-content, #caption {
+    -webkit-animation-name: zoom;
+    -webkit-animation-duration: 0.6s;
+    animation-name: zoom;
+    animation-duration: 0.6s;
+}
+
+@-webkit-keyframes zoom {
+    from {-webkit-transform:scale(0)}
+    to {-webkit-transform:scale(1)}
+}
+
+@keyframes zoom {
+    from {transform:scale(0)}
+    to {transform:scale(1)}
+}
+
+/* The Close Button */
+/*.close {
+    position: absolute;
+    top: 90px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    transition: 0.3s;
+}*/
+
+.close:hover,
+.close:focus {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* 100% Image Width on Smaller Screens */
+@media only screen and (max-width: 700px){
+    .modal-content {
+        width: 100%;
+    }
+}
+
+
+
+
+

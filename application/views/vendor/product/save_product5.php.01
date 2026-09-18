@@ -1,0 +1,1110 @@
+<?php
+$is_edit    = isset($product) && $product && !empty($product->id);
+$page_title = $is_edit ? 'Edit Product' : 'Add New Product';
+?>
+
+<style>
+    :root {
+        --primary: #6366f1;
+        --dark: #1e293b;
+        --light-gray: #f8fafc;
+        --border-color: #e2e8f0;
+        --sidebar-color: #191c4d;
+    }
+
+    .page-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+        background: #fff;
+        margin-bottom: 24px;
+    }
+
+    .page-card .card-header {
+        background: #fff;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--dark);
+    }
+
+    .page-card .card-body {
+        padding: 24px;
+    }
+
+    /* Product type toggle */
+    .type-toggle {
+        background: #f1f5f9;
+        border-radius: 10px;
+        display: inline-flex;
+        padding: 4px;
+    }
+
+    .type-toggle label {
+        padding: 8px 22px;
+        margin: 0;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+        color: #64748b;
+        transition: all 0.2s;
+    }
+
+    .type-toggle input { display: none; }
+    .type-toggle label.active {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+    }
+
+    /* Form controls */
+    .form-group label {
+        font-weight: 600;
+        font-size: 13px;
+        color: #475569;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .form-control {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 9px 14px;
+        font-size: 14px;
+        color: var(--dark);
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: #fff;
+    }
+
+    .form-control.form-control-sm {
+        background: #fff;
+        color: var(--dark);
+    }
+
+    .form-control:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        outline: none;
+    }
+
+    /* Attribute picker */
+    .attr-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 14px;
+        background: var(--light-gray);
+        max-height: 160px;
+        overflow-y: auto;
+    }
+
+    .attr-chip {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.18s;
+    }
+
+    .attr-chip input { display: none; }
+    .attr-chip.selected {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+    }
+
+    /* Tier pricing row */
+    .tier-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-left: 3px solid var(--primary);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+    }
+
+    .tier-row input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        font-size: 13px;
+        color: var(--dark);
+        min-width: 0;
+        text-align: center;
+    }
+
+    .tier-row input:focus { outline: none; }
+    .tier-sep { color: #cbd5e1; font-weight: 700; }
+
+    /* Variation table */
+    #variationTable { width: 100%; border-collapse: collapse; }
+    #variationTable thead th {
+        background: var(--light-gray);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #64748b;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-color);
+    }
+    #variationTable tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-color);
+        vertical-align: top;
+    }
+    #variationTable tbody tr:hover { background: #fafbff; }
+
+    #variationTable select.form-control,
+    #variationTable select.form-control-sm {
+        width: 100%;
+        min-width: 120px;
+        height: 38px;
+        padding: 8px 32px 8px 10px;
+        font-size: 13px;
+        line-height: 1.2;
+        background: #fff;
+        color: var(--dark);
+        -webkit-appearance: auto;
+        -moz-appearance: auto;
+        appearance: auto;
+    }
+
+    #variationTable td {
+        white-space: nowrap;
+    }
+
+    /* Img preview */
+    .img-thumb-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .img-thumb-item { position: relative; width: 56px; height: 56px; }
+    .img-thumb-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid var(--border-color); }
+    .img-thumb-item .del-img { position: absolute; top: -6px; right: -6px; background: #ef4444; color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+    /* Action buttons */
+    .btn-primary-custom {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 28px;
+        font-weight: 600;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    .btn-primary-custom:hover { background: #4f46e5; transform: translateY(-1px); }
+
+    .btn-outline-custom {
+        background: transparent;
+        color: var(--primary);
+        border: 1.5px solid var(--primary);
+        border-radius: 8px;
+        padding: 7px 18px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-outline-custom:hover { background: var(--primary); color: #fff; }
+
+    .btn-icon-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 9px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-icon-danger:hover { background: #ef4444; color: #fff; }
+
+    .section-icon { color: var(--primary); margin-right: 8px; }
+
+    /* Video upload */
+    .video-upload-zone {
+        border: 2px dashed var(--border-color);
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        background: #fafbff;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        position: relative;
+    }
+    .video-upload-zone:hover {
+        border-color: var(--primary);
+        background: #f5f3ff;
+    }
+    .video-upload-zone .upload-icon {
+        font-size: 36px;
+        color: var(--primary);
+        margin-bottom: 8px;
+    }
+    .video-upload-zone p {
+        font-size: 13px;
+        color: #94a3b8;
+        margin: 0;
+    }
+    .video-upload-zone input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+    }
+    #videoPreviewWrap {
+        margin-top: 16px;
+        display: none;
+    }
+    #videoPreviewWrap video {
+        width: 100%;
+        max-height: 300px;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        background: #000;
+    }
+    .video-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 13px;
+        color: #16a34a;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .video-badge i { font-size: 15px; }
+</style>
+
+<div class="content-body">
+    <div class="container-fluid">
+
+        <!-- Page title bar -->
+        <div class="row page-titles mb-3">
+            <div class="col-12 d-flex align-items-center justify-content-between">
+                <h3 style="font-family:'Poppins',sans-serif; font-weight:700; color:#1e293b; margin:0;">
+                    <?= $page_title ?>
+                </h3>
+                <a href="<?= base_url("{$TYPE}/product") ?>" class="btn-outline-custom">
+                    <i class="fa fa-arrow-left mr-1"></i> Back to Products
+                </a>
+            </div>
+        </div>
+
+        <form id="productForm" enctype="multipart/form-data">
+            <input type="hidden" name="product_id" value="<?= $product->id ?? 0 ?>">
+
+            <div class="row">
+                <div class="col-12">
+
+                    <!-- ── Basic Info ─────────────────────────────── -->
+                    <div class="page-card">
+                        <div class="card-header">
+                            <span><i class="fa fa-info-circle section-icon"></i> Basic Information</span>
+                            <div class="type-toggle">
+                                <label id="lbl-simple" class="<?= (!$is_edit || ($product->product_type ?? '') === 'simple') ? 'active' : '' ?>">
+                                    <input type="radio" name="product_type" value="simple"
+                                        <?= (!$is_edit || ($product->product_type ?? 'simple') === 'simple') ? 'checked' : '' ?>>
+                                    Simple
+                                </label>
+                                <label id="lbl-variable" class="<?= ($is_edit && ($product->product_type ?? '') === 'variable') ? 'active' : '' ?>">
+                                    <input type="radio" name="product_type" value="variable"
+                                        <?= ($is_edit && ($product->product_type ?? '') === 'variable') ? 'checked' : '' ?>>
+                                    Variable
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <div class="form-group mb-0">
+                                        <label>Product Name <span class="text-danger">*</span></label>
+                                        <input type="text" name="product_name" id="product_name" class="form-control"
+                                            placeholder="e.g. Premium Wireless Headphones"
+                                            value="<?= htmlspecialchars($product->name ?? '') ?>" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SKU + Stock row -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-0">
+                                        <label><i class="fa fa-barcode section-icon"></i> SKU <span class="text-danger">*</span></label>
+                                        <input type="text" name="sku" id="field_sku" class="form-control"
+                                            placeholder="e.g. WH-1000XM5-BLK"
+                                            value="<?= htmlspecialchars($product->sku ?? '') ?>"
+                                            <?= (!$is_edit) ? 'required' : '' ?>>
+                                        <small class="text-muted">Unique product identifier (Stock Keeping Unit)</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" id="global_stock_wrapper">
+                                    <div class="form-group mb-0">
+                                        <label><i class="fa fa-boxes section-icon"></i> Stock Quantity</label>
+                                        <input type="number" name="stock" id="field_stock" class="form-control"
+                                            placeholder="e.g. 100" min="0"
+                                            value="<?= isset($product->stock) && $product->stock !== null ? (int)$product->stock : '' ?>">
+                                        <small class="text-muted">Leave blank for unlimited / not tracked</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="form-group mb-0">
+                                        <label>Category</label>
+                                        <select id="category" name="cat" class="form-control">
+                                            <option value="">Select Category</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-0">
+                                        <label>Sub Category</label>
+                                        <select id="subCategory" name="sub_cat" class="form-control">
+                                            <option value="">Sub Category</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-0">
+                                        <label>Sub-Sub Category</label>
+                                        <select id="subSubCategory" name="sub_sub_cat" class="form-control">
+                                            <option value="">Sub-Sub Category</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="form-group mb-0">
+                                        <label>Brand</label>
+                                        <select id="brand_id" name="brand_id" class="form-control">
+                                            <option value="">Select Brand</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-0">
+                                <label>Product Description</label>
+                                <textarea name="description" class="form-control" rows="3"
+                                    placeholder="Write a clear product description..."><?= htmlspecialchars($product->description ?? '') ?></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- ── Simple Product Section ─────────────────── -->
+                    <div id="simpleSection" class="page-card">
+                        <div class="card-header">
+                            <span><i class="fa fa-tag section-icon"></i> Pricing &amp; Media</span>
+                            <button type="button" class="btn-outline-custom" id="addSimpleTier">
+                                <i class="fa fa-plus mr-1"></i> Add Tier
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <input type="hidden" name="simple_variation_id" id="simple_variation_id" value="">
+                            <div class="row">
+                                <div class="col-md-5">
+                                    <div class="form-group">
+                                        <label><i class="fa fa-image section-icon"></i> Product Images <small class="text-muted">(Max 5)</small></label>
+                                        <input type="file" name="variation_images[0][]" multiple
+                                            accept="image/jpg,image/jpeg,image/png,image/webp"
+                                            class="form-control-file border p-2 rounded bg-light">
+                                        <div id="simpleImgPreview" class="img-thumb-wrap mt-2"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <div class="form-group mb-1">
+                                        <label><i class="fa fa-layer-group section-icon"></i> Bulk Pricing Tiers</label>
+                                        <div class="mb-1" style="display:flex; gap:8px; font-size:11px; color:#94a3b8; font-weight:600; padding: 0 12px;">
+                                            <span style="flex:1; text-align:center;">MIN QTY</span>
+                                            <span style="flex:1; text-align:center;">MAX QTY</span>
+                                            <span style="flex:1; text-align:center;">PRICE</span>
+                                            <span style="width:30px;"></span>
+                                        </div>
+                                    </div>
+                                    <div id="simpleTierContainer">
+                                        <div class="tier-row">
+                                            <input type="number" name="simple_min_qty[]" placeholder="1" value="1" min="1">
+                                            <span class="tier-sep">|</span>
+                                            <input type="number" name="simple_max_qty[]" placeholder="∞">
+                                            <span class="tier-sep">|</span>
+                                            <input type="number" step="0.01" name="simple_price[]" placeholder="0.00">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Product Video ──────────────────────────── -->
+                    <div class="page-card" id="videoSection">
+                        <div class="card-header">
+                            <span><i class="fa fa-video section-icon"></i> Product Video <small class="text-muted" style="font-size:12px; font-weight:400;">(Optional &mdash; MP4, MOV, WEBM &mdash; max 200 MB)</small></span>
+                        </div>
+                        <div class="card-body">
+                            <?php
+                            $existing_video = isset($product->video_path) && $product->video_path ? $product->video_path : '';
+                            ?>
+                            <?php if ($existing_video) { ?>
+                            <div id="existingVideoWrap">
+                                <div class="video-badge"><i class="fa fa-check-circle"></i> Current video uploaded</div>
+                                <video id="existingVideoPlayer" controls style="width:100%; max-height:280px; border-radius:10px; border:1px solid #e2e8f0; background:#000; display:block; margin-bottom:12px;">
+                                    <source src="<?php echo base_url('uploads/product_videos/' . $existing_video); ?>" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                                <button type="button" id="removeVideoBtn" class="btn-icon-danger" style="padding:7px 14px; border-radius:8px; font-size:13px;"
+                                    data-product_id="<?php echo $product->id ?? 0; ?>">
+                                    <i class="fa fa-trash"></i> Remove Video
+                                </button>
+                            </div>
+                            <?php } ?>
+
+                            <div class="video-upload-zone" id="videoUploadZone" style="<?php echo $existing_video ? 'margin-top:16px;' : ''; ?>">
+                                <input type="file" name="product_video" id="productVideoInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-ms-wmv,video/webm,video/x-matroska">
+                                <div class="upload-icon"><i class="fa fa-cloud-upload-alt"></i></div>
+                                <p><strong>Click to upload</strong> or drag &amp; drop a video file</p>
+                                <p style="margin-top:4px;">MP4, MOV, AVI, WEBM &mdash; up to 200 MB</p>
+                            </div>
+
+                            <div id="videoPreviewWrap">
+                                <video id="videoPreview" controls>
+                                    <source id="videoPreviewSrc" src="" type="video/mp4">
+                                </video>
+                                <p style="font-size:12px; color:#64748b; margin-top:6px;" id="videoFileName"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Variable Product Section ───────────────── -->
+                    <div id="attributeSection" style="display:none;">
+
+                        <div class="page-card">
+                            <div class="card-header">
+                                <span><i class="fa fa-sliders-h section-icon"></i> Select Attributes</span>
+                                <input type="text" id="attrSearch" class="form-control"
+                                    style="max-width:220px; padding:6px 12px; font-size:13px;"
+                                    placeholder="Search attributes...">
+                            </div>
+                            <div class="card-body">
+                                <div class="attr-picker" id="attrList"></div>
+                            </div>
+                        </div>
+
+                        <div class="page-card">
+                            <div class="card-header">
+                                <span><i class="fa fa-table section-icon"></i> Variations &amp; Pricing Matrix</span>
+                                <button type="button" class="btn-primary-custom" id="addVarRow" style="padding:8px 18px; font-size:13px;">
+                                    <i class="fa fa-plus mr-1"></i> Add Variation
+                                </button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table id="variationTable" style="display:none;">
+                                        <thead>
+                                            <tr id="varHeader">
+                                                <th id="mediaHeader" style="min-width:160px;">Media</th>
+                                                <th style="min-width:260px;">Price Tiers <small class="font-weight-normal">(Min | Max | Price)</small></th>
+                                                <th style="min-width:120px;">Stock</th>
+                                                <th class="text-center" style="width:80px;">Remove</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="varBody"></tbody>
+                                    </table>
+                                    <div id="noAttrMsg" class="text-center py-5 text-muted">
+                                        <i class="fa fa-mouse-pointer fa-2x mb-2 d-block"></i>
+                                        Select attributes above to start adding variations.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- ── Save Button ────────────────────────────── -->
+                    <div class="d-flex justify-content-end mb-5">
+                        <a href="<?= base_url("{$TYPE}/product") ?>" class="btn-outline-custom mr-3">Cancel</a>
+                        <button type="submit" class="btn-primary-custom" id="saveBtn">
+                            <i class="fa fa-check mr-1"></i> <?= $is_edit ? 'Update Product' : 'Publish Product' ?>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+<script>
+let productData    = <?= json_encode($product    ?? []) ?>;
+let variationData  = <?= json_encode($variations ?? []) ?>;
+const categories   = <?= json_encode($categories ?? []) ?>;
+let attributes     = <?= json_encode($attributes ?? []) ?>;
+let attr_items     = <?= json_encode($attr_items ?? []) ?>;
+$(document).ready(function () {
+
+    // ── Build attribute registry ──────────────────────────────────────────
+
+    const attributeRegistry = {};
+    attributes.forEach(attr => {
+        const options = attr_items
+            .filter(item => item.attribute_id == attr.attribute_id)
+            .map(item => ({ id: item.attribute_item_id, name: item.name.trim() }));
+        if (options.length > 0) {
+            attributeRegistry[attr.attribute_id] = { label: attr.name, options };
+        }
+    });
+
+    // ── Category & Brand API helpers ──────────────────────────────────────
+    const API_TOKEN = '<?= isset($access_token) ? htmlspecialchars($access_token, ENT_QUOTES, 'UTF-8') : '' ?>';
+    const API_BASE  = '<?= base_url('api/v1/vendor/products') ?>';
+
+    function loadCategories($el, parentId, label, selectedVal, callback) {
+        $el.empty().append('<option value="">Loading...</option>').prop('disabled', true);
+        $.ajax({
+            url: API_BASE + '/categories',
+            type: 'POST',
+            dataType: 'json',
+            headers: API_TOKEN ? { 'Authorization': 'Bearer ' + API_TOKEN } : {},
+            data: { parent_id: parentId || 0 },
+            success: function(resp) {
+                var cats = (resp && resp.data && resp.data.categories) ? resp.data.categories : [];
+                $el.empty().append('<option value="">Select ' + label + '</option>');
+                if (cats.length > 0) {
+                    $el.prop('disabled', false);
+                    cats.forEach(function(c) {
+                        $el.append($('<option>', { value: c.id, text: (c.name || '').trim() }));
+                    });
+                    if (selectedVal) { $el.val(String(selectedVal)); }
+                } else {
+                    $el.prop('disabled', true);
+                }
+                if (typeof callback === 'function') callback();
+            },
+            error: function() {
+                $el.empty().append('<option value="">Select ' + label + '</option>').prop('disabled', true);
+                if (typeof callback === 'function') callback();
+            }
+        });
+    }
+
+    function loadBrandsByCategory(catId, selectedBrandId) {
+        var cid = parseInt(catId || 0, 10);
+        $('#brand_id').html('<option value="">Loading...</option>').prop('disabled', true);
+        var reqData = cid ? { category_id: cid } : {};
+        $.ajax({
+            url: API_BASE + '/brands',
+            type: 'POST',
+            dataType: 'json',
+            headers: API_TOKEN ? { 'Authorization': 'Bearer ' + API_TOKEN } : {},
+            data: reqData,
+            success: function(resp){
+                var data = (resp && resp.data && resp.data.brands) ? resp.data.brands : [];
+                var html = '<option value="">Select Brand</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(function(b){
+                        if (!b) return;
+                        html += '<option value="'+b.brand_id+'">'+(b.name || '')+'</option>';
+                    });
+                }
+                $('#brand_id').html(html).prop('disabled', false);
+                if (selectedBrandId) {
+                    $('#brand_id').val(String(selectedBrandId));
+                }
+            },
+            error: function(){
+                $('#brand_id').html('<option value="">Select Brand</option>').prop('disabled', false);
+            }
+        });
+    }
+
+    loadCategories($('#category'), 0, 'Category', null);
+    $('#category').on('change', function () {
+        var catId = $(this).val();
+        $('#subCategory').html('<option value="">Sub Category</option>').prop('disabled', true);
+        $('#subSubCategory').html('<option value="">Select Sub-Sub Category</option>').prop('disabled', true);
+        if (catId) {
+            loadCategories($('#subCategory'), catId, 'Sub Category', null);
+            loadBrandsByCategory(catId, null);
+        } else {
+            loadBrandsByCategory(0, null);
+        }
+    });
+    $('#subCategory').on('change', function () {
+        var subCatId = $(this).val();
+        $('#subSubCategory').html('<option value="">Select Sub-Sub Category</option>').prop('disabled', true);
+        if (subCatId) {
+            loadCategories($('#subSubCategory'), subCatId, 'Sub-Sub Category', null);
+        }
+    });
+
+    // ── Render attribute picker ───────────────────────────────────────────
+    function renderAttributes() {
+        let html = '';
+        attributes.forEach(attr => {
+            if (attributeRegistry[attr.attribute_id]) {
+                html += `<label class="attr-chip" data-id="${attr.attribute_id}">
+                    <input type="checkbox" class="attr-check" value="${attr.attribute_id}" data-label="${attr.name.toUpperCase()}">
+                    <i class="fa fa-check" style="font-size:10px; display:none;"></i>
+                    ${attr.name}
+                </label>`;
+            }
+        });
+        $('#attrList').html(html);
+    }
+    renderAttributes();
+
+    // Attr chip visual toggle
+    $(document).on('change', '.attr-check', function () {
+        const $chip = $(this).closest('.attr-chip');
+        if ($(this).is(':checked')) {
+            $chip.addClass('selected').find('i').show();
+        } else {
+            $chip.removeClass('selected').find('i').hide();
+        }
+        if ($('.attr-check:checked').length > 0) {
+            $('#variationTable').show();
+            $('#noAttrMsg').hide();
+            updateTableHeaders();
+        } else {
+            $('#variationTable').hide();
+            $('#noAttrMsg').show();
+            $('#varBody').empty();
+        }
+    });
+
+    $('#attrSearch').on('keyup', function () {
+        const val = $(this).val().toLowerCase();
+        $('.attr-chip').filter(function () { $(this).toggle($(this).text().toLowerCase().indexOf(val) > -1); });
+    });
+
+    // ── Product type toggle ───────────────────────────────────────────────
+    $('input[name="product_type"]').on('change', function () {
+        $('.type-toggle label').removeClass('active');
+        $(this).parent().addClass('active');
+        if ($(this).val() === 'variable') {
+            $('#attributeSection').show();
+            $('#simpleSection').hide();
+            $('#global_stock_wrapper').hide();
+        } else {
+            $('#attributeSection').hide();
+            $('#simpleSection').show();
+            $('#global_stock_wrapper').show();
+        }
+    });
+
+    // ── Simple tier add/remove ────────────────────────────────────────────
+    $('#addSimpleTier').click(function () {
+        $('#simpleTierContainer').append(`
+            <div class="tier-row">
+                <input type="number" name="simple_min_qty[]" placeholder="Min Qty">
+                <span class="tier-sep">|</span>
+                <input type="number" name="simple_max_qty[]" placeholder="Max Qty">
+                <span class="tier-sep">|</span>
+                <input type="number" step="0.01" name="simple_price[]" placeholder="Price">
+                <button type="button" class="btn-icon-danger remove-simple-tier"><i class="fa fa-times"></i></button>
+            </div>`);
+    });
+    $(document).on('click', '.remove-simple-tier', function () { $(this).closest('.tier-row').remove(); });
+
+    // ── Variation table ───────────────────────────────────────────────────
+    let varRowCount = 0;
+
+    function updateTableHeaders() {
+        $('.dyn-h').remove();
+        $('.attr-check:checked').each(function () {
+            $('#mediaHeader').before(`<th class="dyn-h">${$(this).data('label')}</th>`);
+        });
+    }
+
+    function addVariationRow(data = null) {
+        const selected = $('.attr-check:checked');
+        if (selected.length === 0) { alert('Select attributes first'); return; }
+        varRowCount++;
+
+        let row = `<tr class="var-row">`;
+        selected.each(function () {
+            const attrId   = $(this).val();
+            const attrData = attributeRegistry[attrId];
+            const savedId  = data?.attr?.[attrId] ?? '';
+            let sel = `<td><select name="vars[${varRowCount}][attr][${attrId}]" class="form-control form-control-sm">`;
+            attrData.options.forEach(opt => {
+                const selected = (opt.id == savedId) ? 'selected' : '';
+                sel += `<option ${selected} value="${opt.id}">${opt.name}</option>`;
+            });
+            row += sel + '</select></td>';
+        });
+
+        // Media column
+        row += `<td>
+            <input type="hidden" name="vars[${varRowCount}][variation_id]" value="${data?.id ?? ''}">
+            <input type="file" name="variation_images[${varRowCount}][]" multiple accept="image/*" class="form-control-file" style="font-size:12px;">
+            <div class="img-thumb-wrap">`;
+        if (data?.images) {
+            data.images.forEach(img => {
+                row += `<div class="img-thumb-item">
+                    <img src="<?= base_url('uploads/products/') ?>${img.image_path}" alt="">
+                    <button type="button" class="del-img delete-img" data-id="${img.id}">×</button>
+                </div>`;
+            });
+        }
+        row += `</div></td>`;
+
+        // Price tiers column
+        row += `<td><div id="tier_wrap_${varRowCount}">`;
+        if (data?.prices && data.prices.length) {
+            data.prices.forEach(p => {
+                row += `<div class="tier-row">
+                    <input type="number" name="vars[${varRowCount}][min_qty][]" value="${p.min_qty}" placeholder="Min">
+                    <span class="tier-sep">|</span>
+                    <input type="number" name="vars[${varRowCount}][max_qty][]" value="${p.max_qty}" placeholder="Max">
+                    <span class="tier-sep">|</span>
+                    <input type="number" step="0.01" name="vars[${varRowCount}][price][]" value="${p.price}" placeholder="Price">
+                    <button type="button" class="btn-icon-danger remove-sub-tier"><i class="fa fa-times"></i></button>
+                </div>`;
+            });
+        } else {
+            row += `<div class="tier-row">
+                <input type="number" name="vars[${varRowCount}][min_qty][]" value="1" placeholder="Min">
+                <span class="tier-sep">|</span>
+                <input type="number" name="vars[${varRowCount}][max_qty][]" placeholder="Max">
+                <span class="tier-sep">|</span>
+                <input type="number" step="0.01" name="vars[${varRowCount}][price][]" placeholder="Price">
+            </div>`;
+        }
+        row += `</div>
+            <button type="button" class="btn-outline-custom mt-2 add-row-tier" data-id="${varRowCount}" style="font-size:12px; padding:4px 10px;">
+                <i class="fa fa-plus"></i> Tier
+            </button></td>`;
+
+        // Stock column (only 1 column for 1 variation)
+        row += `<td>
+            <input type="number" name="vars[${varRowCount}][stock]" value="${data?.stock ?? '1000'}" class="form-control form-control-sm" placeholder="Stock" min="0" style="width:100px;">
+        </td>`;
+
+        // Remove column
+        row += `<td class="text-center">
+            <button type="button" class="btn-icon-danger remove-v" style="padding:7px 10px; border-radius:8px;">
+                <i class="fa fa-trash"></i>
+            </button></td></tr>`;
+
+        $('#varBody').append(row);
+    }
+
+    $('#addVarRow').click(() => addVariationRow());
+
+    $(document).on('click', '.add-row-tier', function () {
+        const id = $(this).data('id');
+        $(`#tier_wrap_${id}`).append(`<div class="tier-row">
+            <input type="number" name="vars[${id}][min_qty][]" placeholder="Min">
+            <span class="tier-sep">|</span>
+            <input type="number" name="vars[${id}][max_qty][]" placeholder="Max">
+            <span class="tier-sep">|</span>
+            <input type="number" step="0.01" name="vars[${id}][price][]" placeholder="Price">
+            <button type="button" class="btn-icon-danger remove-sub-tier"><i class="fa fa-times"></i></button>
+        </div>`);
+    });
+
+    $(document).on('click', '.remove-v',        function () { $(this).closest('tr').remove(); });
+    $(document).on('click', '.remove-sub-tier', function () { $(this).closest('.tier-row').remove(); });
+
+    // ── Delete existing image ─────────────────────────────────────────────
+    $(document).on('click', '.delete-img', function () {
+        const id  = $(this).data('id');
+        const box = $(this).closest('.img-thumb-item');
+        $.post('<?= base_url('vendor/item/delete_image') ?>', { id }, function (res) {
+            if (res.status) box.remove();
+        }, 'json');
+    });
+
+    // ── Video file preview ────────────────────────────────────────────
+    $('#productVideoInput').on('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        const url  = URL.createObjectURL(file);
+        $('#videoPreviewSrc').attr('src', url);
+        $('#videoPreview')[0].load();
+        $('#videoFileName').text(file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)');
+        $('#videoPreviewWrap').show();
+    });
+
+    // ── Remove existing video ─────────────────────────────────────────
+    $(document).on('click', '#removeVideoBtn', function () {
+        if (!confirm('Are you sure you want to remove this video?')) return;
+        const $btn = $(this);
+        const pid  = $btn.data('product_id');
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Removing...');
+        $.post('<?= base_url('vendor/item/delete_video') ?>', { product_id: pid }, function (res) {
+            if (res.status) {
+                $('#existingVideoWrap').slideUp(200, function () { $(this).remove(); });
+            } else {
+                alert(res.msg || 'Failed to remove video.');
+                $btn.prop('disabled', false).html('<i class="fa fa-trash"></i> Remove Video');
+            }
+        }, 'json').fail(function () {
+            alert('Server error. Please try again.');
+            $btn.prop('disabled', false).html('<i class="fa fa-trash"></i> Remove Video');
+        });
+    });
+
+    // ── Prefill on edit ───────────────────────────────────────────────────
+    function prefillProduct() {
+        if (!productData || !productData.id) return;
+
+        $('input[name="product_name"]').val(productData.name);
+        $('textarea[name="description"]').val(productData.description);
+        $('input[name="product_type"][value="' + productData.product_type + '"]').prop('checked', true).trigger('change');
+
+        // Prefill SKU and Stock
+        if (productData.sku)   $('#field_sku').val(productData.sku);
+        if (productData.stock !== undefined && productData.stock !== null) $('#field_stock').val(productData.stock);
+
+        // Restore categories via API (chained callbacks to handle async loading)
+        if (productData.category) {
+            loadCategories($('#category'), 0, 'Category', productData.category, function() {
+                loadBrandsByCategory(productData.category, productData.brand_id || null);
+                loadCategories($('#subCategory'), productData.category, 'Sub Category', productData.sub_category || null, function() {
+                    if (productData.sub_category) {
+                        loadCategories($('#subSubCategory'), productData.sub_category, 'Sub-Sub Category', productData.sub_sub_category || null);
+                    }
+                });
+            });
+        }
+
+        if (productData.product_type === 'variable') {
+            variationData.forEach(v => {
+                Object.keys(v.attr || {}).forEach(key => {
+                    $(`.attr-check[value="${key}"]`).prop('checked', true).trigger('change');
+                });
+            });
+            updateTableHeaders();
+            variationData.forEach(v => addVariationRow(v));
+        }
+
+        if (productData.product_type === 'simple' && variationData.length) {
+            const v = variationData[0];
+            $('#simple_variation_id').val(v.id);
+            $('#simpleTierContainer').html('');
+            v.prices.forEach(p => {
+                $('#simpleTierContainer').append(`<div class="tier-row">
+                    <input type="number" name="simple_min_qty[]" value="${p.min_qty}" placeholder="Min">
+                    <span class="tier-sep">|</span>
+                    <input type="number" name="simple_max_qty[]" value="${p.max_qty}" placeholder="Max">
+                    <span class="tier-sep">|</span>
+                    <input type="number" step="0.01" name="simple_price[]" value="${p.price}" placeholder="Price">
+                    <button type="button" class="btn-icon-danger remove-simple-tier"><i class="fa fa-times"></i></button>
+                </div>`);
+            });
+            if (v.images && v.images.length) {
+                v.images.forEach(img => {
+                    $('#simpleImgPreview').append(`<div class="img-thumb-item">
+                        <img src="<?= base_url('uploads/products/') ?>${img.image_path}" alt="">
+                        <button type="button" class="del-img delete-img" data-id="${img.id}">×</button>
+                    </div>`);
+                });
+            }
+        }
+    }
+
+    const useApi = <?= (isset($use_api) && $use_api) ? 'true' : 'false' ?>;
+    const isEdit = <?= $is_edit ? 'true' : 'false' ?>;
+    const productId = <?= isset($product->id) ? (int)$product->id : 0 ?>;
+
+    if (useApi && isEdit && productId > 0) {
+        $.ajax({
+            url: API_BASE + '/get_details',
+            type: 'POST',
+            dataType: 'json',
+            data: { product_id: productId },
+            headers: API_TOKEN ? { 'Authorization': 'Bearer ' + API_TOKEN } : {},
+            success: function(resp) {
+                if (resp && resp.status === 'success' && resp.data) {
+                    var apiData = resp.data;
+                    productData = {
+                        id: apiData.product_id,
+                        name: apiData.product_name,
+                        description: apiData.description,
+                        product_type: apiData.product_type,
+                        sku: apiData.sku,
+                        stock: apiData.stock,
+                        category: apiData.category_id,
+                        sub_category: apiData.sub_category_id,
+                        sub_sub_category: apiData.sub_sub_category_id,
+                        brand_id: apiData.brand_id
+                    };
+                    
+                    variationData = [];
+                    if (apiData.product_type === 'simple') {
+                        var prices_mapped = [];
+                        if (apiData.price_tiers) {
+                            apiData.price_tiers.forEach(function(p) {
+                                prices_mapped.push({
+                                    id: p.price_id || 0,
+                                    min_qty: p.min_qty,
+                                    max_qty: p.max_qty,
+                                    price: p.price
+                                });
+                            });
+                        }
+                        var images_mapped = [];
+                        if (apiData.images) {
+                            apiData.images.forEach(function(img) {
+                                images_mapped.push({
+                                    id: img.id,
+                                    image_path: img.image_path
+                                });
+                            });
+                        }
+                        variationData.push({
+                            id: $('#simple_variation_id').val() || 0,
+                            prices: prices_mapped,
+                            images: images_mapped
+                        });
+                    } else if (apiData.variations) {
+                        apiData.variations.forEach(function(v) {
+                            var prices_mapped = [];
+                            if (v.price_tiers) {
+                                v.price_tiers.forEach(function(p) {
+                                    prices_mapped.push({
+                                        id: p.price_id || 0,
+                                        min_qty: p.min_qty,
+                                        max_qty: p.max_qty,
+                                        price: p.price
+                                    });
+                                });
+                            }
+                            var images_mapped = [];
+                            if (v.images) {
+                                v.images.forEach(function(img) {
+                                    images_mapped.push({
+                                        id: img.id,
+                                        image_path: img.image_path
+                                    });
+                                });
+                            }
+                            variationData.push({
+                                id: v.variation_id,
+                                attr: v.attr,
+                                prices: prices_mapped,
+                                images: images_mapped,
+                                stock: v.stock
+                            });
+                        });
+                    }
+
+                    prefillProduct();
+                    
+                    if ($('.attr-check:checked').length > 0) {
+                        $('#variationTable').show();
+                        $('#noAttrMsg').hide();
+                    }
+                } else {
+                    prefillProduct();
+                    if ($('.attr-check:checked').length > 0) {
+                        $('#variationTable').show();
+                        $('#noAttrMsg').hide();
+                    }
+                }
+            },
+            error: function() {
+                prefillProduct();
+                if ($('.attr-check:checked').length > 0) {
+                    $('#variationTable').show();
+                    $('#noAttrMsg').hide();
+                }
+            }
+        });
+    } else {
+        prefillProduct();
+        if ($('.attr-check:checked').length > 0) {
+            $('#variationTable').show();
+            $('#noAttrMsg').hide();
+        }
+    }
+
+    // ── Form submit ───────────────────────────────────────────────────────
+    $('#productForm').on('submit', function (e) {
+        e.preventDefault();
+        const $btn = $('#saveBtn');
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+
+        const useApi = <?= (isset($use_api) && $use_api) ? 'true' : 'false' ?>;
+        const productId = parseInt($('input[name="product_id"]').val()) || 0;
+        let url;
+        if (useApi) {
+            if (<?= $is_edit ? 'true' : 'false' ?> && productId > 0) {
+                url = '<?= base_url("api/v1/vendor/products/update") ?>';
+            } else {
+                url = '<?= base_url("api/v1/vendor/products/add") ?>';
+            }
+        } else {
+            url = '<?= base_url("vendor/item/save_product") ?>';
+        }
+        const headers = useApi 
+            ? { 'Authorization': 'Bearer <?= isset($access_token) ? $access_token : "" ?>' } 
+            : {};
+
+        $.ajax({
+            url: url,
+            type: 'POST',
+            headers: headers,
+            data: new FormData(this),
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            success: function (res) {
+                if (res.STATUS || res.status) {
+                    // Redirect to product listing on success
+                    window.location.href = '<?= base_url("{$TYPE}/product") ?>';
+                } else {
+                    var errMsg = res.MSG || res.msg || res.message || 'Something went wrong.';
+                    if (res.errors && res.errors.length > 0) {
+                        errMsg = res.errors[0];
+                    }
+                    alert(errMsg);
+                    $btn.prop('disabled', false).html('<?= $is_edit ? '<i class="fa fa-check mr-1"></i> Update Product' : '<i class="fa fa-check mr-1"></i> Publish Product' ?>');
+                }
+            },
+            error: function (xhr) {
+                var errMsg = 'Server error. Please try again.';
+                if (xhr.responseText) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        errMsg = (res.errors && res.errors.length > 0) ? res.errors[0] : (res.message || errMsg);
+                    } catch(e) {}
+                }
+                alert(errMsg);
+                $btn.prop('disabled', false).html('<?= $is_edit ? '<i class="fa fa-check mr-1"></i> Update Product' : '<i class="fa fa-check mr-1"></i> Publish Product' ?>');
+            }
+        });
+    });
+
+});
+</script>

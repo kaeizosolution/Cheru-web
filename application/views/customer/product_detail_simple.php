@@ -1,0 +1,111 @@
+<?php
+$placeholder = base_url('assets/default_images/product.jpg');
+$title = isset($product->name) ? $product->name : '';
+$desc = isset($product->short_description) ? $product->short_description : '';
+if (!$desc && isset($product->description) && $product->description) {
+    $desc = (string)$product->description;
+}
+// Render as plain-text with preserved line breaks
+$desc_html = $desc ? nl2br(htmlspecialchars($desc, ENT_QUOTES, 'UTF-8')) : '';
+$price = isset($product->display_price) ? (float)$product->display_price : 0;
+$images = isset($product->image_urls) && is_array($product->image_urls) ? $product->image_urls : array();
+if(!$images){
+    $images = array($placeholder);
+}
+?>
+
+<div class="wrapper body-bg">
+  <div class="all-product-imosys">
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-lg-12">
+          <div class="product-dt-view">
+            <div class="row">
+              <div class="col-lg-4 col-md-4">
+                <div class="left-sidebar">
+                  <div class="sync1_js">
+                    <div id="sync1" class="owl-carousel owl-theme">
+                      <?php foreach($images as $k => $url){ ?>
+                        <div class="item <?php if($k==0){ echo 'active'; } ?>" data-slide-number="<?php echo (int)$k; ?>">
+                          <div class="big-product-wrap"><img src="<?php echo $url; ?>" alt="" class="big-img-product"></div>
+                        </div>
+                      <?php } ?>
+                    </div>
+                  </div>
+
+                  <div class="sync2_js">
+                    <div id="sync2" class="owl-carousel owl-theme">
+                      <?php foreach($images as $k => $url){ ?>
+                        <div class="item item-thumb <?php echo ($k==0?'active':''); ?>" onclick="setActiveThumb(this)" id="carousel-selector-<?php echo (int)$k; ?>">
+                          <img src="<?php echo $url; ?>" alt="" class="mini-img-product">
+                        </div>
+                      <?php } ?>
+                    </div>
+                  </div>
+
+                  <div class="product-group-dt details-price-div">
+                    <div class="ordr-crt-share">
+                      <div class="d-flex align-items-center" style="gap:12px; flex-wrap:wrap;">
+                        <div style="font-size:20px; font-weight:600;">
+                          <?php echo '$'.number_format($price, 2); ?>
+                        </div>
+						<button type="button" class="add-cart-btn hover-btn mr-3 text-uppercase is_stock_class_add add-to-cart-btn" data-product_id="<?php echo (int)$product->id; ?>" data-vendor_id="0" data-quantity="1">
+						  <i class="uil uil-shopping-cart-alt"></i>Add to Cart
+						</button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div class="col-lg-8 col-md-8 main-content">
+                <div class="product-dt-right mt-0">
+
+                  <div class="imosys-Breadcrumb">
+                    <div class="row">
+                      <div class="col-md-12">
+                        <?php echo isset($breadcrumbs) ? $breadcrumbs : ''; ?>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h2><?php echo htmlspecialchars($title); ?></h2>
+
+                  <div class="mt-3">
+                    <?php echo $desc_html ? $desc_html : '-'; ?>
+                  </div>
+
+                  <?php if(isset($related_products) && $related_products){ ?>
+                    <div class="mt-4">
+                      <h4>Related Products</h4>
+                      <div class="row">
+                        <?php foreach($related_products as $rp){ ?>
+                          <div class="col-6 col-md-4 col-xl-3 mb-3">
+                            <a href="<?php echo base_url('product/details/'.(int)$rp->id); ?>" style="text-decoration:none;">
+                              <div class="iconbox">
+                                <div class="icon">
+                                  <img src="<?php echo $placeholder; ?>" alt="Product Image">
+                                </div>
+                                <div class="details">
+                                  <h5 class="title"><?php echo htmlspecialchars($rp->name); ?></h5>
+                                  <p class="subtitle"><?php echo '$'.number_format((float)$rp->display_price, 2); ?></p>
+                                </div>
+                              </div>
+                            </a>
+                          </div>
+                        <?php } ?>
+                      </div>
+                    </div>
+                  <?php } ?>
+
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

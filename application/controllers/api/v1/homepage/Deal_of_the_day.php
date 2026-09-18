@@ -1,0 +1,240 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Deal_of_the_day extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+    }
+
+    private function _resolve_image_url($raw)
+    {
+        $raw = trim((string)$raw);
+        if ($raw === '') {
+            return '';
+        }
+        if (preg_match('#^https?://#i', $raw)) {
+            return $raw;
+        }
+
+        $rel = ltrim($raw, '/\\');
+        if ($rel !== '' && @file_exists(FCPATH . $rel)) {
+            return base_url($rel);
+        }
+
+        return base_url('uploads/products/' . $rel);
+    }
+
+    public function index()
+    {
+        if (strtoupper((string)$this->input->method()) !== 'GET') {
+            return $this->fail('method_not_allowed', ['Only GET is allowed'], 405);
+        }
+
+        $nowUtc = new DateTime('now', new DateTimeZone('UTC'));
+        $nowStr = $nowUtc->format('Y-m-d H:i:s');
+
+        // New admin module uses `ec_deal_of_the_day`; product data must come from `products`
+        $candidates = $this->db
+            ->select('id, product_id, discount_type, discount_percent, discount_amount, timezone, deal_date, status')
+            ->from('ec_deal_of_the_day')
+            ->where('status', '1')
+            ->order_by('id', 'DESC')
+            ->limit(50)
+            ->get()->result_array();
+
+        $active_rows = [];
+        foreach ($candidates as $row) {
+            $tzName = trim((string)($row['timezone'] ?? 'UTC'));
+            try {
+                $tz = new DateTimeZone($tzName !== '' ? $tzName : 'UTC');
+            } catch (Exception $e) {
+                $tz = new DateTimeZone('UTC');
+                $tzName = 'UTC';
+            }
+
+            $dealDate = trim((string)($row['deal_date'] ?? ''));
+            if ($dealDate === '') {
+                continue;
+            }
+
+            // Consider a deal active if its deal_date equals "today" in its timezone.
+            $todayLocal = (new DateTime('now', $tz))->format('Y-m-d');
+            if ($dealDate === $todayLocal) {
+                $row['_timezone'] = $tzName;
+                $active_rows[] = $row;
+            }
+        }
+
+        if (!$active_rows) {
+            return $this->ok([
+                'deal' => null,
+                'items' => [],
+                'server_now_utc' => $nowStr,
+            ], 'success');
+        }
+
+        // Base price per variation: choose row with smallest min_qty
+        $price_sql = "SELECT pp.variation_id, pp.price
+                FROM product_variation_price pp
+                JOIN (
+                    SELECT variation_id, MIN(COALESCE(min_qty,0)) AS min_qty
+                    FROM product_variation_price
+                    GROUP BY variation_id
+                ) x ON x.variation_id = pp.variation_id AND COALESCE(pp.min_qty,0) = x.min_qty";
+
+        $items = [];
+        $timerDeal = null;
+        $timerStartUtc = null;
+        $timerEndUtc = null;
+        $cur_rate_dotd = 1.0;
+        if (function_exists('current_currency') && function_exists('get_currency')) {
+            $cc_dotd = current_currency();
+            $cur_dotd = $cc_dotd ? get_currency($cc_dotd) : null;
+            if ($cur_dotd && isset($cur_dotd->rate) && is_numeric($cur_dotd->rate)) {
+                $cur_rate_dotd = (float)$cur_dotd->rate;
+            }
+        }
+
+        foreach ($active_rows as $drow) {
+            $tzName = (string)($drow['_timezone'] ?? 'UTC');
+            try {
+                $tz = new DateTimeZone($tzName !== '' ? $tzName : 'UTC');
+            } catch (Exception $e) {
+                $tz = new DateTimeZone('UTC');
+                $tzName = 'UTC';
+            }
+
+            $dealDate = (string)($drow['deal_date'] ?? '');
+            try {
+                $startLocal = new DateTime($dealDate . ' 00:00:00', $tz);
+            } catch (Exception $e) {
+                $startLocal = new DateTime('now', $tz);
+            }
+            $endLocal = clone $startLocal;
+            $endLocal->modify('+24 hours');
+            $startUtc = clone $startLocal;
+            $startUtc->setTimezone(new DateTimeZone('UTC'));
+            $endUtc = clone $endLocal;
+            $endUtc->setTimezone(new DateTimeZone('UTC'));
+
+            // Choose the soonest-ending deal window for the single countdown timer.
+            if (!$timerEndUtc || $endUtc < $timerEndUtc) {
+                $timerDeal = $drow;
+                $timerStartUtc = $startUtc;
+                $timerEndUtc = $endUtc;
+            }
+
+            $product_id = (int)($drow['product_id'] ?? 0);
+            if ($product_id <= 0) {
+                continue;
+            }
+
+            $row = $this->db
+                ->select('p.id, p.name, p.status, p.vendor_id, p.product_type')
+                ->select('MIN(pr.price) AS min_price', false)
+                ->select('SUBSTRING_INDEX(GROUP_CONCAT(img.image_path ORDER BY img.id ASC SEPARATOR ","), ",", 1) AS first_image_path', false)
+                ->from('products p')
+                ->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left')
+                ->join('product_variations v', 'v.product_id = p.id', 'left')
+                ->join('product_variation_images img', 'img.variation_id = v.id', 'left')
+                ->join("($price_sql) pr", 'pr.variation_id = v.id', 'left', false)
+                ->where('p.id', $product_id)
+                ->where('p.status', '1')
+                ->group_start()
+                    ->where('p.vendor_id', 0)
+                    ->or_where('p.vendor_id IS NULL', null, false)
+                    ->or_group_start()
+                        ->where('v_check.status', 'approved')
+                        ->or_where('v_check.status', 'Approved')
+                        ->or_where('v_check.status', '1')
+                        ->or_where('v_check.status', 1)
+                    ->group_end()
+                ->group_end()
+                ->group_by('p.id')
+                ->limit(1)
+                ->get()->row();
+
+            // Skip this deal product if vendor is not approved (row will be null)
+            if (!$row) {
+                continue;
+            }
+
+            $name = $row && isset($row->name) ? (string)$row->name : '';
+            $base_price = $row && isset($row->min_price) && $row->min_price !== null ? (float)$row->min_price * $cur_rate_dotd : 0;
+            $img_url = base_url('assets/default_images/product.jpg');
+            if ($row && isset($row->first_image_path) && trim((string)$row->first_image_path) !== '') {
+                $img_url = $this->_resolve_image_url((string)$row->first_image_path);
+            }
+
+            $discount_type = (string)($drow['discount_type'] ?? 'FIXED');
+            $discount_percent_raw = (float)($drow['discount_percent'] ?? 0);
+            $discount_amount_raw = (float)($drow['discount_amount'] ?? 0);
+
+            $discount_amount = 0;
+            $discount_percent_for_ui = 0;
+            if ($discount_type === 'PERCENT') {
+                $discount_percent_for_ui = $discount_percent_raw;
+                $discount_amount = ($base_price * $discount_percent_for_ui) / 100;
+            } else {
+                $discount_amount = $discount_amount_raw * $cur_rate_dotd;
+                if ($base_price > 0 && $discount_amount > 0) {
+                    $discount_percent_for_ui = ($discount_amount / $base_price) * 100;
+                }
+            }
+
+            $deal_price = $base_price - $discount_amount;
+            if ($deal_price < 0) {
+                $deal_price = 0;
+            }
+
+            $avg_rating = 0;
+            $review_count = 0;
+            $rev = $this->db
+                ->select('AVG(rating) as avg_rating, COUNT(review_rating_id) as review_count')
+                ->from('ec_review_rating')
+                ->where('product_id', $product_id)
+                ->where('status', '1')
+                ->get()->row();
+            if ($rev) {
+                $avg_rating = isset($rev->avg_rating) ? (float)$rev->avg_rating : 0;
+                $review_count = isset($rev->review_count) ? (int)$rev->review_count : 0;
+            }
+
+            $items[] = [
+                'product_id' => $product_id,
+                'product' => [
+                    'id' => $product_id,
+                    'name' => $name,
+                    'vendor_id' => $row && isset($row->vendor_id) ? (int)$row->vendor_id : null,
+                    'product_type' => $row && isset($row->product_type) ? (string)$row->product_type : 'simple',
+                    'image_url' => $img_url,
+                    'regular_price' => (float)$base_price,
+                    'base_price' => (float)$base_price,
+                    'rating' => $avg_rating,
+                    'review' => $review_count,
+                ],
+                'discount_percent' => (float)$discount_percent_for_ui,
+                'base_price' => (float)$base_price,
+                'deal_price' => (float)$deal_price,
+            ];
+        }
+
+        return $this->ok([
+            'deal' => ($timerDeal && $timerStartUtc && $timerEndUtc) ? [
+                'id' => (int)($timerDeal['id'] ?? 0),
+                'timezone' => (string)($timerDeal['_timezone'] ?? 'UTC'),
+                'starts_at_utc' => $timerStartUtc->format('Y-m-d H:i:s'),
+                'ends_at_utc' => $timerEndUtc->format('Y-m-d H:i:s'),
+            ] : null,
+            'items' => $items,
+            'server_now_utc' => $nowStr,
+        ], 'success');
+    }
+}

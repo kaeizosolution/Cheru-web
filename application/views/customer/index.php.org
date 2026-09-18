@@ -1,0 +1,426 @@
+<section id="home" class="home-wrapper section-b-space overflow-hidden">
+        <div class="background-effect">
+            <div class="main-circle">
+                <div class="main-circle circle-1">
+                    <div class="main-circle circle-2"></div>
+                </div>
+            </div>
+        </div>
+        <div class="container text-center position-relative">
+            <h1><?= $site_lang->hero_title; ?></h1>
+            <h2><?= $site_lang->hero_subtitle; ?></h2>
+            <div class="text-center"><img src="/assets/customer/images/Flag2.png" class="flag-lf"></div>
+            <div class="search-section">
+                <form class="auth-form search-head">
+                    <div class="form-group">
+                        <div class="form-input mb-0 search-box position-relative">
+                            <input type="text" class="form-control search rounded-pill" id="searchInput"
+                                placeholder="<?= $site_lang->search_placeholder; ?>">
+                            <i class="ri-search-line search-icon"></i>
+                            <div id="searchResults" class="list-group" style="display:none"></div>  
+                
+                        </div>
+                    </div>
+                </form>
+                </div>
+            <ul class="home-features-list d-md-flex d-none">
+                <li>
+                    <div class="home-features-box">
+                        <img class="img-fluid icon" src="/assets/customer/images/svg/routing.svg" alt="routing">
+                        <h6><?= $site_lang->wide_map; ?></h6>
+                    </div>
+                </li>
+                <li>
+                    <div class="home-features-box">
+                        <img class="img-fluid icon" src="/assets/customer/images/svg/3d-rotate.svg" alt="3d-rotate">
+                        <h6><?= $site_lang->easiest_order; ?></h6>
+                    </div>
+                </li>
+                <li>
+                    <div class="home-features-box">
+                        <img class="img-fluid icon" src="/assets/customer/images/svg/truck.svg" alt="truck">
+                        <h6><?= $site_lang->most_delivery; ?></h6>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+    <section class="categories-section section-b-space">
+        <img src="/assets/customer/images/scooter.png" class="scooter-img img-fluid d-md-inline-block d-none"
+            alt="animation-scooter">
+        <div class="container">
+            <div class="title">
+                <h2><?= $site_lang->categories; ?></h2>
+                <div class="loader-line"></div>
+                <div class="sub-title">
+                    <p><?= $site_lang->categories_subtitle; ?></p>
+                </div>
+            </div>
+            <div class="theme-arrow">
+                <div class="swiper categories-slider categories-style">
+                    <div class="swiper-wrapper" id="category-list">
+                        
+                    </div>
+                </div>
+                <div class="swiper-button-next categories-next"></div>
+                <div class="swiper-button-prev categories-prev"></div>
+            </div>
+        </div>
+    </section>
+    <section class="banner-section section-b-space">
+        <div class="container">
+            <div class="title">
+                <h2><?= $site_lang->todays_deal; ?></h2>
+                <div class="loader-line"></div>
+                <div class="sub-title">
+                    <p><?= $site_lang->todays_deal_subtitle; ?></p>
+                </div>
+            </div>
+            <div class="position-relative">
+                <div class="swiper banner1-slider">
+                    <div class="swiper-wrapper">
+                        <div class="swiper-slide">
+                            <div class="banner-part">
+                                <a href="javascript:void(0);">
+                                    <img class="img-fluid banner-img" src="/assets/customer/images/banner/banner1.jpg"
+                                        alt="banner">
+                                </a>
+                            </div>
+                        </div>
+                        <div class="swiper-slide">
+                            <div class="banner-part">
+                                <a href="javascript:void(0);">
+                                    <img class="img-fluid banner-img" src="/assets/customer/images/banner/banner2.jpg"
+                                        alt="banner">
+                                </a>
+                            </div>
+                        </div>
+                        <div class="swiper-slide">
+                            <div class="banner-part">
+                                <a href="javascript:void(0);">
+                                    <img class="img-fluid banner-img" src="/assets/customer/images/banner/banner3.jpg"
+                                        alt="banner">
+                                </a>
+                            </div>
+                        </div>
+                        <div class="swiper-slide">
+                            <div class="banner-part">
+                                <a href="javascript:void(0);">
+                                    <img class="img-fluid banner-img" src="/assets/customer/images/banner/banner4.jpg"
+                                        alt="banner">
+                                </a>
+                            </div>
+                        </div>
+                        <div class="swiper-slide">
+                            <div class="banner-part">
+                                <a href="javascript:void(0);">
+                                    <img class="img-fluid banner-img" src="/assets/customer/images/banner/banner5.jpg"
+                                        alt="banner">
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <section class="advertisement-section section-b-space">
+        <div class="container">
+            <div class="title">
+                <h2><?= $site_lang->advertisement; ?></h2>
+                <div class="loader-line"></div>
+            </div>
+            
+            <?php if (isset($advertisements) && !empty($advertisements)): ?>
+                
+                <div class="advertisement-container" style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                    
+                    <?php foreach ($advertisements as $ad): ?>
+                        
+                        <a href="<?php echo htmlspecialchars($ad->advertisement_link); ?>" target="_blank" class="ad-item" 
+                           style="display: block; width: 1000px; height: 200px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; transition: transform 0.3s ease;"
+                           onmouseover="this.style.transform='scale(1.03)'" 
+                           onmouseout="this.style.transform='scale(1)'">
+                            <img 
+                                src="<?php echo base_url('uploads/advertisement/' . $ad->advertisement_image); ?>" 
+                                alt="<?php echo htmlspecialchars($ad->advertisement_name); ?>"
+                                style="width: 100%; height: 100%; object-fit: cover;" 
+                            >
+                        </a>
+
+                    <?php endforeach; ?>
+
+                </div>
+
+            <?php endif; ?>
+        </div>
+    </section>
+    
+    <style>
+        @media (max-width: 600px) {
+            .advertisement-container .ad-item {
+                width: 100% !important; /* Force full width on small screens */
+                /* Optional: Adjust height automatically based on aspect ratio */
+                /* height: auto !important; */
+                /* aspect-ratio: 500 / 200 !important; */
+            }
+        }
+    </style>
+   
+    <section class="popular-restaurant section-b-space ratio3_2 overflow-hidden randum_product_section" style="display:none;">
+        <img class="img-fluid item-5" src="/assets/customer/images/svg/item5.svg" alt="item-5">
+        <div class="container">
+            <div class="title">
+                <h2><?= $site_lang->our_items; ?></h2>
+                <div class="loader-line"></div>
+                <div class="sub-title">
+                    <p><?= $site_lang->top_class_menu; ?></p>
+                </div>
+            </div>
+            <div class="row g-md-4 g-3 randum_product">
+                
+            </div>
+        </div>
+    </section>
+    <section class="restaurant-list section-b-space ratio3_2 new_product_section" style="display:none;">
+        <div class="container">
+            <div class="title restaurant-title w-border pb-0">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <h2 class="mb-0"><?= $site_lang->new_on_menu; ?></h2>
+                  </div>
+              
+                <div class="sub-title ps-3 mt-2">
+                  <p><?= $site_lang->new_on_menu_subtitle; ?></p>
+                </div>
+              
+                <div class="loader-line"></div>
+            </div>
+            <div class="row g-lg-4 g-3 new_product">
+            </div>
+        </div>
+    </section>
+    <section class="restaurant-list banner-section section-b-space ratio3_2 butcher_section" style="display:none;">
+        <div class="container">
+            <div class="title restaurant-title w-border pb-0">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h2><?= $site_lang->butcher_kilo; ?></h2>
+                    <a href="/product/butcher-by-kilo" class="btn theme-btn btn-sm"><?= $site_lang->view_more; ?></a>
+                </div>
+
+                <div class="sub-title ps-33 mt-2">
+                    <p><?= $site_lang->butcher_subtitle; ?></p>
+                </div>
+
+                <div class="loader-line"></div>
+                
+            </div>
+            <div class="row g-lg-4 g-3 butcher_items">
+            </div>
+        </div>
+    </section>
+    <section class="restaurant-list section-b-space ratio3_2 grocery_section" style="display:none;">
+        <div class="container">
+            <div class="title restaurant-title w-border pb-0">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h2><?= $site_lang->grocery; ?></h2>
+                    <a href="/product/grocery" class="btn theme-btn btn-sm"><?= $site_lang->view_more; ?></a>
+                </div>
+
+                <div class="sub-title ps-3 mt-2">
+                    <p><?= $site_lang->grocery_subtitle; ?></p>
+                </div>
+                <div class="loader-line"></div>
+            </div>
+            <div class="row g-lg-4 g-3 grocery_items">
+        </div>
+    </section>
+    <section class="restaurant-list banner-section section-b-space ratio3_2 pastry_section" style="display:none;">
+        <div class="container">
+            <div class="title restaurant-title w-border pb-0">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h2><?= $site_lang->pastry; ?></h2>
+                    <a href="/product/pastry" class="btn theme-btn btn-sm"><?= $site_lang->view_more; ?></a>
+                </div>
+                
+                <div class="sub-title ps-3 mt-2">
+                    <p><?= $site_lang->pastry_subtitle; ?></p>
+                </div>
+                <div class="loader-line"></div>
+            </div>
+            <div class="row g-lg-4 g-3 pastry_items">
+                        
+                    </div>
+        </div>
+    </section>
+    <section class="restaurant-list section-b-space ratio3_2 icecream_section" style="display:none;">
+            <div class="container">
+                <div class="title restaurant-title w-border pb-0">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h2><?= $site_lang->ice_cream; ?></h2>
+                        <a href="/product/icecream" class="btn theme-btn btn-sm"><?= $site_lang->view_more; ?></a>
+                    </div>
+
+                    <div class="sub-title ps-3 mt-2">
+                        <p><?= $site_lang->ice_cream_subtitle; ?></p>
+                    </div>
+                    <div class="loader-line"></div>
+                </div>
+                <div class="row g-lg-4 g-3 icecream_items">
+                            
+                        </div>
+            </div>
+        </section>
+    <section class="restaurant-list banner-section section-b-space ratio3_2 fast_food_section" style="display:none;">
+        <div class="container">
+            <div class="title restaurant-title w-border pb-0">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h2><?= $site_lang->fast_food; ?></h2>
+                    <a href="/product/fast-food" class="btn theme-btn btn-sm"><?= $site_lang->view_more; ?></a>
+                </div>
+                
+                <div class="sub-title ps-3 mt-2">
+                    <p><?= $site_lang->fast_food_subtitle; ?></p>
+                </div>
+                <div class="loader-line"></div>
+                
+            </div>
+            <div class="row g-lg-4 g-3 fast_food_items">
+                        
+                        
+                        
+                    </div>
+        </div>
+    </section>
+    <section class="restaurant-list banner-section section-b-space ratio3_2">
+        <div class="container">
+        <div class="title restaurant-title w-border pb-0">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h2><?= $site_lang->latest_kitchen; ?></h2>
+                </div>
+            
+            <div class="sub-title ps-3 mt-2">
+            <p><?= $site_lang->latest_kitchen_subtitle; ?></p>
+            </div>
+
+            <div class="loader-line"></div>
+        </div>
+    
+        <div class="row g-lg-4 g-3">
+    
+            <div class="col-xl-3 col-lg-4 col-sm-6">
+            <div class="vertical-product-box">
+                <div class="vertical-product-box-img position-relative">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#videoModal1">
+                    <img class="product-img-top w-100 bg-img" src="https://img.youtube.com/vi/vjEdCoLQhaU/hqdefault.jpg" alt="video1">
+                    <span class="position-absolute top-50 start-50 translate-middle fs-2 text-white"><i class="ri-play-fill"></i></span>
+                </a>
+                </div>
+                <div class="vertical-product-body">
+                <h4 class="vertical-product-title"><?= $site_lang->inside_kitchen; ?></h4>
+                <h5 class="product-items"><?= $site_lang->inside_kitchen_desc; ?></h5>
+                </div>
+            </div>
+            </div>
+    
+            <div class="col-xl-3 col-lg-4 col-sm-6">
+            <div class="vertical-product-box">
+                <div class="vertical-product-box-img position-relative">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#videoModal2">
+                    <img class="product-img-top w-100 bg-img" src="https://img.youtube.com/vi/QJiThZlgeWU/hqdefault.jpg" alt="video2">
+                    <span class="position-absolute top-50 start-50 translate-middle fs-2 text-white"><i class="ri-play-fill"></i></span>
+                </a>
+                </div>
+                <div class="vertical-product-body">
+                <h4 class="vertical-product-title"><?= $site_lang->signature_dish; ?></h4>
+                <h5 class="product-items"><?= $site_lang->signature_dish_desc; ?></h5>
+                </div>
+            </div>
+            </div>
+    
+            <div class="col-xl-3 col-lg-4 col-sm-6">
+            <div class="vertical-product-box">
+                <div class="vertical-product-box-img position-relative">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#videoModal3">
+                    <img class="product-img-top w-100 bg-img" src="https://img.youtube.com/vi/4aSJn3FNtk4/hqdefault.jpg" alt="video3">
+                    <span class="position-absolute top-50 start-50 translate-middle fs-2 text-white"><i class="ri-play-fill"></i></span>
+                </a>
+                </div>
+                <div class="vertical-product-body">
+                <h4 class="vertical-product-title"><?= $site_lang->street_shawarma; ?></h4>
+                <h5 class="product-items"><?= $site_lang->street_shawarma_desc; ?></h5>
+                </div>
+            </div>
+            </div>
+    
+            <div class="col-xl-3 col-lg-4 col-sm-6">
+            <div class="vertical-product-box">
+                <div class="vertical-product-box-img position-relative">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#videoModal4">
+                    <img class="product-img-top w-100 bg-img" src="https://img.youtube.com/vi/7qblPnywREA/hqdefault.jpg" alt="video4">
+                    <span class="position-absolute top-50 start-50 translate-middle fs-2 text-white"><i class="ri-play-fill"></i></span>
+                </a>
+                </div>
+                <div class="vertical-product-body">
+                <h4 class="vertical-product-title"><?= $site_lang->sweet_moments; ?></h4>
+                <h5 class="product-items"><?= $site_lang->sweet_moments_desc; ?></h5>
+                </div>
+            </div>
+            </div>
+    
+        </div>
+        </div>
+    </section>
+    <section class="app-section">
+        <div class="container">
+            <div class="d-flex align-items-center">
+                <div class="app-img">
+                    <img class="img-fluid phone" src="/assets/customer/images/service-phone.png" alt="app-phone">
+                </div>
+                <div class="app-content">
+                    <h2><?= $site_lang->app_title; ?></h2>
+                    <h5>
+                        <?= $site_lang->app_subtitle; ?>
+                    </h5>
+                    <div class="app-buttons d-flex align-items-center gap-3">
+                        <a href="https://www.apple.com/in/app-store/">
+                            <img class="img-fluid app-btn" src="/assets/customer/images/svg/app-store.svg" alt="app-store">
+                        </a>
+                        <a href="https://play.google.com/store/apps">
+                            <img class="img-fluid app-btn" src="/assets/customer/images/svg/google-play.svg" alt="google-play">
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <script>
+<?php
+    $modifiers = (isset($modifiers) && is_array($modifiers)) ? $modifiers : [];
+    $extras = (isset($extras) && is_array($extras)) ? $extras : [];
+
+    function safe_json($data) {
+      return json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    }
+?>
+
+
+try {
+    var modifiers_json = <?php echo safe_json($modifiers); ?>;
+    var extras_json = <?php echo safe_json($extras); ?>;
+
+    if (typeof modifiers_json !== 'object' || modifiers_json === null) {
+      modifiers_json = {};
+    }
+
+    if (typeof extras_json !== 'object' || extras_json === null) {
+      extras_json = {};
+    }
+
+  } catch (e) {
+    var modifiers_json = {};
+    var extras_json = {};
+  }
+</script>
+
+<script src="/assets/customer/js/index.js?r=1"></script> 
+<script src="/assets/customer/js/add_to_cart.js?r=4"></script>

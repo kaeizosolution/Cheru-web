@@ -1,0 +1,342 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Coupon extends MY_Controller {
+
+	function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Coupon_model');
+		$this->load->library('ImageUploadService');
+        $this->TYPE = $this->session->userdata('type');
+        $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+        $this->FNAME = $this->session->userdata($this->TYPE)['fname'];
+    }
+	
+	public function index()
+    {
+        $page_lang = get_page_language_data('admin_page_lang');
+        $crumbs = array( $page_lang->home => "/$this->TYPE/dashboard", $page_lang->coupon => "");
+        $breadcrumbs = $this->breadcrumbs->show($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+
+        $data['csrf'] = csrf_token();
+        $data['TYPE'] = $this->TYPE;
+        $data['page_count'] = page_count();
+        $this->load->template("$this->TYPE/coupon/index_coupon",$data);
+	}
+
+   public function index_ajax_coupon()
+   {
+        $list = $this->Coupon_model->get_datatable();
+
+        $data = array();
+        foreach ($list as $obj) {
+            $row = array();
+            
+            $row['coupon_id']   = $obj->coupon_id;
+            $row['name']        = $obj->name;
+            $row['discount']    = $obj->discount;
+            $row['type']        = ($obj->type == 1) ? 'Fixed' : 'Percentage';
+            $row['start_date']  = date("d-M-Y", strtotime($obj->start_date));
+            $row['end_date']    = date("d-M-Y", strtotime($obj->end_date));
+            $row['status']      = $obj->status; 
+
+            // Resolve applicable target names
+            $applicable_to = 'N/A';
+            if ($obj->ctype == 1) { // Category
+                $cat_ids = is_string($obj->category_id) ? json_decode($obj->category_id, true) : $obj->category_id;
+                if (!is_array($cat_ids)) {
+                    $cat_ids = $obj->category_id ? [$obj->category_id] : [];
+                }
+                if (!empty($cat_ids)) {
+                    $this->db->select('name');
+                    $this->db->from('ec_categories_prod');
+                    $this->db->where_in('id', $cat_ids);
+                    $cats = $this->db->get()->result_array();
+                    $cat_names = array_column($cats, 'name');
+                    $applicable_to = 'Categories: ' . implode(', ', $cat_names);
+                } else {
+                    $applicable_to = 'Categories: All';
+                }
+            } else if ($obj->ctype == 2) { // Brand
+                $brand_ids = is_string($obj->brand_id) ? json_decode($obj->brand_id, true) : $obj->brand_id;
+                if (!is_array($brand_ids)) {
+                    $brand_ids = $obj->brand_id ? [$obj->brand_id] : [];
+                }
+                if (!empty($brand_ids)) {
+                    $this->db->select('name');
+                    $this->db->from('ec_brand');
+                    $this->db->where_in('brand_id', $brand_ids);
+                    $brands = $this->db->get()->result_array();
+                    $brand_names = array_column($brands, 'name');
+                    $applicable_to = 'Brands: ' . implode(', ', $brand_names);
+                } else {
+                    $applicable_to = 'Brands: All';
+                }
+            } else if ($obj->ctype == 3) { // Product
+                $prod_ids = is_string($obj->product_id) ? json_decode($obj->product_id, true) : $obj->product_id;
+                if (!is_array($prod_ids)) {
+                    $prod_ids = $obj->product_id ? [$obj->product_id] : [];
+                }
+                if (!empty($prod_ids)) {
+                    $this->db->select('name');
+                    $this->db->from('products');
+                    $this->db->where_in('id', $prod_ids);
+                    $prods = $this->db->get()->result_array();
+                    $prod_names = array_column($prods, 'name');
+                    $applicable_to = 'Products: ' . implode(', ', $prod_names);
+                } else {
+                    $applicable_to = 'Products: All';
+                }
+            }
+            $row['applicable_to'] = $applicable_to;
+
+            $data[] = $row;
+        }
+
+        $output = array(
+            "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+            "recordsTotal" => $this->Coupon_model->count_all(),
+            "recordsFiltered" => $this->Coupon_model->count_filtered(),
+            "data" => $data,
+        );
+        echo json_encode($output);
+   }
+
+	public function add()
+    {
+        $this->post();
+    }
+
+	public function update($coupon_id)
+    {
+        $this->post($coupon_id);
+    }
+
+	function post($coupon_id = NULL)
+    {
+        $this->load->library('form_validation');
+
+        $this->form_validation->set_rules('name', 'Name', 'trim|required|xss_clean|callback_unique_field['.$coupon_id.']');
+        $this->form_validation->set_rules('discount', 'Discount', 'trim|required');
+        $this->form_validation->set_rules('start_date', 'Start Date', 'trim|required');
+        $this->form_validation->set_rules('end_date', 'End Date', 'trim|required');
+        $this->form_validation->set_rules('type', 'Discount Type', 'trim|required');
+
+        $brand_obj = $this->Query_model->get_data('ec_brand', array('status' => '1'));
+        $category_obj = $this->Query_model->get_data('ec_categories_prod', array('status' => '1', 'parent_id' => '0'));
+        $db_product_arr = [];
+        $db_brand_ids = [];
+        $db_category_ids = [];
+        if(isset($coupon_id)){
+            $coupon_obj = $this->Query_model->get_data_obj('ec_coupon',array('coupon_id' => $coupon_id, 'login_id' => $this->LOGIN_ID));
+            if(!$coupon_obj){
+                $this->session->set_flashdata('error', 'Invalid Error.');
+                redirect("$this->TYPE/coupon");
+            }
+            $db_product_id = is_string($coupon_obj->product_id) ? json_decode($coupon_obj->product_id, true) : $coupon_obj->product_id;
+            if (is_array($db_product_id) && !empty($db_product_id)) {
+                $this->db->from('products');
+                $this->db->where_in('id', $db_product_id);
+                $db_product_arr = $this->db->get()->result();
+            }
+            
+            $db_brand_ids = is_string($coupon_obj->brand_id) ? json_decode($coupon_obj->brand_id, true) : $coupon_obj->brand_id;
+            if (!is_array($db_brand_ids)) {
+                $db_brand_ids = $coupon_obj->brand_id ? [$coupon_obj->brand_id] : [];
+            }
+            
+            $db_category_ids = is_string($coupon_obj->category_id) ? json_decode($coupon_obj->category_id, true) : $coupon_obj->category_id;
+            if (!is_array($db_category_ids)) {
+                $db_category_ids = $coupon_obj->category_id ? [$coupon_obj->category_id] : [];
+            }
+        }
+
+        if($_POST) {
+            $ctype = $this->input->post('ctype');
+            $category_id  = $this->input->post('category_id');
+            $product_id = $this->input->post('product_id');
+            $brand_id = $this->input->post('brand_id');
+            if($ctype == 1){
+                $product_id = $brand_id = NULL;
+                // Filter out the 'all' placeholder value
+                if(is_array($category_id)) {
+                    $category_id = array_values(array_filter($category_id, function($v){ return $v !== '' && $v !== 'all'; }));
+                }
+                $category_id = !empty($category_id) ? json_encode(array_map('intval', $category_id)) : NULL;
+            }else if($ctype == 2){
+                $product_id = $category_id = NULL;
+                // Filter out the 'all' placeholder value
+                if(is_array($brand_id)) {
+                    $brand_id = array_values(array_filter($brand_id, function($v){ return $v !== '' && $v !== 'all'; }));
+                }
+                $brand_id = !empty($brand_id) ? json_encode(array_map('intval', $brand_id)) : NULL;
+            }else{
+                $category_id = $brand_id = NULL;
+                // Filter out the 'all' placeholder value
+                if(is_array($product_id)) {
+                    $product_id = array_values(array_filter($product_id, function($v){ return $v !== '' && $v !== 'all'; }));
+                }
+                $product_id = !empty($product_id) ? json_encode(array_map('intval', $product_id)) : NULL;
+            }
+            $data =  array(
+                    'name'          => $this->input->post('name'),
+                    'description'   => $this->input->post('description'),
+                    'discount'      => $this->input->post('discount'),
+                    'start_date'    => $this->input->post('start_date'),
+                    'end_date'      => $this->input->post('end_date'),
+                    'type'          => $this->input->post('type'),
+                    'ctype'         => $this->input->post('ctype'),
+                    'status'        => $this->input->post('status'),
+                    'brand_id'      => $brand_id,
+                    'product_id'    => $product_id,
+                    'category_id'   => $category_id,
+                    'minimum_order_value'   => $this->input->post('minimum_order_value'),
+                    );
+	
+			if($_FILES && isset($_FILES['image']) && isset($_FILES['image']['name']) && $_FILES['image']['name'])
+        	{
+                $get_file = $this->imageuploadservice->uploadSingle('image', 'profile_image');
+                $data['image'] = $get_file;
+        	}
+        }else{
+            if(isset($coupon_id)){
+                $data =  array(
+                        'name'          => $coupon_obj->name,
+                        'description'   => $coupon_obj->description,
+                        'discount'      => $coupon_obj->discount,
+                        'start_date'    => $coupon_obj->start_date,
+                        'end_date'      => $coupon_obj->end_date,
+                        'type'          => $coupon_obj->type,
+                        'ctype'         => $coupon_obj->ctype,
+                        'status'        => $coupon_obj->status,
+                        'brand_id'      => $db_brand_ids,
+                        'product_id'    => $db_product_arr,
+                        'category_id'   => $db_category_ids,
+                        'minimum_order_value'   => $coupon_obj->minimum_order_value,
+                        );
+            }
+        }
+
+        if ($this->form_validation->run() == FALSE){
+            // Ensure category_id, brand_id are arrays for the view if validation failed
+            if (isset($data['category_id']) && is_string($data['category_id'])) {
+                $data['category_id'] = json_decode($data['category_id'], true) ?: [];
+            }
+            if (isset($data['brand_id']) && is_string($data['brand_id'])) {
+                $data['brand_id'] = json_decode($data['brand_id'], true) ?: [];
+            }
+            if (isset($data['product_id']) && is_string($data['product_id'])) {
+                $prod_ids = json_decode($data['product_id'], true) ?: [];
+                $db_product_arr = [];
+                if (!empty($prod_ids)) {
+                    $this->db->from('products');
+                    $this->db->where_in('id', $prod_ids);
+                    $db_product_arr = $this->db->get()->result();
+                }
+                $data['product_id'] = $db_product_arr;
+            }
+
+            $page_lang = get_page_language_data('admin_page_lang');
+            $action_bc = isset($coupon_id) ? $page_lang->update : $page_lang->add;
+            $crumbs = array($page_lang->home => "/$this->TYPE/dashboard", $page_lang->coupon => "/$this->TYPE/coupon/", "$action_bc" => 'action');
+            $breadcrumbs = $this->breadcrumbs->show($crumbs);
+            $data['breadcrumbs']    = $breadcrumbs;
+
+            $data['csrf'] = csrf_token();
+            $data['TYPE'] = $this->TYPE;
+            $data['action'] = isset($coupon_id) ? $page_lang->update : $page_lang->add;
+            $data['coupon_id'] = isset($coupon_id) ? $coupon_id : NULL;
+            $data['product_obj'] = []; 
+            $data['brand_obj'] = $brand_obj;
+            $data['category_obj'] = $category_obj;
+            
+            $this->load->template("$this->TYPE/coupon/coupon",$data);
+        }else{
+            $data['status'] = ($data['status']) ? $data['status'] : '0';
+            $db_data =  array(
+                    'name'          => $data['name'],
+                    'description'   => $data['description'],
+                    'discount'      => $data['discount'],
+                    'start_date'    => $data['start_date'],
+                    'end_date'      => $data['end_date'],
+                    'type'          => $data['type'],
+                    'ctype'         => $data['ctype'],
+                    'status'        => '1',
+                    'login_id'      => $this->LOGIN_ID,
+                    'brand_id'      => $data['brand_id'],
+                    'product_id'    => $data['product_id'],
+                    'category_id'   => $data['category_id'],
+                    'minimum_order_value'   => $data['minimum_order_value'],
+                    );
+            if(isset($coupon_id)){
+                $this->Query_model->update_data('ec_coupon',$db_data,array('coupon_id' => $coupon_id));
+                $this->session->set_flashdata('success', 'Updated Successfully.');
+            }else{
+                $this->Query_model->insert_data('ec_coupon',$db_data);
+                $this->session->set_flashdata('success', 'Inserted Successfully.');
+            }
+            redirect("$this->TYPE/coupon");
+        }
+    }
+	
+	function unique_field($value, $coupon_id)
+    {
+        $name = $this->input->post('name');
+        $args = array('name' => $name);
+        if($coupon_id){
+            $args['coupon_id!='] = $coupon_id;
+        }	
+		
+        $coupon_obj = $this->Query_model->get_data_obj('ec_coupon',$args);					
+        $status   = TRUE;
+        $message  = '';
+        if($coupon_obj) {
+            $status   = FALSE;
+            $message  = 'Name must be unique <br/>';
+            $this->form_validation->set_message('unique_field', $message);
+        }
+        return $status;
+    }
+	
+	function search_ajax_product()
+    {
+        $sarch = $this->input->post('searchTerm');		
+        $product_obj = $this->Coupon_model->sarch_coupan($sarch);		
+        $data = array();
+        foreach ($product_obj as $obj) {
+            $row = array();
+            $row['id']   = $obj->id;
+            $row['text'] 	 = $obj->name;			
+            $data[] = $row;
+        }
+        echo json_encode($data);
+    }
+	function get_product()
+    {		
+        $product_obj = $this->Coupon_model->sarch_coupan();		
+        $data = array();
+        foreach ($product_obj as $obj) {
+            $row = array();			
+            $row['name'] 	 = $obj->name;			
+            $data[] = $row;
+        }
+        return $data;
+    }	
+
+
+    public function status_change()
+{
+    $id = $this->input->post('id');
+    $status = $this->input->post('status'); // This will now be 0 or 1
+    
+    // Fix: Flip the status based on numeric value
+    $status_val = ($status == 1) ? 0 : 1;
+
+    $update = $this->Coupon_model->coupan_status_change($id, $status_val);
+    echo json_encode(array('success' => $update));
+}
+
+	
+}

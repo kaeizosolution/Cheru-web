@@ -1,0 +1,1467 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+/* ================= SESSION CHECK ================= */
+$logged_in = false;
+$customer  = $this->session->userdata('customer');
+if (!is_array($customer)) {
+    $customer = [];
+}
+
+if (!empty($customer) && !empty($customer['logged_in'])) {
+    $logged_in = true;
+}
+
+$profile_img = base_url('assets/images/default-profile-pic.png');
+if ($logged_in) {
+    $_hdr_ci2 = get_instance();
+    $_hdr_cust_id2 = (int)($customer['login_id'] ?? ($customer['customer_id'] ?? 0));
+    if ($_hdr_cust_id2 > 0) {
+        $_hdr_db_row2 = $_hdr_ci2->db->select('user_img')->from('ec_customer')->where('customer_id', $_hdr_cust_id2)->get()->row();
+        $_hdr_raw_img2 = $_hdr_db_row2 ? (string)($_hdr_db_row2->user_img ?? '') : '';
+        if ($_hdr_raw_img2 !== '' && $_hdr_raw_img2 !== 'NULL') {
+            if (filter_var($_hdr_raw_img2, FILTER_VALIDATE_URL) !== false || strpos($_hdr_raw_img2, 'http://') === 0 || strpos($_hdr_raw_img2, 'https://') === 0) {
+                $profile_img = $_hdr_raw_img2;
+            } elseif (file_exists(FCPATH . 'assets/uploads/' . $_hdr_raw_img2)) {
+                $profile_img = base_url('assets/uploads/' . $_hdr_raw_img2);
+            } else {
+                $profile_img = base_url('uploads/profile_image/' . $_hdr_raw_img2);
+            }
+        }
+    } elseif (!empty($customer['profile_img'])) {
+        $profile_img = $customer['profile_img'];
+    } elseif (!empty($customer['user_img'])) {
+        $profile_img = $customer['user_img'];
+    }
+}
+$user_name   = $customer['name'] ?? ($customer['fname'] ?? 'User');
+
+// Load Header Language File
+$page_lang = get_page_language_data('header_page_lang');
+?>
+
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="keywords" content="auto parts, baby store, ecommerce, electronics, fashion, food, marketplace, modern, multi vendor, multipurpose, organic, responsive, shop, shopping, store">
+<meta name="description" content="cheruapp - Multi-Vendor & Marketplace HTML Template">
+<meta name="CreativeLayers" content="ATFN">
+<!-- css file -->
+<link rel="stylesheet" href="<?= base_url('assets/customer/css/bootstrap.min.css'); ?>">
+<link rel="stylesheet" href="<?= base_url('assets/customer/css/ace-responsive-menu.css');?>">
+<link rel="stylesheet" href="<?= base_url('assets/customer/css/menu.css');?>">
+<link rel="stylesheet" href="<?= base_url('assets/customer/css/fontawesome.css');?>">
+<link rel="stylesheet" href="<?= base_url('assets/customer/css/fontawesome-free.css');?>">
+<link rel="stylesheet" href="<?=base_url('assets/customer/css/flaticon.css');?>">
+<link rel="stylesheet" href="<?=base_url('assets/customer/css/bootstrap-select.min.css');?>">
+<link rel="stylesheet" href="<?=base_url('assets/customer/css/animate.css');?>">
+<link rel="stylesheet" href="<?=base_url('assets/customer/css/slider.css');?>">
+<link rel="stylesheet" href="<?=base_url('assets/customer/css/style.css');?>">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500&amp;family=Poppins:wght@700&amp;display=swap" rel="stylesheet">
+<!-- Responsive stylesheet -->
+<link rel="stylesheet" href="/assets/customer/css/responsive.css">
+<link rel="stylesheet" href="/assets/customer/css/custom.css">
+<!-- Title -->
+<title>cheruapp - Multi-Vendor & Marketplace HTML Template</title>
+<!-- Favicon -->
+<link href="/assets/customer/images/favicon.ico" sizes="128x128" rel="shortcut icon" type="image/x-icon" />
+<link href="/assets/customer/images/favicon.ico" sizes="128x128" rel="shortcut icon" />
+<!-- Apple Touch Icon -->
+<link href="/assets/customer/images/apple-touch-icon-60x60.png" sizes="60x60" rel="apple-touch-icon">
+<link href="/assets/customer/images/apple-touch-icon-72x72.png" sizes="72x72" rel="apple-touch-icon">
+<link href="/assets/customer/images/apple-touch-icon-114x114.png" sizes="114x114" rel="apple-touch-icon">
+<link href="/assets/customer/images/apple-touch-icon-180x180.png" sizes="180x180" rel="apple-touch-icon">
+
+
+<style>
+ /* Remove the default bootstrap arrow since we added our own */
+.header_top_iconbox.dropdown-toggle::after {
+    display: none;
+}
+
+/* Adjust dropdown menu appearance */
+.hm_log_fav_cart_widget .dropdown-menu {
+    border-radius: 10px;
+    padding: 10px 0;
+    min-width: 180px;
+}
+
+.hm_log_fav_cart_widget .dropdown-item {
+    font-weight: 500;
+    font-size: 14px;
+    padding: 8px 20px;
+}
+
+</style>
+
+</head>
+<body data-spy="scroll">
+<div class="wrapper ovh">
+  <div class="preloader"></div>
+  <!-- header middle -->
+  <div class="header_middle pt20 pb20 dn-992">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-2 col-xxl-2">
+          <div class="header_top_logo_home1">
+            <a href="<?= base_url('/'); ?>" class="logo"><img src="<?= base_url('assets/vendor/images/logo.png'); ?>" alt="Cheru" style="max-height:42px; width:auto;"></a>
+          </div>
+        </div>
+        <div class="col-lg-5 col-xxl-6">
+          <div class="header_middle_advnc_search">
+            <div class="search_form_wrapper">
+              <div class="row">
+                <div class="col-auto pr0">
+                  <div class="actegory">
+                    <select class="selectpicker" id="selectbox_alCategory">
+                      <option value="AllCategory"><?= $page_lang->all_category ?? 'All Category' ?></option>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-auto p0">
+                  <div class="top-search">
+                    <form action="#" method="get" class="form-search header-search-form" accept-charset="utf-8">
+                      <div class="box-search pre_line">
+                        <input class="form_control header-search-input" id="headerSearchInput" type="text" name="search" placeholder="<?= htmlspecialchars($page_lang->search_products ?? 'Search products…') ?>" autocomplete="off">
+                        <div class="search-suggestions" id="headerSearchSuggestions" style="display:none;">
+                          <div class="box-suggestions">
+                            <ul></ul>
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+                <div class="col-auto p0">
+                  <div class="advscrh_frm_btn">
+                    <button type="submit" class="btn search-btn"><span class="flaticon-search"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5 col-xxl-4 pr0-lg">
+          <div class="hm_log_fav_cart_widget justify-content-center">
+            <div class="wrapper">
+              <ul class="mb0">
+                <li class="list-inline-item"><a class="header_top_iconbox" href="<?= $logged_in ? base_url('customer/profile?tab=wishlist') : base_url('customer/login'); ?>">
+                  <div class="d-block d-md-flex">
+                    <div class="icon"><span class="flaticon-heart"></span></div>
+                    <div class="details">
+                      <p class="subtitle"><?= $page_lang->wishlist ?? 'Wishlist' ?></p>
+                      <h5 class="title"><?= $page_lang->my_items ?? 'My Items' ?></h5>
+                    </div>
+                  </div>
+                  </a> </li>
+                  <?php if($logged_in): ?>
+                    <li class="list-inline-item">
+        <div class="dropdown">
+            <a class="header_top_iconbox dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="border:none; background:none;">
+                <div class="d-block d-md-flex align-items-center">
+                    <div class="icon"><span class="flaticon-profile"></span></div>
+                    <div class="details text-start">
+                        <p class="subtitle"><?= $page_lang->hello ?? 'Hello,' ?></p>
+                        <h5 class="title"><?= explode(' ', $user_name)[0]; ?> <i class="fa fa-angle-down fz12"></i></h5>
+                    </div>
+                </div>
+            </a>
+            
+            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
+                <li><a class="dropdown-item" href="<?= base_url('customer/profile'); ?>"><i class="fa fa-user me-2 text-muted"></i> <?= $page_lang->dashboard ?? 'Dashboard' ?></a></li>
+                <li><a class="dropdown-item" href="<?= base_url('customer/profile?tab=order'); ?>"><i class="fa fa-shopping-bag me-2 text-muted"></i> <?= $page_lang->my_orders ?? 'My Orders' ?></a></li>
+                <li><a class="dropdown-item" href="<?= base_url('customer/profile?tab=details'); ?>"><i class="fa fa-cog me-2 text-muted"></i> <?= $page_lang->account_details ?? 'Account Details' ?></a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="<?= base_url('/logout'); ?>"><i class="fa fa-sign-out me-2"></i> <?= $page_lang->logout ?? 'Logout' ?></a></li>
+            </ul>
+        </div>
+    </li>
+                    
+                    <?php else: ?>
+                  <li class="list-inline-item"><a class="header_top_iconbox signin-filter-btn" href="#">
+                  <div class="d-block d-md-flex">
+                    <div class="icon"><span class="flaticon-profile"></span></div>
+                    <div class="details">
+                      <p class="subtitle"><?= $page_lang->sign_in ?? 'Sign In' ?></p>
+                      <h5 class="title"><?= $page_lang->account ?? 'Account' ?></h5>
+                    </div>
+                  </div>
+                  </a> </li>
+                      <?php endif; ?>
+              
+                <li class="list-inline-item"><a class="header_top_iconbox cart-filter-btn" href="<?= base_url('cart'); ?>">
+                  <div class="d-block d-md-flex">
+                    <div class="icon">
+                        <span><img src="/assets/customer/images/icons/flaticon-shopping-cart-white.svg" alt=""></span>
+                        <span class="badge" id="cart_count"><?= (int)($cart_count ?? 0); ?></span>
+                    </div>
+                    <div class="details">
+                      <p class="subtitle" id="cart_total"><?= ($symbol ?? '$') . number_format((float)($cart_total ?? 0), 2); ?></p>
+                      <h5 class="title"><?= $page_lang->total ?? 'Total' ?></h5>
+                    </div>
+                  </div>
+                  </a> </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Main Header Nav -->
+  <header class="header-nav menu_style_home_one main-menu">
+    <nav class="posr">
+      <div class="container posr menu_bdrt1">
+        <div class="menu-toggle">
+          <button type="button" id="menu-btn"> <span class="icon-bar"></span> <span class="icon-bar"></span> <span class="icon-bar"></span> </button>
+        </div>
+        <div class="posr logo1 home1_style">
+          <div id="mega-menu"> <a class="btn-mega" href="#"> <img class="me-2" src="/assets/customer/images/desktop-nav-menu-white.svg" alt="Desktop Menu Icon"> <span class="fw500 fz16 color-white vam"><?= $page_lang->browse_categories ?? 'Browse Categories' ?></span> </a>
+            <div id="bcDropdown" style="position:relative;display:inline-block;">
+            <ul class="menu" id="bcMenu" style="min-width:260px;">
+              <?php
+              $CI =& get_instance();
+              $browse_parents = $CI->db
+                ->select('id, name, slug')
+                ->from('ec_categories_prod')
+                ->where('status', '1')
+                ->where('parent_id', 0)
+                ->order_by('id', 'DESC')
+                ->get()->result_array();
+              ?>
+              <?php if(!empty($browse_parents) && is_array($browse_parents)): ?>
+                <?php foreach($browse_parents as $cat): ?>
+                  <li>
+                    <a class="dropdown" data-bc-id="<?= (int)($cat['id'] ?? 0); ?>" data-bc-slug="<?= $cat['slug'] ?? ''; ?>" href="<?= base_url('products/category/'); ?><?= $cat['slug'] ?? ''; ?>">
+                      <span class="menu-icn flaticon-diamond"></span>
+                      <span class="menu-title"><?= $cat['name'] ?? ''; ?></span>
+                    </a>
+                  </li>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </ul>
+            <div id="bcRightPanel" style="display:none; position:absolute; left:100%; top:0; min-width:280px; background:#fff; border:1px solid rgba(0,0,0,.08); padding:10px; z-index:10020; box-shadow:0 12px 32px rgba(0,0,0,.18); border-radius:6px;"></div>
+            <div id="bcRightPanel2" style="display:none; position:absolute; left:calc(100% + 280px); top:0; min-width:280px; background:#fff; border:1px solid rgba(0,0,0,.08); padding:10px; z-index:10030; box-shadow:0 12px 32px rgba(0,0,0,.18); border-radius:6px;"></div>
+            </div>
+          </div>
+        </div>
+        <ul id="respMenu" class="ace-responsive-menu menu_list_custom_code wa d-none" data-menu-style="horizontal">
+          <li class="visible_list"> <a href="#"><span class="title">Home</span></a>
+            <ul>
+              <li><a href="/assets/customer/index1.html">Home V1</a></li>
+              <li><a href="/assets/customer/index2.html">Home V2</a></li>
+              <li><a href="/assets/customer/index3.html">Home V3</a></li>
+              <li><a href="/assets/customer/index4.html">Home V4</a></li>
+              <li><a href="/assets/customer/index5.html">Home V5</a></li>
+              <li><a href="/assets/customer/index6.html">Home V6</a></li>
+              <li><a href="/assets/customer/index7.html">Home V7</a></li>
+              <li><a href="/assets/customer/index8.html">Home V8</a></li>
+              <li><a href="/assets/customer/index9.html">Home V9</a></li>
+              <li><a href="/assets/customer/index10.html">Home V10</a></li>
+            </ul>
+          </li>
+          <li class="megamenu_style d-none"> <a href="#"><span class="title">Shop</span></a>
+            <ul class="row dropdown-megamenu">
+              <li class="col mega_menu_list pl30">
+                <h4 class="title">Shop Listing</h4>
+                <ul>
+                  <li><a href="/assets/customer/page-shop-list-v1.html">Listing v1</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v2.html">Listing v2</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v3.html">Listing v3</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v4.html">Listing v4</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v5.html">Listing v5</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v6.html">Listing v6</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v7.html">Listing v7</a></li>
+                  <li><a href="/assets/customer/page-shop-list-v8.html">Listing v8</a></li>
+                </ul>
+              </li>
+              <li class="col mega_menu_list">
+                <h4 class="title">Shop Single</h4>
+                <ul>
+                  <li><a href="/assets/customer/page-shop-single-v1.html">Version 1</a></li>
+                  <li><a href="/assets/customer/page-shop-single-v2.html">Version 2</a></li>
+                  <li><a href="/assets/customer/page-shop-single-v3.html">Version 3</a></li>
+                  <li><a href="/assets/customer/page-shop-single-v4.html">Version 4</a></li>
+                  <li><a href="/assets/customer/page-shop-single-v5.html">Version 5</a></li>
+                  <li><a href="/assets/customer/page-shop-single-color-switch.html">Color Switch</a></li>
+                  <li><a href="/assets/customer/page-shop-single-image-switch.html">Image Switch</a></li>
+                  <li><a href="/assets/customer/page-shop-single-countdown.html">Single Countdown</a></li>
+                  <li><a href="/assets/customer/page-shop-single-external-product.html">External Product</a></li>
+                  <li><a href="/assets/customer/page-shop-single-grouped-product.html">Grouped Product</a></li>
+                  <li><a href="/assets/customer/page-shop-single-bought-together.html">Bought Together</a></li>
+                </ul>
+              </li>
+              <li class="col mega_menu_list">
+                <h4 class="title">User Dashboard</h4>
+                <ul>
+                  <li><a href="/assets/customer/page-dashboard.html">Dashboard</a></li>
+                  <li><a href="/assets/customer/page-dashboard-order.html">Orders</a></li>
+                  <li><a href="/assets/customer/page-dashboard-wish-list.html">Downloads</a></li>
+                  <li><a href="/assets/customer/page-dashboard-address.html">Addresses</a></li>
+                  <li><a href="/assets/customer/page-dashboard-account-details.html">Account Details</a></li>
+                  <li><a href="/assets/customer/page-dashboard-wish-list.html">Wishlist</a></li>
+                  <li><a href="/assets/customer/page-login.html">Logout</a></li>
+                </ul>
+              </li>
+              <li class="col mega_menu_list">
+                <h4 class="title">Woo Pages</h4>
+                <ul>
+                  <li><a href="/assets/customer/page-shop-cart.html">Cart</a></li>
+                  <li><a href="/assets/customer/page-shop-checkout.html">Checkout</a></li>
+                  <li><a href="/assets/customer/page-shop-order-received.html">Wishlist</a></li>
+                  <li><a href="/assets/customer/page-account-details.html">My account</a></li>
+                  <li><a href="/assets/customer/page-compare.html">Compare</a></li>
+                  <li><a href="/assets/customer/page-order-tracking.html">Order Tracking</a></li>
+                </ul>
+              </li>
+              <li class="col mega_menu_list">
+                <div class="banner_one megamenu_style home1_style color1 mb30">
+                  <div class="thumb style1"> <img class="float-end" src="/assets/customer/images/banner/smartwatch.png" alt="smartwatch"> </div>
+                  <div class="details">
+                    <p class="para color-light-blue">Starting from <span class="fw500">$899.</span></p>
+                    <h3 class="title">Health Care Monitor</h3>
+                    <a href="/assets/customer/page-shop-list-v1.html" class="shop_btn">Shop Now</a> </div>
+                </div>
+                <div class="banner_one megamenu_style home1_style color1">
+                  <div class="thumb"> <img class="float-end" src="/assets/customer/images/banner/earphone.png" alt="EarPhone"> </div>
+                  <div class="details">
+                    <p class="para color-light-blue">Starting from <span class="fw500">$899.</span></p>
+                    <h3 class="title">Stainless Steel Scissors</h3>
+                    <a href="/assets/customer/page-shop-list-v1.html" class="shop_btn">Shop Now</a> </div>
+                </div>
+              </li>
+            </ul>
+          </li>
+          <li class="visible_list d-none"> <a href="#"><span class="title">Pages</span></a>
+            <ul>
+              <li><a href="/assets/customer/page-about.html">About Us</a></li>
+              <li> <a href="#"><span class="title">Accounts</span></a>
+                <ul>
+                  <li><a href="/assets/customer/page-account-details.html">Account Details</a></li>
+                  <li><a href="/assets/customer/page-account-order.html">Account Order</a></li>
+                  <li><a href="/assets/customer/page-account-address.html">Account Address</a></li>
+                  <li><a href="/assets/customer/page-account-wishlist.html">Account Wishlist</a></li>
+                  <li><a href="/assets/customer/page-account-invoice.html">Account Invoice</a></li>
+                </ul>
+              </li>
+              <li><a href="/assets/customer/page-become-vendor.html">Become Vendor</a></li>
+              <li> <a href="#"><span class="title">Vendor Pages</span></a>
+                <ul>
+                  <li><a href="/assets/customer/page-vendor-list.html">Vendor List</a></li>
+                  <li><a href="/assets/customer/page-vendor-single.html">Vendor Single</a></li>
+                  <li><a href="/assets/customer/page-dashboard.html">Dashboard</a></li>
+                  <li><a href="/assets/customer/page-dashboard-products.html">Products</a></li>
+                  <li><a href="/assets/customer/page-dashboard-order.html">Order</a></li>
+                  <li><a href="/assets/customer/page-dashboard-customer.html">Customer</a></li>
+                  <li><a href="/assets/customer/page-dashboard-categories.html">Categories</a></li>
+                  <li><a href="/assets/customer/page-dashboard-message.html">Message</a></li>
+                  <li><a href="/assets/customer/page-dashboard-setting.html">Settings</a></li>
+                </ul>
+              </li>
+              <li><a href="/assets/customer/page-brands.html">Brands</a></li>
+              <li><a href="/assets/customer/page-contact.html">Contact</a></li>
+              <li><a href="/assets/customer/page-coming-soon.html">Coming Soon</a></li>
+              <li><a href="/assets/customer/page-help.html">Help</a></li>
+              <li><a href="/assets/customer/page-error.html">404 Page</a></li>
+              <li><a href="/assets/customer/page-faq.html">Faq</a></li>
+              <li><a href="/assets/customer/page-invoices.html">Invoices</a></li>
+              <li><a href="/assets/customer/page-login.html">Login</a></li>
+              <li><a href="/assets/customer/page-register.html">Register</a></li>
+              <li><a href="/assets/customer/page-terms.html">Terms and Conditions</a></li>
+              <li><a href="/assets/customer/page-ui-element.html">UI Elements</a></li>
+            </ul>
+          </li>
+          <li class="visible_list d-none"> <a href="#"><span class="title">Blog</span></a>
+            <ul>
+              <li><a href="/assets/customer/page-blog-grid.html">Blog Grid</a></li>
+              <li><a href="/assets/customer/page-blog-grid-sidebar.html">Blog Grid Sidebar</a></li>
+              <li><a href="/assets/customer/page-blog-details.html">Blog Details</a></li>
+              <li><a href="/assets/customer/page-blog-list.html">Blog List</a></li>
+              <li><a href="/assets/customer/page-blog-single.html">Blog Single</a></li>
+              <li><a href="/assets/customer/page-blog-single2.html">Blog Single v2</a></li>
+            </ul>
+          </li>
+        </ul>
+        <ul id="respMenu2" class="ace-responsive-menu wa pl200" data-menu-style="horizontal"><!--widget_menu_home2-->
+          <li class="list-inline-item list_c"><a href="<?= base_url('/'); ?>#deal-of-the-day"><?= $page_lang->deal_of_the_day ?? 'Deal of the Day' ?></a></li>
+          <li class="list-inline-item list_c"><a href="<?= base_url('/'); ?>#best-sellers"><?= $page_lang->best_sellers ?? 'Best Sellers' ?></a></li>
+          <li class="list-inline-item list_c"><a href="<?= base_url('/'); ?>#new-arrivals"><?= $page_lang->new_arrivals ?? 'New Arrivals' ?></a></li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+  
+  <!-- Body Ovelay Behind Sidebar -->
+  <div class="hiddenbar-body-ovelay"></div>
+  
+  <!-- Sign In Hiddn SideBar -->
+ <div class="signin-hidden-sbar">
+    <div class="hsidebar-header">
+        <div class="sidebar-close-icon"><span class="flaticon-close"></span></div>
+        <h4 class="title"><?= $page_lang->sign_in ?? 'Sign-In' ?></h4>
+    </div>
+    <div id="login-sidebar-message" class="auth-sidebar-message" style="display:none;"></div>
+    <div class="hsidebar-content">
+        <div class="log_reg_form sidebar_area">
+            <div class="login_form">
+               <form id="login-form" method="post">
+                  <input type="hidden" name="<?= $this->security->get_csrf_token_name(); ?>" value="<?= $this->security->get_csrf_hash(); ?>">
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label class="form-label" id="label_signin_sidebar"><?= $page_lang->mobile_number ?? 'Mobile number' ?></label>
+                            <a href="#" class="toggle-login-method" data-target="#signin_sidebar_input" data-label="#label_signin_sidebar" style="font-size:12px;"><?= $page_lang->use_email_instead ?? 'Use email instead' ?></a>
+                        </div>
+                        <input type="text" name="email_mobile" id="signin_sidebar_input" class="form-control" placeholder="<?= htmlspecialchars($page_lang->mobile_number ?? 'Mobile number') ?>" required data-parsley-emailorphone data-login-mode="mobile">
+                    </div>
+                    <div class="form-group mb5">
+                        <label class="form-label"><?= $page_lang->password ?? 'Password' ?></label>
+                        <input type="password" name="password" id="password" class="form-control" placeholder="........." required>
+                    </div>
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" name="remember" class="custom-control-input" id="exampleCheck3">
+                        <label class="custom-control-label" for="exampleCheck3"><?= $page_lang->remember_me ?? 'Remember me' ?></label>
+                        <a class="btn-fpswd float-end" href="/forgot-password"><?= $page_lang->lost_your_password ?? 'Lost your password?' ?></a> 
+                    </div>
+                    
+                    <button type="submit" class="btn btn-log btn-thm mt20 login-btn"><?= $page_lang->login ?? 'Login' ?></button>
+                    
+                    <p class="text-center mb25 mt10"><?= $page_lang->dont_have_account ?? "Don't have an account?" ?> <a class="signup-filter-btn" href="#"><?= $page_lang->create_account ?? 'Create account' ?></a></p>
+                    
+                    <div class="hr_content">
+                        <hr><span class="hr_top_text"><?= $page_lang->or ?? 'or' ?></span> 
+                    </div>
+                    <ul class="login_with_social text-center mt30 mb0">
+                        <li class="list-inline-item"><a href="#"><i class="fab fa-facebook"></i></a></li>
+                        <li class="list-inline-item"><a href="#"><i class="fab fa-google"></i></a></li>
+                        <li class="list-inline-item"><a href="#"><i class="fab fa-x-twitter"></i></a></li>
+                        <li class="list-inline-item"><a href="#"><i class="fab fa-apple"></i></a></li>
+                    </ul>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+  <!--End Sign In Hiddn SideBar --> 
+  <!-- Your Cart Hiddn SideBar -->
+  <div class="cart-hidden-sbar">
+    <div class="hsidebar-header">
+      <div class="sidebar-close-icon"><span class="flaticon-close"></span></div>
+      <h4 class="title"><?= $page_lang->your_cart ?? 'Your Cart' ?></h4>
+    </div>
+    <div class="hsidebar-content">
+      <div class="wrapper">
+        <ul class="cart-list-vertical">
+          <?php if(!empty($cart_items)): ?>
+            <?php foreach($cart_items as $item): ?>
+              <li class="cart-item-row" data-product_id="<?= $item->product_id ?>">
+                <div class="cart-img-wrap">
+                  <img src="<?= $item->image_url; ?>" onerror="this.src='<?= base_url('assets/customer/images/shop/s1.png'); ?>'" alt="product">
+                </div>
+                <div class="cart-details">
+                  <span class="remove-item btn-delete" data-product_id="<?= $item->product_id ?>" data-attribute_item_id="<?= $item->attribute_item_id ?>">
+                    <i class="flaticon-close"></i>
+                  </span>
+                  <p><?= $item->post_title ?></p>
+                  <div class="qty-price-wrap">
+                    <div class="quantity-block numbering">
+                      <button class="quantity_update minus" data-product_id="<?= $item->product_id ?>" data-attribute_item_id="<?= $item->attribute_item_id ?>"> - </button>
+                      <input class="quantity-num qty_update" type="text" value="<?= $item->quantity; ?>" data-product_id="<?= $item->product_id ?>" data-attribute_item_id="<?= $item->attribute_item_id ?>" data-original_quantity="<?= $item->quantity; ?>" readonly>
+                      <button class="quantity_update plus" data-product_id="<?= $item->product_id ?>" data-attribute_item_id="<?= $item->attribute_item_id ?>"> + </button>
+                    </div>
+                    <span class="price item-price" data-unit-price="<?= $item->sale_price ?>" data-total="<?= $item->total ?>"><?= $symbol . number_format($item->total, 2) ?></span>
+                    <span class="unit-price" style="display:none;"><?= $item->sale_price ?></span>
+                  </div>
+                </div>
+              </li>
+            <?php endforeach; ?>
+          <?php else: ?>
+            <li class="text-center p-5"><?= $page_lang->cart_empty ?? 'Your cart is empty' ?></li>
+          <?php endif; ?>
+        </ul>
+      </div>
+    </div>
+
+    <?php 
+      $cartEmpty = empty($cart_items);
+      $cartTotal = $cart_summary->grand_total ?? $cart_summary->total ?? 0;
+      $cartSubtotal = $cart_summary->subtotal ?? $cart_summary->total ?? 0;
+      $_cur_id = current_currency();
+      $_cur_obj = get_currency($_cur_id);
+      $_rate = $_cur_obj ? (float)$_cur_obj->rate : 1.0;
+      $freeShippingThreshold = 9800 * $_rate;
+      $percentage = $cartSubtotal >= $freeShippingThreshold ? 100 : min(100, ($cartSubtotal / $freeShippingThreshold) * 100);
+    ?>
+
+    <div class="hsidebar_footer_content" id="cartSidebarFooter" style="<?= $cartEmpty ? 'display:none;' : '' ?>">
+      <div class="lc">
+        <h5 class="mb-3"><?= $page_lang->total ?? 'Total' ?>: <span class="float-end" id="side_total"><?= $symbol . number_format($cartTotal, 2) ?></span></h5>
+        <div class="progress mb-2" style="height: 8px;" id="cartProgressBarWrap">
+          <div class="progress-bar bg-success" id="cartProgressBar" role="progressbar" style="width: <?= $percentage ?>%" aria-valuenow="<?= $percentage ?>" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <p class="para mb-2" id="cartShippingMsg" style="font-size: 12px; text-align: center;">
+          <?= $cartSubtotal < $freeShippingThreshold ? sprintf($page_lang->buy_more_for_free_shipping ?? "Buy %s more for FREE Shipping", $symbol.number_format($freeShippingThreshold - $cartSubtotal, 2)) : ($page_lang->free_shipping ?? "You have FREE Shipping!"); ?>
+        </p>
+        <div class="d-grid gap-2 mt-3" id="cartActionButtons">
+          <a href="<?= base_url('cart') ?>" class="btn btn-outline-dark w-100 mb-2" id="viewCartBtn"><?= $page_lang->view_cart ?? 'View Cart' ?></a>
+          <a href="<?= base_url('checkout') ?>" class="btn btn-warning w-100" id="checkoutBtn" style="background: #f1c40f; border: none; font-weight: bold; color: #333;"><?= $page_lang->checkout_now ?? 'Checkout Now' ?></a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!--End Your Cart Hiddn SideBar --> 
+  <!-- Sign Up Hiddn SideBar -->
+  <div class="signup-hidden-sbar">
+  <div class="hsidebar-header">
+    <div class="sidebar-close-icon"><span class="flaticon-close"></span></div>
+    <h4 class="title"><?= $page_lang->create_your_account ?? 'Create Your Account' ?></h4>
+  </div>
+  <div id="signup-sidebar-message" class="auth-sidebar-message" style="display:none;"></div>
+  <div class="hsidebar-content">
+    <div class="log_reg_form sidebar_area">
+      <div class="sign_up_form">
+        <form id="signup-form" method="post">
+         <input type="hidden" name="<?= $this->security->get_csrf_token_name(); ?>" value="<?= $this->security->get_csrf_hash(); ?>">
+         <input type="hidden" name="action" value="signup">
+
+          <div class="form-group">
+            <label class="form-label"><?= $page_lang->your_name ?? 'Your Name' ?></label>
+            <input type="text" name="fname" class="form-control" placeholder="<?= htmlspecialchars($page_lang->placeholder_name ?? 'Ali Tufan') ?>" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><?= $page_lang->mobile_number ?? 'Mobile number' ?></label>
+            <input type="text" name="mobile" class="form-control" placeholder="<?= htmlspecialchars($page_lang->mobile_number ?? 'Mobile number') ?>" required maxlength="15">
+          </div>
+
+          <div class="form-group mb-2">
+            <label class="form-label"><?= $page_lang->email ?? 'Email' ?></label>
+            <input type="email" name="email" class="form-control" placeholder="<?= htmlspecialchars($page_lang->placeholder_email ?? 'Email address') ?>" required maxlength="200">
+          </div>
+          <div class="form-group mb20">
+            <label class="form-label"><?= $page_lang->password ?? 'Password' ?></label>
+            <input type="password" name="password" class="form-control" placeholder="******************" required data-parsley-minlength="6">
+          </div>
+          
+          <button type="submit" class="btn btn-signup btn-thm login-btn"><?= $page_lang->create_account ?? 'Create Account' ?></button>
+          
+          <p class="text-center mb25 mt10"><?= $page_lang->already_have_account ?? 'Already have an account?' ?> <a class="login-form-btn" href="#"><?= $page_lang->sign_in ?? 'Sign in' ?></a></p>       
+           <div class="hr_content">
+            <hr><span class="hr_top_text"><?= $page_lang->or ?? 'or' ?></span>
+          </div>
+          <ul class="login_with_social text-center mt30 mb0">
+            <li class="list-inline-item"><a href="#"><i class="fab fa-facebook"></i></a></li>
+            <li class="list-inline-item"><a href="#"><i class="fab fa-google"></i></a></li>
+            <li class="list-inline-item"><a href="#"><i class="fab fa-x-twitter"></i></a></li>
+            <li class="list-inline-item"><a href="#"><i class="fab fa-apple"></i></a></li>
+          </ul>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+  <!--End Sign Up Hiddn SideBar --> 
+  
+  <!-- Main Header Nav For Mobile -->
+  <div id="page" class="stylehome1">
+    <div class="mobile-menu">
+      <div class="header stylehome1">
+        <div class="menu_and_widgets">
+          <div class="mobile_menu_bar float-start"> <a class="menubar" href="#menu"><span></span></a> <a class="mobile_logo" href="<?= base_url('/'); ?>"><img src="<?= base_url('assets/vendor/images/logo.png'); ?>" alt="Cheru" style="max-height:34px; width:auto;"></a> </div>
+          <div class="mobile_menu_widget_icons">
+            <ul class="cart mt15">
+              <li class="list-inline-item"> <a class="cart_btn signin-filter-btn" href="#"><span class="icon flaticon-profile"></span></a> </li>
+              <li class="list-inline-item"> <a class="cart_btn cart-filter-btn" href="#"><span class="icon"><img src="/assets/customer/images/icons/flaticon-shopping-cart-white.svg" alt=""></span><span class="badge bgc-thm">2</span></a> </li>
+            </ul>
+          </div>
+        </div>
+        <div class="mobile_menu_search_widget">
+          <div class="header_middle_advnc_search">
+            <div class="container search_form_wrapper">
+              <div class="row">
+                <div>
+                  <div class="top-search text-start">
+                    <form action="#" method="get" class="form-search" accept-charset="utf-8">
+                      <div class="box-search">
+                        <input class="form_control" type="text" name="search" placeholder="<?= htmlspecialchars($page_lang->search_products ?? 'Search products…') ?>">
+                        <div class="search-suggestions text-start">
+                          <div class="box-suggestions">
+                            <ul>
+                              <li>
+                                <div class="thumb"> <img src="/assets/customer/images/listing/sf1.png" alt="sf1.png"> </div>
+                                <div class="info-product">
+                                  <div class="item_title">Sony DJ Headphones 4334205465, Black, Standard</div>
+                                  <div class="price"><span class="sale">$32.50</span></div>
+                                </div>
+                              </li>
+                              <li>
+                                <div class="thumb"> <img src="/assets/customer/images/listing/sf2.png" alt="sf2.png"> </div>
+                                <div class="info-product">
+                                  <div class="item_title">Sony E-Mount Full Frame FE 24-70mm f/2.8 GM II G Master</div>
+                                  <div class="price"><span class="sale">$32.50</span></div>
+                                </div>
+                              </li>
+                              <li>
+                                <div class="thumb"> <img src="/assets/customer/images/listing/sf3.png" alt="sf3.png"> </div>
+                                <div class="info-product">
+                                  <div class="item_title">TV 55" 4-Series 4K UHD smart TV</div>
+                                  <div class="price"><span class="sale">$32.50</span></div>
+                                </div>
+                              </li>
+                              <li>
+                                <div class="thumb"> <img src="/assets/customer/images/listing/sf4.png" alt="sf4.png"> </div>
+                                <div class="info-product">
+                                  <div class="item_title">Hugolog Baby Monitor, 2K Security Camera, PT Cameras for</div>
+                                  <div class="price"><span class="sale">$32.50</span></div>
+                                </div>
+                              </li>
+                              <li>
+                                <div class="thumb"> <img src="/assets/customer/images/listing/sf5.png" alt="sf5.png"> </div>
+                                <div class="info-product">
+                                  <div class="item_title">Apple iPhone Retina 6s Plus 64GB</div>
+                                  <div class="price"><span class="sale">$32.50</span></div>
+                                </div>
+                              </li>
+                            </ul>
+                          </div>
+                          <!-- /.box-suggestions --> 
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+                <div>
+                  <div class="advscrh_frm_btn">
+                    <button type="submit" class="btn search-btn"><span class="flaticon-search"></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="posr">
+          <div class="mobile_menu_close_btn"><span class="flaticon-close"></span></div>
+        </div>
+      </div>
+    </div>
+    <!-- /.mobile-menu -->
+    <nav id="menu" class="stylehome1 d-none">
+      <ul>
+        <li><span>Home</span>
+          <ul>
+            <li><a href="/assets/customer/index1.html">Home V1</a></li>
+            <li><a href="/assets/customer/index2.html">Home V2</a></li>
+            <li><a href="/assets/customer/index3.html">Home V3</a></li>
+            <li><a href="/assets/customer/index4.html">Home V4</a></li>
+            <li><a href="/assets/customer/index5.html">Home V5</a></li>
+            <li><a href="/assets/customer/index6.html">Home V6</a></li>
+            <li><a href="/assets/customer/index7.html">Home V7</a></li>
+            <li><a href="/assets/customer/index8.html">Home V8</a></li>
+            <li><a href="/assets/customer/index9.html">Home V9</a></li>
+            <li><a href="/assets/customer/index10.html">Home V10</a></li>
+          </ul>
+        </li>
+        <li><span>Shop</span>
+          <ul>
+            <li><span>Shop Listing</span>
+              <ul>
+                <li><a href="/assets/customer/page-shop-list-v1.html">Listing v1</a></li>
+                <li><a href="/assets/customer/page-shop-list-v2.html">Listing v2</a></li>
+                <li><a href="/assets/customer/page-shop-list-v3.html">Listing v3</a></li>
+                <li><a href="/assets/customer/page-shop-list-v4.html">Listing v4</a></li>
+                <li><a href="/assets/customer/page-shop-list-v5.html">Listing v5</a></li>
+                <li><a href="/assets/customer/page-shop-list-v6.html">Listing v6</a></li>
+                <li><a href="/assets/customer/page-shop-list-v7.html">Listing v7</a></li>
+                <li><a href="/assets/customer/page-shop-list-v8.html">Listing v8</a></li>
+              </ul>
+            </li>
+            <li><span>Shop Single</span>
+              <ul>
+                <li><a href="/assets/customer/page-shop-single-v1.html">Version 1</a></li>
+                <li><a href="/assets/customer/page-shop-single-v2.html">Version 2</a></li>
+                <li><a href="/assets/customer/page-shop-single-v3.html">Version 3</a></li>
+                <li><a href="/assets/customer/page-shop-single-v4.html">Version 4</a></li>
+                <li><a href="/assets/customer/page-shop-single-v5.html">Version 5</a></li>
+                <li><a href="/assets/customer/page-shop-single-color-switch.html">Color Switch</a></li>
+                <li><a href="/assets/customer/page-shop-single-image-switch.html">Image Switch</a></li>
+                <li><a href="/assets/customer/page-shop-single-countdown.html">Single Countdown</a></li>
+                <li><a href="/assets/customer/page-shop-single-external-product.html">External Product</a></li>
+                <li><a href="/assets/customer/page-shop-single-grouped-product.html">Grouped Product</a></li>
+                <li><a href="/assets/customer/page-shop-single-bought-together.html">Bought Together</a></li>
+              </ul>
+            </li>
+            <li><span>User Dashboard</span>
+              <ul>
+                <li><a href="/assets/customer/page-dashboard.html">Dashboard</a></li>
+                <li><a href="/assets/customer/page-dashboard-order.html">Orders</a></li>
+                <li><a href="/assets/customer/page-dashboard-wish-list.html">Downloads</a></li>
+                <li><a href="/assets/customer/page-dashboard-address.html">Addresses</a></li>
+                <li><a href="/assets/customer/page-dashboard-account-details.html">Account Details</a></li>
+                <li><a href="/assets/customer/page-dashboard-wish-list.html">Wishlist</a></li>
+                <li><a href="/assets/customer/page-login.html">Logout</a></li>
+              </ul>
+            </li>
+            <li><span>Shop Pages</span>
+              <ul>
+                <li><a href="/assets/customer/page-shop-cart.html">Cart</a></li>
+                <li><a href="/assets/customer/page-shop-checkout.html">Checkout</a></li>
+                <li><a href="/assets/customer/page-shop-order-received.html">Order Received</a></li>
+                <li><a href="/assets/customer/page-order-tracking.html">Order Tracking</a></li>
+                <li><a href="/assets/customer/page-store-location.html">Store Locator</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><span>Pages</span>
+          <ul>
+            <li><a href="/assets/customer/page-about.html">About Us</a></li>
+            <li><span>Accounts</span>
+              <ul>
+                <li><a href="/assets/customer/page-account-details.html">Account Details</a></li>
+                <li><a href="/assets/customer/page-account-order.html">Account Order</a></li>
+                <li><a href="/assets/customer/page-account-address.html">Account Address</a></li>
+                <li><a href="/assets/customer/page-account-wishlist.html">Account Wishlist</a></li>
+                <li><a href="/assets/customer/page-account-invoice.html">Account Invoice</a></li>
+              </ul>
+            </li>
+            <li><a href="/assets/customer/page-become-vendor.html">Become Vendor</a></li>
+            <li><span>Vendor Pages</span>
+              <ul>
+                <li><a href="/assets/customer/page-vendor-list.html">Vendor List</a></li>
+                <li><a href="/assets/customer/page-vendor-single.html">Vendor Single</a></li>
+                <li><a href="/assets/customer/page-dashboard.html">Dashboard</a></li>
+                <li><a href="/assets/customer/page-dashboard-products.html">Products</a></li>
+                <li><a href="/assets/customer/page-dashboard-order.html">Order</a></li>
+                <li><a href="/assets/customer/page-dashboard-customer.html">Customer</a></li>
+                <li><a href="/assets/customer/page-dashboard-categories.html">Categories</a></li>
+                <li><a href="/assets/customer/page-dashboard-message.html">Message</a></li>
+                <li><a href="/assets/customer/page-dashboard-setting.html">Settings</a></li>
+              </ul>
+            </li>
+            <li><a href="/assets/customer/page-brands.html">Brands</a></li>
+            <li><a href="/assets/customer/page-contact.html">Contact</a></li>
+            <li><a href="/assets/customer/page-coming-soon.html">Coming Soon</a></li>
+            <li><a href="/assets/customer/page-help.html">Help</a></li>
+            <li><a href="/assets/customer/page-error.html">404 Page</a></li>
+            <li><a href="/assets/customer/page-faq.html">Faq</a></li>
+            <li><a href="/assets/customer/page-invoices.html">Invoices</a></li>
+            <li><a href="/assets/customer/page-login.html">Login</a></li>
+            <li><a href="/assets/customer/page-register.html">Register</a></li>
+            <li><a href="/assets/customer/page-terms.html">Terms and Conditions</a></li>
+            <li><a href="/assets/customer/page-ui-element.html">UI Elements</a></li>
+          </ul>
+        </li>
+        <li><span>Blog</span>
+          <ul>
+            <li><a href="/assets/customer/page-blog-grid.html">Blog Grid</a></li>
+            <li><a href="/assets/customer/page-blog-grid-sidebar.html">Blog Grid Sidebar</a></li>
+            <li><a href="/assets/customer/page-blog-details.html">Blog Details</a></li>
+            <li><a href="/assets/customer/page-blog-list.html">Blog List</a></li>
+            <li><a href="/assets/customer/page-blog-single.html">Blog Single</a></li>
+            <li><a href="/assets/customer/page-blog-single2.html">Blog Single v2</a></li>
+          </ul>
+        </li>
+        <li class="title my-3 bb1 pl20 fz20 fw500 pb-3">Departments</li>
+        <li><span><i class="flaticon-cooking mr20"></i>Home & Kitchen</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Home & Kitchen</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-armchair mr20"></i>Home & Furniture</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Home & Furniture</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-smartphone-1 mr20"></i>Electronics</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Electronics</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-bride-dress mr20"></i>Clothing & Accessories</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Clothing & Accessories</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-heart-beat mr20"></i>Health & Beauty</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Health & Beauty</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-volleyball mr20"></i>Sport & Outdoor</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Sport & Outdoor</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-groceries mr20"></i>Grocery & Market</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Grocery & Market</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-remote-control mr20"></i>Toy & Video Games</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Toy & Video Games</a></li>
+          </ul>
+        </li>
+        <li><span><i class="flaticon-feeding-bottle mr20"></i>Babies & Moms</span>
+          <ul>
+            <li><a href="/assets/customer/page-shop-list-v1.html">Babies & Moms</a></li>
+          </ul>
+        </li>
+        <li><a class="tdu text-thm1 text-capitalize" href="#">See More <i class="far fa-angle-down"></i></a></li>
+        <!-- Only for Mobile View -->
+      </ul>
+    </nav>
+  </div>
+
+  <script src="<?= base_url('assets/customer/js/cart.js'); ?>"></script>
+
+  <script>
+  var base_url = '<?= base_url(); ?>';
+  var site_url = '<?= site_url(); ?>';
+  var csrf_token_name = '<?= $this->security->get_csrf_token_name(); ?>';
+  var csrf_hash = '<?= $this->security->get_csrf_hash(); ?>';
+  var currency_symbol = '<?= $symbol ?? '$'; ?>';
+  window.csrf_token_name = csrf_token_name;
+  window.csrf_hash = csrf_hash;
+  window.site_url = site_url;
+  window.currency_symbol = currency_symbol;
+  window.customer_access_token = '<?= isset($this->session) && is_array($this->session->userdata('customer')) && !empty($this->session->userdata('customer')['access_token']) ? $this->session->userdata('customer')['access_token'] : '' ?>';
+  window.__cheru_cart_use_api__ = true;
+  window.freeShippingThreshold = <?= 9800 * (isset($_rate) ? (float)$_rate : 1.0) ?>;
+  window.shippingFee           = <?= 50 * (isset($_rate) ? (float)$_rate : 1.0) ?>;
+
+  (function () {
+      var sel = document.getElementById('selectbox_alCategory');
+      if (!sel) {
+          return;
+      }
+      var apiUrl = base_url + 'api/v1/homepage/categories';
+
+      function runWhenJqReady(fn) {
+          if (typeof window.jQuery !== 'undefined') {
+              fn(window.jQuery);
+              return;
+          }
+          var attempts = 0;
+          var maxAttempts = 50;
+          var timer = setInterval(function () {
+              attempts++;
+              if (typeof window.jQuery !== 'undefined') {
+                  clearInterval(timer);
+                  fn(window.jQuery);
+              } else if (attempts >= maxAttempts) {
+                  clearInterval(timer);
+              }
+          }, 100);
+      }
+
+      runWhenJqReady(function ($) {
+          $.ajax({
+              url: apiUrl,
+              type: 'GET',
+              dataType: 'json'
+          }).done(function (json) {
+              if (!json || json.status !== 1 || !json.data || !Array.isArray(json.data.categories)) {
+                  return;
+              }
+              var categories = json.data.categories;
+              if (!categories.length) {
+                  return;
+              }
+              var keepFirst = sel.querySelector('option[value="AllCategory"]');
+              while (sel.firstChild) {
+                  sel.removeChild(sel.firstChild);
+              }
+              if (keepFirst) {
+                  sel.appendChild(keepFirst);
+              } else {
+                  var optAll = document.createElement('option');
+                  optAll.value = 'AllCategory';
+                  optAll.textContent = 'All Category';
+                  sel.appendChild(optAll);
+              }
+              categories.forEach(function (c) {
+                  if (!c || !c.slug) {
+                      return;
+                  }
+                  var opt = document.createElement('option');
+                  opt.value = String(c.slug);
+                  opt.textContent = String(c.name || c.slug);
+                  sel.appendChild(opt);
+              });
+              if (typeof $(sel).selectpicker === 'function') {
+                  $(sel).selectpicker('refresh');
+              }
+          });
+      });
+  })();
+
+  (function(){
+      function runWhenJqReady2(fn) {
+          if (typeof window.jQuery !== 'undefined') {
+              fn(window.jQuery);
+              return;
+          }
+          var attempts = 0;
+          var maxAttempts = 50;
+          var timer = setInterval(function () {
+              attempts++;
+              if (typeof window.jQuery !== 'undefined') {
+                  clearInterval(timer);
+                  fn(window.jQuery);
+              } else if (attempts >= maxAttempts) {
+                  clearInterval(timer);
+              }
+          }, 100);
+      }
+
+      function debounce(fn, wait) {
+          var t;
+          return function() {
+              var ctx = this, args = arguments;
+              clearTimeout(t);
+              t = setTimeout(function(){ fn.apply(ctx, args); }, wait);
+          };
+      }
+
+      function renderSuggestions($box, data, selectedCategory, term) {
+          var $ul = $box.find('ul');
+          if (!$ul.length) return;
+          $ul.empty();
+
+          var items = [];
+          if (data && data.data) {
+              if (data.data.products && data.data.products.length) {
+                  data.data.products.forEach(function(p){ items.push({type:'product', title:p.name, url:p.url, price:p.price || '', image:p.image_url || ''}); });
+              }
+          }
+
+          if (!items.length) {
+              var msg = selectedCategory ? "No product found in this category." : "No product found.";
+              $ul.append('<li style="padding:15px;text-align:center;color:#666;list-style:none;">' + msg + '</li>');
+              $box.addClass('show').css('display', 'block');
+              return;
+          }
+
+          items.forEach(function(it){
+              var thumb = it.image ? '<div class="thumb"><img src="' + it.image + '" alt=""></div>' : '<div class="thumb"><img src="' + base_url + 'assets/default_images/product.jpg" alt=""></div>';
+              var right = '';
+              if (it.type === 'product' && it.price !== '') {
+                  right = '<div class="price"><span class="sale">' + currency_symbol + it.price + '</span></div>';
+              }
+              var li = '';
+              li += '<li>';
+              li += '<a href="' + it.url + '" class="header-search-suggestion" style="display:flex; align-items:center; gap:10px;">';
+              li += thumb;
+              li += '<div class="info-product">';
+              li += '<div class="item_title">' + $('<div/>').text(it.title).html() + '</div>';
+              li += right;
+              li += '</div>';
+              li += '</a>';
+              li += '</li>';
+              $ul.append(li);
+          });
+
+          // "View all results" button
+          if (term) {
+              var viewAllUrl = base_url + 'shop/' + encodeURIComponent(term);
+              if (selectedCategory) { viewAllUrl += '?cat=' + encodeURIComponent(selectedCategory); }
+              var viewAllLi = '<li class="search-view-all-li" style="border-top:1px solid #eee;list-style:none;">';
+              viewAllLi += '<a href="' + viewAllUrl + '" class="search-view-all-btn" style="display:block;text-align:center;padding:11px 15px;font-size:13px;font-weight:600;color:#6366f1;text-decoration:none;letter-spacing:.2px;">View all results for &ldquo;' + $('<div/>').text(term).html() + '&rdquo; &rarr;</a>';
+              viewAllLi += '</li>';
+              $ul.append(viewAllLi);
+          }
+
+          $box.addClass('show').css('display', 'block');
+      }
+
+      runWhenJqReady2(function($){
+          $(function(){
+              var $input = $('#headerSearchInput');
+              var $suggestions = $('#headerSearchSuggestions');
+              if(!$input.length || !$suggestions.length) return;
+
+              function getSelectedCategorySlug(){
+                  var $cat = $('#selectbox_alCategory');
+                  if(!$cat.length) return '';
+                  var val = ($cat.val() || '').toString();
+                  if(val === 'AllCategory') return '';
+                  return val;
+              }
+
+              var fetchSuggestions = debounce(function(){
+                  var term = ($input.val() || '').trim();
+                  if (term.length < 2) {
+                      $suggestions.hide();
+                      return;
+                  }
+
+                  var cat = getSelectedCategorySlug();
+                  var postData = { term: term, category_slug: cat };
+                  postData[csrf_token_name] = csrf_hash;
+
+                  $.ajax({
+                      url: base_url + 'api/v1/homepage/smart-search',
+                      type: 'POST',
+                      dataType: 'json',
+                      data: postData
+                  }).done(function(resp){
+                      if (resp && resp.csrf_hash) {
+                          csrf_hash = resp.csrf_hash;
+                      }
+                      renderSuggestions($suggestions, resp, cat, term);
+                  }).fail(function(){
+                      $suggestions.removeClass('show').css('display', 'none');
+                  });
+              }, 250);
+
+              $input.on('input', fetchSuggestions);
+              $input.on('focus', function(){
+                  if ($suggestions.find('li').length) $suggestions.addClass('show').css('display', 'block');
+              });
+              $(document).on('click', function(e){
+                  if ($(e.target).closest($suggestions).length) return;
+                  if ($(e.target).closest($input).length) return;
+                  $suggestions.removeClass('show').css('display', 'none');
+              });
+              $input.closest('form.header-search-form').on('submit', function(e){
+                  e.preventDefault();
+                  var term = ($input.val() || '').trim();
+                  if (!term) return;
+                  var cat = getSelectedCategorySlug();
+                  var url = base_url + 'shop/' + encodeURIComponent(term);
+                  if(cat){
+                      url += '?cat=' + encodeURIComponent(cat);
+                  }
+                  window.location.href = url;
+              });
+          });
+      });
+  })();
+
+  (function () {
+      var apiBase = "<?= base_url('api/v1/homepage/categories'); ?>";
+      var dropdown = document.getElementById('bcDropdown');
+      var menu = document.getElementById('bcMenu');
+      var panel = document.getElementById('bcRightPanel');
+      var panel2 = document.getElementById('bcRightPanel2');
+      if (!menu) {
+          return;
+      }
+
+      function safeText(v) {
+          return (v === null || v === undefined) ? '' : String(v);
+      }
+
+      function categoryUrl(slug) {
+          return "<?= base_url('products/category/'); ?>" + encodeURIComponent(safeText(slug));
+      }
+
+      function fetchCategories(parentId) {
+          var url = apiBase;
+          if (parentId !== null && parentId !== undefined) {
+              url += '?parent_id=' + encodeURIComponent(parentId);
+          }
+          return fetch(url, { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (json) {
+                  if (!json || json.status !== 1 || !json.data || !json.data.categories) {
+                      return [];
+                  }
+                  return json.data.categories;
+              })
+              .catch(function () { return []; });
+      }
+
+      function renderParents(parents) {
+          if (!parents || !parents.length) {
+              return;
+          }
+          while (menu.firstChild) {
+              menu.removeChild(menu.firstChild);
+          }
+          for (var i = 0; i < parents.length; i++) {
+              var c = parents[i] || {};
+              var li = document.createElement('li');
+              var a = document.createElement('a');
+              a.className = 'dropdown';
+              a.href = categoryUrl(c.slug);
+              a.setAttribute('data-bc-id', safeText(c.id));
+              a.setAttribute('data-bc-slug', safeText(c.slug));
+              a.setAttribute('data-bc-has-children', c.has_children ? '1' : '0');
+              var icn = document.createElement('span');
+              icn.className = 'menu-icn flaticon-diamond';
+              var title = document.createElement('span');
+              title.className = 'menu-title';
+              title.textContent = safeText(c.name);
+              a.appendChild(icn);
+              a.appendChild(title);
+              li.appendChild(a);
+              menu.appendChild(li);
+          }
+      }
+
+      function hidePanel() {
+          if (panel) {
+              panel.style.display = 'none';
+              panel.innerHTML = '';
+          }
+          if (panel2) {
+              panel2.style.display = 'none';
+              panel2.innerHTML = '';
+          }
+      }
+
+      function hidePanel2() {
+          if (panel2) {
+              panel2.style.display = 'none';
+              panel2.innerHTML = '';
+          }
+      }
+
+      function positionPanelTo(targetPanel, sourceEl, clampToViewportBottom) {
+          if (!targetPanel || !sourceEl || !targetPanel.parentNode) {
+              return;
+          }
+          try {
+              var parentRect = targetPanel.parentNode.getBoundingClientRect();
+              var srcRect = sourceEl.getBoundingClientRect();
+              var ph = targetPanel.offsetHeight || 0;
+              var top;
+              if (menu && menu.contains(sourceEl)) {
+                  top = sourceEl.offsetTop;
+              } else if (panel && panel.contains(sourceEl)) {
+                  top = (panel.offsetTop || 0) + (sourceEl.offsetTop || 0);
+              } else if (panel2 && panel2.contains(sourceEl)) {
+                  top = (panel2.offsetTop || 0) + (sourceEl.offsetTop || 0);
+              } else {
+                  top = (srcRect.top - parentRect.top);
+              }
+              if (top < 0) {
+                  top = 0;
+              }
+
+              if (clampToViewportBottom) {
+                  var viewportH = (document.documentElement && document.documentElement.clientHeight) ? document.documentElement.clientHeight : window.innerHeight;
+                  var parentTopInViewport = parentRect.top;
+                  var panelTopInViewport = parentTopInViewport + top;
+                  var maxPanelTopInViewport = Math.max(0, viewportH - ph - 10);
+                  if (panelTopInViewport > maxPanelTopInViewport) {
+                      panelTopInViewport = maxPanelTopInViewport;
+                      top = panelTopInViewport - parentTopInViewport;
+                  }
+                  if (top < 0) {
+                      top = 0;
+                  }
+              }
+
+              targetPanel.style.top = top + 'px';
+          } catch (e) {
+              // no-op
+          }
+      }
+
+      function showChildren(targetPanel, titleText, parentId, children, sourceEl) {
+          if (!targetPanel) {
+              return;
+          }
+          clearHoverTimer();
+          var posEl = sourceEl;
+          while (posEl && posEl.tagName && posEl.tagName !== 'LI') {
+              posEl = posEl.parentNode;
+          }
+          posEl = posEl || sourceEl;
+          targetPanel.innerHTML = '';
+
+          var title = document.createElement('div');
+          title.style.fontWeight = '600';
+          title.style.marginBottom = '8px';
+          title.textContent = safeText(titleText);
+          targetPanel.appendChild(title);
+
+          var ul = document.createElement('ul');
+          ul.style.listStyle = 'none';
+          ul.style.padding = '0';
+          ul.style.margin = '0';
+
+          for (var i = 0; i < children.length; i++) {
+              (function (c) {
+                  var li = document.createElement('li');
+                  li.style.margin = '0';
+                  var a = document.createElement('a');
+                  a.href = categoryUrl(c.slug);
+                  a.style.display = 'block';
+                  a.style.padding = '6px 8px';
+                  a.style.color = '#222';
+                  a.style.textDecoration = 'none';
+                  a.setAttribute('data-bc-id', safeText(c.id));
+                  a.setAttribute('data-bc-slug', safeText(c.slug));
+                  a.setAttribute('data-bc-name', safeText(c.name));
+                  a.setAttribute('data-bc-has-children', c.has_children ? '1' : '0');
+                  var icn = document.createElement('span');
+                  icn.className = 'menu-icn flaticon-diamond';
+                  icn.style.cssText = 'margin-right:8px;';
+                  a.appendChild(icn);
+                  a.appendChild(document.createTextNode(safeText(c.name)));
+                  if (c.has_children) {
+                      var arrow = document.createElement('span');
+                      arrow.textContent = '›';
+                      arrow.style.cssText = 'float:right;opacity:.7;font-size:16px;line-height:1;';
+                      a.appendChild(arrow);
+                  }
+                  li.appendChild(a);
+                  ul.appendChild(li);
+              })(children[i] || {});
+          }
+          targetPanel.appendChild(ul);
+          targetPanel.style.display = 'block';
+          positionPanelTo(targetPanel, posEl, targetPanel === panel);
+      }
+
+      var hoverTimer = null;
+      var panelHovered = false;
+      var panel2Hovered = false;
+      function clearHoverTimer() {
+          if (hoverTimer) {
+              clearTimeout(hoverTimer);
+              hoverTimer = null;
+          }
+      }
+
+      function handleHoverOpen(linkEl) {
+          var idRaw = linkEl.getAttribute('data-bc-id');
+          var hasChildren = linkEl.getAttribute('data-bc-has-children') === '1';
+          if (!idRaw || !hasChildren) {
+              hidePanel();
+              return;
+          }
+          var id = parseInt(idRaw, 10);
+          if (!id) {
+              hidePanel();
+              return;
+          }
+          var name = linkEl.textContent || '';
+          fetchCategories(id).then(function (children) {
+              if (children && children.length) {
+                  hidePanel2();
+                  showChildren(panel, name, id, children, linkEl);
+                  return;
+              }
+              hidePanel();
+          });
+      }
+
+      menu.addEventListener('mouseover', function (e) {
+          var target = e.target;
+          while (target && target !== menu && target.tagName !== 'A') {
+              target = target.parentNode;
+          }
+          if (!target || target === menu || target.tagName !== 'A') {
+              return;
+          }
+          clearHoverTimer();
+          hoverTimer = setTimeout(function () {
+              handleHoverOpen(target);
+          }, 80);
+      });
+
+      menu.addEventListener('mouseleave', function () {
+          clearHoverTimer();
+          hoverTimer = setTimeout(function () {
+              if (panelHovered) {
+                  return;
+              }
+              hidePanel();
+          }, 120);
+      });
+
+      function handlePanelHoverOpen(linkEl) {
+          var idRaw = linkEl.getAttribute('data-bc-id');
+          var hasChildren = linkEl.getAttribute('data-bc-has-children') === '1';
+          if (!idRaw || !hasChildren) {
+              hidePanel2();
+              return;
+          }
+          var id = parseInt(idRaw, 10);
+          if (!id) {
+              return;
+          }
+          var name = linkEl.getAttribute('data-bc-name') || linkEl.textContent || '';
+          fetchCategories(id).then(function (children) {
+              if (children && children.length) {
+                  showChildren(panel2, name, id, children, linkEl);
+              }
+          });
+      }
+
+      if (panel) {
+          panel.addEventListener('mouseenter', function () {
+              panelHovered = true;
+              clearHoverTimer();
+          });
+          panel.addEventListener('mouseover', function (e) {
+              var target = e.target;
+              while (target && target !== panel && target.tagName !== 'A') {
+                  target = target.parentNode;
+              }
+              if (!target || target === panel || target.tagName !== 'A') {
+                  return;
+              }
+              clearHoverTimer();
+              hoverTimer = setTimeout(function () {
+                  handlePanelHoverOpen(target);
+              }, 80);
+          });
+          panel.addEventListener('mouseleave', function () {
+              panelHovered = false;
+              clearHoverTimer();
+              hoverTimer = setTimeout(function () {
+                  if (panel2Hovered) {
+                      return;
+                  }
+                  hidePanel();
+              }, 120);
+          });
+      }
+
+      if (panel2) {
+          panel2.addEventListener('mouseenter', function () {
+              panel2Hovered = true;
+              clearHoverTimer();
+          });
+          panel2.addEventListener('mouseleave', function () {
+              panel2Hovered = false;
+              clearHoverTimer();
+              hoverTimer = setTimeout(function () {
+                  hidePanel2();
+              }, 120);
+          });
+      }
+
+      if (dropdown) {
+          dropdown.addEventListener('mouseleave', function () {
+              clearHoverTimer();
+              hoverTimer = setTimeout(function () {
+                  hidePanel();
+              }, 50);
+          });
+      }
+
+      menu.addEventListener('click', function (e) {
+          var target = e.target;
+          while (target && target !== menu && target.tagName !== 'A') {
+              target = target.parentNode;
+          }
+          if (!target || target === menu || target.tagName !== 'A') {
+              return;
+          }
+          var hasChildren = target.getAttribute('data-bc-has-children') === '1';
+          if (hasChildren) {
+              e.preventDefault();
+          }
+      });
+
+      if (panel) {
+          panel.addEventListener('click', function (e) {
+              var target = e.target;
+              while (target && target !== panel && target.tagName !== 'A') {
+                  target = target.parentNode;
+              }
+              if (!target || target === panel || target.tagName !== 'A') {
+                  return;
+              }
+              var hasChildren = target.getAttribute('data-bc-has-children') === '1';
+              var idRaw = target.getAttribute('data-bc-id');
+              var slug = target.getAttribute('data-bc-slug') || '';
+              var name = target.getAttribute('data-bc-name') || target.textContent || '';
+              var id = parseInt(idRaw, 10);
+              if (!hasChildren || !id) {
+                  return;
+              }
+              e.preventDefault();
+              fetchCategories(id).then(function (children) {
+                  if (children && children.length) {
+                      showChildren(panel2, name, id, children, target);
+                      return;
+                  }
+                  window.location.href = categoryUrl(slug);
+              });
+          });
+      }
+
+      document.addEventListener('click', function (e) {
+          if ((!panel || panel.style.display === 'none') && (!panel2 || panel2.style.display === 'none')) {
+              return;
+          }
+          if ((panel && panel.contains(e.target)) || (panel2 && panel2.contains(e.target)) || menu.contains(e.target)) {
+              return;
+          }
+          hidePanel();
+      });
+
+      fetchCategories(null).then(renderParents);
+  })();
+
+  // Auto-refresh cart count badge + sidebar on every page load
+  (function() {
+      function _waitForJqCart(fn) {
+          if (window.jQuery) return fn();
+          setTimeout(function() { _waitForJqCart(fn); }, 50);
+      }
+      _waitForJqCart(function() {
+          if (!window.__cheru_cart_autoloaded__ && typeof window.refreshHeaderAndSidebarCart === 'function') {
+              window.__cheru_cart_autoloaded__ = true;
+              window.refreshHeaderAndSidebarCart();
+          }
+      });
+  })();
+  </script>
+
+  <div class="body_content_wrapper position-relative pt30"> 
+    <!-- Home Design -->
+        <!-- Custom Shop Category List Menu -->
+        <section class="p0 bb1 overflow-hidden">
+            <div class="container">
+              <div class="row">
+                <div class="col-lg-12">
+                  <div class="custom_shop_category_nav_list_menu">
+                    <ul class="mb0 d-flex">
+                      <li><a href="#">All Electronics</a></li>
+                      <li><a href="#">Smart TV</a></li>
+                      <li><a class="active" href="#">Laptops</a></li>
+                      <li><a href="#">Cell Phones</a></li>
+                      <li><a href="#">Camera & Photo</a></li>
+                      <li><a href="#">Portable Audio</a></li>
+                      <li><a href="#">Computers</a></li>
+                      <li><a href="#">iPad & Tablets</a></li>
+                      <li><a href="#">Pc Gaming</a></li>
+                      <li><a href="#">Smart Home</a></li>
+                      <li><a href="#">Headphones</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+          <!-- Inner Page Breadcrumb -->
+          <section class="inner_page_breadcrumb">
+            <div class="container">
+              <div class="row">
+                <div class="col-xl-6">
+                  <div class="breadcrumb_content">
+                    <ol class="breadcrumb">
+                      <li class="breadcrumb-item"><a href="#">Home</a></li>
+                      <li class="breadcrumb-item"><a href="#">Electronics</a></li>
+                      <li class="breadcrumb-item"><a href="#">Computers</a></li>
+                      <li class="breadcrumb-item active" aria-current="page"><a href="#">Desktop Computers</a></li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>

@@ -1,0 +1,612 @@
+<?php $page_lang = get_page_language_data('admin_page_lang'); ?>
+
+<div class="page-body">
+    <div class="container-fluid">
+        <div class="page-header">
+            <div class="row">
+                <div class="col-lg-6">
+                    <h3>Deal of the Day</h3>
+                </div>
+                <?= $breadcrumbs ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card">
+                    <?php if ($this->session->flashdata('error')) { ?>
+                    <div class="alert alert-danger m-3 rounded"><?= $this->session->flashdata('error')?><?php $this->session->unset_userdata('error');?></div>
+                    <?php } ?>
+                    <?php if($this->session->flashdata('success')){?>
+                    <div class="alert alert-success m-3 rounded"><?= $this->session->flashdata('success')?><?php $this->session->unset_userdata('success');?></div>
+                    <?php } ?>
+
+                    <div class="card-body">
+                        <div class="topAction-btn" style="display:flex; justify-content:flex-end; margin-bottom:10px; gap:10px;">
+                            <button type="button" id="btnOpenFilterDeal" class="btn btn-light" title="Filter" data-toggle="tooltip" data-placement="top" data-animation="false">
+                                <i class="fa fa-filter"></i> Filter
+                            </button>
+                            <button type="button" id="btnOpenAddDeal" class="btn btn-primary addNew" title="Add Deal" data-toggle="tooltip" data-placement="top" data-animation="false">
+                                <i class="fa fa-plus"></i> Add Deal
+                            </button>
+                        </div>
+
+                        <div class="dt-ext table-responsive">
+                            <table id="table" class="display dataTable table-striped table-bordered table-hover custom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Sales Price</th>
+                                        <th>Discount Type</th>
+                                        <th>Discount Per</th>
+                                        <th>Discount Amount</th>
+                                        <th>Deal Price</th>
+                                        <th>Timezone</th>
+                                        <th>Deal Date</th>
+                                        <th>Status</th>
+                                        <th width="50px" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addDealModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Deal</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="addDealForm">
+                    <input type="hidden" name="<?= $csrf->name; ?>" value="<?= $csrf->hash; ?>">
+                    <input type="hidden" id="deal_id" name="id" value="">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Product</label>
+                                <select id="deal_product_id" name="product_id" class="form-control" style="width:100%" required></select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Prices</label>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0" id="deal_prices_table">
+                                        <thead>
+                                            <tr>
+                                                <th>Label</th>
+                                                <th class="text-right">Sales Price</th>
+                                                <th class="text-right">Regular Price</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td colspan="3" class="text-center">Select product</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Discount Type</label>
+                                <select id="deal_discount_type" name="discount_type" class="form-control" required>
+                                    <option value="FIXED" selected>FIXED</option>
+                                    <option value="PERCENT">PERCENT</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6" id="deal_discount_percent_wrap" style="display:none;">
+                            <div class="form-group">
+                                <label class="form-label">Discount Percent</label>
+                                <input type="number" min="0" max="100" step="0.01" id="deal_discount_percent" name="discount_percent" class="form-control" value="0">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Discount Amount</label>
+                                <input type="number" min="0" step="0.01" id="deal_discount_amount" name="discount_amount" class="form-control" value="0">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Deal Price</label>
+                                <input type="text" id="deal_price" class="form-control" readonly>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Timezone</label>
+                                <select id="deal_timezone" name="timezone" class="form-control" required>
+                                    <option value="UTC" selected>UTC</option>
+                                    <option value="Asia/Kolkata">Asia/Kolkata</option>
+                                    <option value="Asia/Dubai">Asia/Dubai</option>
+                                    <option value="Europe/London">Europe/London</option>
+                                    <option value="America/New_York">America/New_York</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Deal Date</label>
+                                <input type="date" id="deal_date" name="deal_date" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" id="btnSubmitDeal" class="btn btn-primary">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="filterDealModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Filter Deals</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="dealFilterForm">
+                    <div class="form-group">
+                        <label class="form-label">Product Name</label>
+                        <select id="filter_product_id" name="product_id" class="form-control" style="width:100%"></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Discount Type</label>
+                        <select id="filter_discount_type" name="discount_type" class="form-control">
+                            <option value="">All</option>
+                            <option value="FIXED">FIXED</option>
+                            <option value="PERCENT">PERCENT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Timezone</label>
+                        <select id="filter_timezone" name="timezone" class="form-control">
+                            <option value="">All</option>
+                            <option value="UTC">UTC</option>
+                            <option value="Asia/Kolkata">Asia/Kolkata</option>
+                            <option value="Asia/Dubai">Asia/Dubai</option>
+                            <option value="Europe/London">Europe/London</option>
+                            <option value="America/New_York">America/New_York</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Deal Date</label>
+                        <input type="date" id="filter_deal_date" name="deal_date" class="form-control">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                <button type="button" id="btnResetDealFilter" class="btn btn-outline-secondary">Reset</button>
+                <button type="button" id="btnApplyDealFilter" class="btn btn-primary">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var table;
+$(document).ready(function() {
+    dataTable();
+
+    $('#btnOpenFilterDeal').on('click', function(){
+        $('#filterDealModal').modal('show');
+    });
+    $('#btnApplyDealFilter').on('click', function(){
+        $('#filterDealModal').modal('hide');
+        table.ajax.reload();
+    });
+    $('#btnResetDealFilter').on('click', function(){
+        resetDealFilters();
+        table.ajax.reload();
+    });
+
+    $('#btnOpenAddDeal').on('click', function(){
+        resetDealModal();
+        $('#addDealModal').modal('show');
+    });
+
+    $('#deal_discount_type').on('change', function(){
+        applyDiscountMode();
+        recalcDeal();
+    });
+    $('#deal_discount_percent, #deal_discount_amount').on('input', function(){
+        recalcDeal();
+    });
+
+    $('#btnSubmitDeal').on('click', function(){
+        submitDeal();
+    });
+
+    initDealProductSelect();
+    initFilterProductSelect();
+});
+
+function resetDealFilters(){
+    $('#filter_product_id').val(null).trigger('change');
+    $('#filter_discount_type').val('');
+    $('#filter_timezone').val('');
+    $('#filter_deal_date').val('');
+}
+
+function initDealProductSelect(){
+    $('#deal_product_id').select2({
+        dropdownParent: $('#addDealModal'),
+        ajax: {
+            url: "/<?= $TYPE; ?>/deal_of_the_day/search_ajax_product",
+            type: "post",
+            dataType: 'json',
+            delay: 250,
+            data: function (params) {
+                var req = { searchTerm: params.term || '' };
+                req["<?= $csrf->name; ?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+                return req;
+            },
+            processResults: function (response) {
+                return { results: response };
+            },
+            cache: true
+        },
+        placeholder: "Search product...",
+        minimumInputLength: 0,
+        allowClear: true,
+        width: '100%'
+    });
+
+    $('#deal_product_id').on('change', function(){
+        fetchProductPrices();
+    });
+}
+
+function initFilterProductSelect(){
+    $('#filter_product_id').select2({
+        dropdownParent: $('#filterDealModal'),
+        ajax: {
+            url: "/<?= $TYPE; ?>/deal_of_the_day/search_ajax_product",
+            type: "post",
+            dataType: 'json',
+            delay: 250,
+            data: function (params) {
+                var req = { searchTerm: params.term || '' };
+                req["<?= $csrf->name; ?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+                return req;
+            },
+            processResults: function (response) {
+                return { results: response };
+            },
+            cache: true
+        },
+        placeholder: "All products",
+        minimumInputLength: 0,
+        allowClear: true,
+        width: '100%'
+    });
+}
+
+function resetDealModal(){
+    $('#deal_id').val('');
+    $('#deal_product_id').val(null).trigger('change');
+    setPricesTable([]);
+    $('#deal_discount_type').val('FIXED');
+    $('#deal_discount_percent').val('0');
+    $('#deal_discount_amount').val('0');
+    $('#deal_price').val('');
+
+    var today = new Date();
+    var yyyy = today.getFullYear();
+    var mm = String(today.getMonth() + 1).padStart(2, '0');
+    var dd = String(today.getDate()).padStart(2, '0');
+    var ds = yyyy + '-' + mm + '-' + dd;
+    $('#deal_date').val(ds);
+    $('#deal_timezone').val('UTC');
+
+    $('#addDealForm input[name="<?= $csrf->name; ?>"]').val("<?= $csrf->hash; ?>");
+    $('#addDealModal').data('base_price', 0);
+    $('#addDealModal').data('prices', []);
+    applyDiscountMode();
+    $('#addDealModal .modal-title').text('Add Deal');
+    $('#btnSubmitDeal').text('Submit');
+}
+
+function applyDiscountMode(){
+    var t = $('#deal_discount_type').val();
+    if(t === 'PERCENT'){
+        $('#deal_discount_percent_wrap').show();
+        $('#deal_discount_percent').prop('disabled', false);
+        $('#deal_discount_amount').prop('readonly', true);
+    }else{
+        $('#deal_discount_percent_wrap').hide();
+        $('#deal_discount_percent').prop('disabled', true);
+        $('#deal_discount_amount').prop('readonly', false);
+    }
+}
+
+function fetchProductPrices(){
+    var pid = $('#deal_product_id').val();
+    if(!pid){
+        setPricesTable([]);
+        $('#addDealModal').data('base_price', 0);
+        $('#addDealModal').data('prices', []);
+        recalcDeal();
+        return;
+    }
+    var postData = {};
+    postData["<?= $csrf->name; ?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+    postData.product_id = pid;
+    $.ajax({
+        url: "/<?= $TYPE; ?>/deal_of_the_day/ajax_get_product_prices",
+        type: 'post',
+        dataType: 'json',
+        data: postData,
+        success: function(res){
+            if(res && res.csrf && res.csrf.name && res.csrf.hash){
+                $("#addDealForm input[name='"+res.csrf.name+"']").val(res.csrf.hash);
+            }
+            if(!res || res.success != 1){
+                setPricesTable([]);
+                $('#addDealModal').data('base_price', 0);
+                $('#addDealModal').data('prices', []);
+                recalcDeal();
+                return;
+            }
+            var prices = Array.isArray(res.prices) ? res.prices : [];
+            setPricesTable(prices);
+            $('#addDealModal').data('base_price', parseFloat(res.base_price || 0));
+            $('#addDealModal').data('prices', prices);
+            recalcDeal();
+        }
+    });
+}
+
+function setPricesTable(prices){
+    var $tb = $('#deal_prices_table tbody');
+    $tb.empty();
+    if(!Array.isArray(prices) || prices.length === 0){
+        $tb.append('<tr><td colspan="3" class="text-center">Select product</td></tr>');
+        return;
+    }
+    prices.forEach(function(p){
+        var label = (p && (p.label || p.size || p.name)) ? (p.label || p.size || p.name) : '-';
+        var sp = (p && (p.sales_price || p.sale_price || p.selling_price)) ? (p.sales_price || p.sale_price || p.selling_price) : '';
+        var rp = (p && p.regular_price) ? p.regular_price : '';
+        $tb.append(
+            '<tr>'+
+                '<td>'+escapeHtml(String(label))+'</td>'+
+                '<td class="text-right">'+escapeHtml(String(sp))+'</td>'+
+                '<td class="text-right">'+escapeHtml(String(rp))+'</td>'+
+            '</tr>'
+        );
+    });
+}
+
+function escapeHtml(str){
+    return str
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/\"/g,'&quot;')
+        .replace(/'/g,'&#039;');
+}
+
+function recalcDeal(){
+    var basePrice = parseFloat($('#addDealModal').data('base_price') || 0);
+    var dtype = $('#deal_discount_type').val();
+    var discountAmount = 0;
+    if(dtype === 'PERCENT'){
+        var per = parseFloat($('#deal_discount_percent').val() || 0);
+        if(per < 0) per = 0;
+        if(per > 100) per = 100;
+        discountAmount = (basePrice * per) / 100;
+        $('#deal_discount_amount').val(discountAmount.toFixed(2));
+    }else{
+        discountAmount = parseFloat($('#deal_discount_amount').val() || 0);
+        if(discountAmount < 0) discountAmount = 0;
+    }
+    var dealPrice = basePrice - discountAmount;
+    if(dealPrice < 0) dealPrice = 0;
+    $('#deal_price').val(dealPrice.toFixed(2));
+}
+
+function submitDeal(){
+    var form = $('#addDealForm');
+    var postData = form.serializeArray();
+    postData.push({name: 'id', value: $('#deal_id').val()});
+    postData.push({name: 'product_id', value: $('#deal_product_id').val()});
+    postData.push({name: 'discount_type', value: $('#deal_discount_type').val()});
+    postData.push({name: 'discount_percent', value: $('#deal_discount_percent').val()});
+    postData.push({name: 'discount_amount', value: $('#deal_discount_amount').val()});
+    postData.push({name: 'deal_date', value: $('#deal_date').val()});
+
+    $.ajax({
+        url: "/<?= $TYPE; ?>/deal_of_the_day/ajax_save",
+        type: 'post',
+        dataType: 'json',
+        data: $.param(postData),
+        success: function(res){
+            if(res && res.csrf && res.csrf.name && res.csrf.hash){
+                $("#addDealForm input[name='"+res.csrf.name+"']").val(res.csrf.hash);
+            }
+            if(res && res.success == 1){
+                $('#addDealModal').modal('hide');
+                table.ajax.reload();
+                swal({ title: 'Success', text: res.msg || 'Saved', icon: 'success', timer: 2000, buttons: false });
+                return;
+            }
+            swal({ title: 'Error', text: (res && res.msg) ? res.msg : 'Failed', icon: 'error' });
+        }
+    });
+}
+
+function dataTable()
+{
+    table = $('#table').DataTable({
+        "processing": true,
+        "serverSide": true,
+        "responsive": true,
+        "searching": false,
+        "ordering": false,
+        "lengthChange": false,
+        "orderCellsTop": true,
+        "destroy": true,
+        "pageLength": <?= $page_count ?>,
+        "ajax": {
+            "url": "/<?= $TYPE; ?>/deal_of_the_day/ajax_list",
+            "data": function(d){
+                d["<?= $csrf->name;?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+                d.filter_product_id = $('#filter_product_id').val();
+                d.filter_discount_type = $('#filter_discount_type').val();
+                d.filter_timezone = $('#filter_timezone').val();
+                d.filter_deal_date = $('#filter_deal_date').val();
+                return d;
+            },
+            "type": "POST",
+            "dataType": 'json',
+            complete: function () { $('[data-toggle="tooltip"]').tooltip(); },
+        },
+        "dom": '<"top"i>t<"bottom"flp><"clear">',
+        "columnDefs": [
+            {
+                "targets": -1,
+                "data": null,
+                "className": "text-center",
+                "render": function ( data, type, row ) {
+                    var isEnabled = (String(row.status || '0') === '1');
+                    var toggleIcon = isEnabled ? 'fa fa-toggle-on' : 'fa fa-toggle-off';
+                    var toggleTitle = isEnabled ? 'Disable' : 'Enable';
+                    var actionTemplate = '';
+                    actionTemplate += '<button title="' + toggleTitle + '" data-toggle="tooltip" data-placement="top" data-animation="false" data-html="true" class="btn custom-popover-btn btn-toggle-status btncolor" type="button" data-status="' + (isEnabled ? '1' : '0') + '" data-id="' + row.id + '"><i class="' + toggleIcon + '"></i></button>';
+                    actionTemplate += ' ';
+                    actionTemplate += '<button title="Edit" data-toggle="tooltip" data-placement="top" data-animation="false" data-html="true" class="btn custom-popover-btn btn-edit btncolor" type="button" data-id="'+row.id+'"><i class="fa fa-edit"></i></button>';
+                    return actionTemplate;
+                },
+                "defaultContent": ''
+            }
+        ],
+        "columns": [
+            {"data": "product_name"},
+            {"data": "sales_price"},
+            {"data": "discount_type"},
+            {"data": "discount_percent"},
+            {"data": "discount_amount"},
+            {"data": "deal_price"},
+            {"data": "timezone"},
+            {"data": "deal_date"},
+            {"data": "status_label"},
+            {"data": "action"},
+        ]
+    });
+}
+
+$(document).on('click','.btn-edit', function(e){
+    e.preventDefault();
+    var uid=$(this).attr('data-id');
+    openEditDealModal(uid);
+});
+
+$(document).on('click','.btn-toggle-status', function(e){
+    e.preventDefault();
+    var $btn = $(this);
+    var id = $btn.attr('data-id');
+    var cur = String($btn.attr('data-status') || '0');
+    var next = (cur === '1') ? '0' : '1';
+    var postData = {};
+    postData["<?= $csrf->name; ?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+    postData.deal_id = id;
+    postData.status = next;
+    $.ajax({
+        url: "/<?= $TYPE; ?>/deal_of_the_day/ajax_toggle_status",
+        type: 'post',
+        dataType: 'json',
+        data: postData,
+        success: function(res){
+            if(res && res.csrf && res.csrf.name && res.csrf.hash){
+                $("#addDealForm input[name='"+res.csrf.name+"']").val(res.csrf.hash);
+            }
+            if(res && res.success == 1){
+                table.ajax.reload(null, false);
+                return;
+            }
+            swal({ title: 'Error', text: (res && res.msg) ? res.msg : 'Failed', icon: 'error' });
+        }
+    });
+});
+
+function openEditDealModal(id){
+    resetDealModal();
+    var postData = {};
+    postData["<?= $csrf->name; ?>"] = $("#addDealForm input[name='<?= $csrf->name; ?>']").val();
+    postData.id = id;
+    $.ajax({
+        url: "/<?= $TYPE; ?>/deal_of_the_day/ajax_get_deal",
+        type: 'post',
+        dataType: 'json',
+        data: postData,
+        success: function(res){
+            if(res && res.csrf && res.csrf.name && res.csrf.hash){
+                $("#addDealForm input[name='"+res.csrf.name+"']").val(res.csrf.hash);
+            }
+            if(!res || res.success != 1){
+                swal({ title: 'Error', text: (res && res.msg) ? res.msg : 'Failed to load deal', icon: 'error' });
+                return;
+            }
+            $('#deal_id').val(res.deal.id || '');
+            $('#addDealModal .modal-title').text('Edit Deal');
+            $('#btnSubmitDeal').text('Update');
+
+            if(res.product && res.product.id){
+                var opt = new Option(res.product.name || ('#'+res.product.id), res.product.id, true, true);
+                $('#deal_product_id').append(opt).trigger('change');
+            }
+            var prices = Array.isArray(res.prices) ? res.prices : [];
+            setPricesTable(prices);
+            $('#addDealModal').data('base_price', parseFloat(res.base_price || 0));
+            $('#addDealModal').data('prices', prices);
+
+            $('#deal_discount_type').val(res.deal.discount_type || 'FIXED').trigger('change');
+            $('#deal_discount_percent').val(res.deal.discount_percent || '0');
+            $('#deal_discount_amount').val(res.deal.discount_amount || '0');
+            $('#deal_timezone').val(res.deal.timezone || 'UTC');
+            $('#deal_date').val(res.deal.deal_date || '');
+            applyDiscountMode();
+            recalcDeal();
+            $('#addDealModal').modal('show');
+        }
+    });
+}
+
+function url_new_tab(e,url)
+{
+    if(e.ctrlKey){
+        window.open(url);
+    }else{
+        $(location).attr('href', url);
+    }
+}
+</script>
+

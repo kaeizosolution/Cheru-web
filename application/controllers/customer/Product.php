@@ -1,0 +1,1763 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+ 
+class Product extends MY_Controller {
+
+    function __construct() 
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+		$this->load->model('Product_model');
+		$this->load->model('Cart_model');
+		$this->load->model('Attribute_model');
+		$this->load->model('Search_model');
+        $this->config->load('custom_config');
+        $this->load->helper('api');
+        $this->load->helper('text');		
+        $this->TYPE = $this->session->userdata('type');
+        $this->LOGIN_ID = ($this->session->userdata($this->TYPE)) ? $this->session->userdata($this->TYPE)['login_id'] : 0;
+    }
+
+    public function index($arg=null) 
+    {
+		$data         = array();
+		$data['page_count'] = page_count();		
+		$length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+		$data['page_lang'] = get_page_language_data('product_list_lang');
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+        $crumbs = array($data['page_lang']->home => "/$this->TYPE/product/", $data['page_lang']->products => "");
+        $breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+		$data['fts'] = $arg;					
+		$data['cat'] = 0;
+		$data['cat_image'] = 0;
+		$data['homepage'] = 1;
+        $this->load->template("$this->TYPE/product_list", $data);
+    }
+
+	public function details($id = null, $skip_slug_redirect = false)
+	{
+		$id = is_numeric((string)$id) ? (int)$id : 0;
+		if(!$id){
+			redirect("/");
+			return;
+		}
+
+		if (!$skip_slug_redirect) {
+			$prod = $this->Product_model->get_new_product($id);
+			if ($prod && isset($prod->slug) && trim((string)$prod->slug) !== '') {
+				redirect('/product/detail/' . trim((string)$prod->slug) . '-' . $id);
+				return;
+			}
+		}
+
+		$data = array();
+		$data['csrf'] = csrf_token();
+		$data['TYPE'] = $this->TYPE;
+		$data['homepage'] = 1;
+		$data['page_lang'] = get_page_language_data('product_detail_lang');
+		$data['cate_all_strip']  = $this->Product_model->categories_all_strip();
+
+		$use_api = (bool)$this->config->item('use_api');
+		$product = null;
+		$related = null;
+		$data['available_attributes'] = array();
+		$data['default_selection'] = array();
+		$data['variations'] = array();
+		$data['attr_item_labels'] = array();
+		$data['attribute_labels'] = array();
+
+		if ($use_api) {
+			$api_detail = call_api('GET', 'products/' . $id);
+			if ($api_detail['response'] !== null && (int)($api_detail['response']['status'] ?? 0) === 1 && is_array($api_detail['response']['data'] ?? null)) {
+				$item = $api_detail['response']['data'];
+				// Support both shapes:
+				// 1) legacy: data has product fields at top-level
+				// 2) new: data.product holds the core product fields
+				if (isset($item['product']) && is_array($item['product'])) {
+					$core = $item['product'];
+					// Keep any top-level keys that the legacy UI expects if they are missing.
+					foreach ($core as $k => $v) {
+						if (!array_key_exists($k, $item)) {
+							$item[$k] = $v;
+						}
+					}
+				}
+
+				$prices = $item['prices'] ?? [];
+				if (!is_array($prices)) {
+					$prices = [];
+				}
+
+				// Expose variation-ready structures to the view (UI can adopt later)
+				if (isset($item['available_attributes']) && is_array($item['available_attributes'])) {
+					$data['available_attributes'] = $item['available_attributes'];
+				}
+				if (isset($item['default_selection']) && is_array($item['default_selection'])) {
+					$data['default_selection'] = $item['default_selection'];
+				}
+				if (isset($item['variations']) && is_array($item['variations'])) {
+					$data['variations'] = $item['variations'];
+				}
+
+				// API already provides display-ready attribute keys/values.
+				$data['attr_item_labels'] = array();
+				$data['attribute_labels'] = array();
+
+				$product = (object)array(
+					'id' => (int)($item['id'] ?? 0),
+					'name' => (string)($item['name'] ?? ''),
+					'description' => (string)($item['description'] ?? ''),
+					'short_description' => (string)($item['short_description'] ?? ''),
+					'status' => (string)($item['status'] ?? '1'),
+					'login_id' => (int)($item['vendor_id'] ?? 0),
+					'stock' => isset($item['stock']) ? (int)$item['stock'] : null,
+					'product_type' => (string)($item['product_type'] ?? ''),
+					'prices' => json_encode($prices),
+					'images' => json_encode([]),
+					'video_path' => (string)($item['video_path'] ?? ''),
+				);
+
+				$product->display_price = 0;
+				// Prefer variation price if present (new product detail API)
+				if (isset($data['variations'][0]) && is_array($data['variations'][0]) && isset($data['variations'][0]['price'])) {
+					$product->display_price = (float)$data['variations'][0]['price'];
+				}
+				if (isset($prices[0]) && is_array($prices[0])) {
+					$first = $prices[0];
+					if (isset($first['sales_price'])) {
+						$product->display_price = (float)$first['sales_price'];
+					} elseif (isset($first['sale_price'])) {
+						$product->display_price = (float)$first['sale_price'];
+					} elseif (isset($first['regular_price'])) {
+						$product->display_price = (float)$first['regular_price'];
+					}
+				}
+
+				// Also attach for easy access if the view wants them later
+				$product->available_attributes = $data['available_attributes'];
+				$product->default_selection = $data['default_selection'];
+				$product->variations = $data['variations'];
+
+				$product->vendor_id = isset($product->login_id) ? (int)$product->login_id : 0;
+
+				// Images priority:
+				// 1) variations[0].image_urls (if exists)
+				// 2) top-level images (already URLs)
+				// 3) product.images (if core nested structure is used and top-level is missing)
+				$image_urls = array();
+				if (isset($data['variations'][0]) && is_array($data['variations'][0]) && isset($data['variations'][0]['image_urls']) && is_array($data['variations'][0]['image_urls'])) {
+					$image_urls = $data['variations'][0]['image_urls'];
+				}
+				if (!$image_urls && isset($item['images']) && is_array($item['images'])) {
+					$image_urls = $item['images'];
+				}
+				if (!$image_urls && isset($item['product']) && is_array($item['product']) && isset($item['product']['images']) && is_array($item['product']['images'])) {
+					$image_urls = $item['product']['images'];
+				}
+				$image_urls = array_values(array_unique(array_filter($image_urls)));
+				$product->image_urls = $image_urls ? $image_urls : array(base_url('assets/default_images/product.jpg'));
+
+				$cat_name = '';
+				$cat_slug = '';
+				$cat_id_for_related = 0;
+				if (isset($item['categories']) && is_array($item['categories']) && isset($item['categories'][0]) && is_array($item['categories'][0])) {
+					$cat_name = (string)($item['categories'][0]['name'] ?? '');
+					$cat_slug = (string)($item['categories'][0]['slug'] ?? '');
+					$cat_id_for_related = (int)($item['categories'][0]['id'] ?? 0);
+				}
+				// Fallback: derive category ID from product fields (sub_sub_category > sub_category > category)
+				if ($cat_id_for_related <= 0) {
+					$_core = isset($item['product']) && is_array($item['product']) ? $item['product'] : $item;
+					foreach (['sub_sub_category', 'sub_category', 'category'] as $_cf) {
+						$_cv = isset($_core[$_cf]) ? $_core[$_cf] : (isset($item[$_cf]) ? $item[$_cf] : '');
+						if ($_cv !== '' && $_cv !== null && is_numeric((string)$_cv) && (int)$_cv > 0) {
+							$cat_id_for_related = (int)$_cv;
+							break;
+						}
+					}
+				}
+				// Fetch category name/slug from DB if not already set
+				if ($cat_id_for_related > 0 && $cat_name === '') {
+					$_cat_row = $this->db->select('name, slug')->from('ec_categories_prod')->where('id', $cat_id_for_related)->limit(1)->get()->row();
+					if ($_cat_row) {
+						$cat_name = (string)($_cat_row->name ?? '');
+						$cat_slug = (string)($_cat_row->slug ?? '');
+					}
+				}
+				$title = isset($product->name) ? substr((string)$product->name, 0, 40) : '';
+				$crumbs = array('Home' => "/", $cat_name => ($cat_slug ? '/category/'.$cat_slug : ''), $title => '');
+				$data['breadcrumbs'] = $this->breadcrumbs->show_new($crumbs);
+
+				if ($cat_id_for_related > 0) {
+					$api_related = call_api('GET', 'products?category_id=' . $cat_id_for_related . '&page=1&per_page=8');
+					if ($api_related['response'] !== null && (int)($api_related['response']['status'] ?? 0) === 1) {
+						$items = $api_related['response']['data']['items'] ?? [];
+						if (is_array($items)) {
+							$mapped_rel = [];
+							foreach ($items as $it) {
+								if (!is_array($it)) {
+									continue;
+								}
+								$rid = (int)($it['id'] ?? 0);
+								if (!$rid || $rid === $id) {
+									continue;
+								}
+
+								$rprices = $it['prices'] ?? [];
+								if (!is_array($rprices)) {
+									$rprices = [];
+								}
+								$img_url = (string)($it['image_url'] ?? '');
+								$img_fn = $img_url !== '' ? basename(parse_url($img_url, PHP_URL_PATH)) : '';
+								$imgs = $img_fn !== '' ? json_encode([$img_fn]) : '';
+
+								$rp = (object)array(
+									'id' => $rid,
+									'name' => (string)($it['name'] ?? ''),
+									'prices' => json_encode($rprices),
+									'images' => $imgs,
+									'login_id' => (int)($it['vendor_id'] ?? 0),
+								);
+
+								$rp->display_price = 0;
+								if (isset($rprices[0]) && is_array($rprices[0])) {
+									$first = $rprices[0];
+									if (isset($first['sales_price'])) {
+										$rp->display_price = (float)$first['sales_price'];
+									} elseif (isset($first['sale_price'])) {
+										$rp->display_price = (float)$first['sale_price'];
+									} elseif (isset($first['regular_price'])) {
+										$rp->display_price = (float)$first['regular_price'];
+									}
+								}
+								$rp->vendor_id = isset($rp->login_id) ? (int)$rp->login_id : 0;
+								$rp->image_urls = $img_url !== '' ? array($img_url) : array(base_url('assets/default_images/product.jpg'));
+								$rp->image_url = isset($rp->image_urls[0]) ? $rp->image_urls[0] : base_url('assets/default_images/product.jpg');
+								$mapped_rel[] = $rp;
+							}
+							$related = $mapped_rel;
+						}
+					}
+				}
+			}
+		}
+
+		if(!$product){
+			// Prefer new products schema for details/variations
+			$new_p = $this->Product_model->get_new_product($id);
+			if($new_p){
+				$product = $new_p;
+				$product->display_price = 0;
+				$product->vendor_id = isset($product->vendor_id) ? (int)$product->vendor_id : (isset($product->login_id) ? (int)$product->login_id : 0);
+				$product->image_urls = array(base_url('assets/default_images/product.jpg'));
+
+				// Build variations bundle for view
+				$bundle = $this->Product_model->get_variation_bundle($id);
+				$variation_ids = array();
+				$available_attributes = array();
+				$default_selection = array();
+				$variations_out = array();
+				$all_attr_item_ids = array();
+				$all_attribute_ids = array();
+
+				if($bundle){
+					foreach($bundle as $row){
+						if(!is_object($row)){
+							continue;
+						}
+						$vid = isset($row->variation_id) ? (int)$row->variation_id : 0;
+						if($vid > 0){
+							$variation_ids[] = $vid;
+						}
+
+						$attrs = array();
+						if(isset($row->attr_json) && $row->attr_json){
+							$decoded = json_decode((string)$row->attr_json, true);
+							if(is_array($decoded)){
+								foreach($decoded as $k => $v){
+									if($v === null || $v === ''){
+										continue;
+									}
+									$attrs[(string)$k] = (string)$v;
+									if(is_numeric((string)$k)){
+										$all_attribute_ids[] = (int)$k;
+									}
+									if(is_numeric((string)$v)){
+										$all_attr_item_ids[] = (int)$v;
+									}
+								}
+							}
+						}
+
+						foreach($attrs as $attr_id => $item_id){
+							if(!isset($available_attributes[$attr_id])){
+								$available_attributes[$attr_id] = array();
+							}
+							$available_attributes[$attr_id][] = $item_id;
+						}
+
+						$img_urls = array();
+						$imgs_raw = isset($row->images) ? trim((string)$row->images) : '';
+						if($imgs_raw !== ''){
+							$parts = explode(',', $imgs_raw);
+							foreach($parts as $p){
+								$p = trim((string)$p);
+								if($p === ''){
+									continue;
+								}
+								if(preg_match('#^https?://#i', $p)){
+									$img_urls[] = $p;
+								}else{
+									$img_urls[] = base_url('uploads/products/' . ltrim($p, '/\\'));
+								}
+							}
+						}
+						$img_urls = array_values(array_unique(array_filter($img_urls)));
+
+						$variations_out[] = array(
+							'variation_id' => $vid,
+							'attributes' => $attrs,
+							'price' => isset($row->price) && $row->price !== null ? (float)$row->price : 0,
+							'price_tiers' => array(),
+							'image_urls' => $img_urls,
+						);
+					}
+				}
+
+				// Normalize available attributes
+				foreach($available_attributes as $ak => $vals){
+					$vals = array_values(array_unique(array_filter($vals)));
+					$available_attributes[$ak] = $vals;
+					if(!isset($default_selection[$ak]) && isset($vals[0])){
+						$default_selection[$ak] = (string)$vals[0];
+					}
+				}
+
+				// Price tiers per variation
+				$price_tiers_map = $this->Product_model->get_variation_price_tiers($variation_ids);
+				if($variations_out){
+					foreach($variations_out as $idx => $vrow){
+						$vid = isset($vrow['variation_id']) ? (int)$vrow['variation_id'] : 0;
+						if($vid > 0 && isset($price_tiers_map[$vid])){
+							$variations_out[$idx]['price_tiers'] = $price_tiers_map[$vid];
+						}
+					}
+				}
+
+				// Main image + display price preference
+				if(isset($variations_out[0]) && isset($variations_out[0]['image_urls']) && is_array($variations_out[0]['image_urls']) && $variations_out[0]['image_urls']){
+					$product->image_urls = $variations_out[0]['image_urls'];
+				}
+				if(isset($variations_out[0]) && isset($variations_out[0]['price'])){
+					$product->display_price = (float)$variations_out[0]['price'];
+				}
+
+				$data['available_attributes'] = $available_attributes;
+				$data['default_selection'] = $default_selection;
+				$data['variations'] = $variations_out;
+
+				// Labels for attribute items / attributes (re-using legacy label tables)
+				$all_attr_item_ids = array_values(array_unique(array_filter($all_attr_item_ids)));
+				$all_attribute_ids = array_values(array_unique(array_filter($all_attribute_ids)));
+				if($all_attr_item_ids){
+					$rows = $this->db
+						->select('attribute_item_id, name')
+						->from('ec_attribute_item')
+						->where_in('attribute_item_id', $all_attr_item_ids)
+						->where('status', '1')
+						->get()->result();
+					$labels = array();
+					if($rows){
+						foreach($rows as $r){
+							if(!isset($r->attribute_item_id) || !isset($r->name)){
+								continue;
+							}
+							$labels[(string)((int)$r->attribute_item_id)] = (string)$r->name;
+						}
+					}
+					$data['attr_item_labels'] = $labels;
+				}
+				if($all_attribute_ids){
+					$rows = $this->db
+						->select('attribute_id, name')
+						->from('ec_attribute')
+						->where_in('attribute_id', $all_attribute_ids)
+						->where('status', '1')
+						->get()->result();
+					$labels = array();
+					if($rows){
+						foreach($rows as $r){
+							if(!isset($r->attribute_id) || !isset($r->name)){
+								continue;
+							}
+							$labels[(string)((int)$r->attribute_id)] = (string)$r->name;
+						}
+					}
+					$data['attribute_labels'] = $labels;
+				}
+
+				// Breadcrumbs (best effort; new schema uses string slugs sometimes)
+				$title = isset($product->name) ? substr((string)$product->name, 0, 40) : '';
+				$cat_label = '';
+				$cat_link = '';
+				if (isset($product->sub_sub_category) && (string)$product->sub_sub_category !== '') {
+					$cat_label = (string)$product->sub_sub_category;
+				} elseif (isset($product->sub_category) && (string)$product->sub_category !== '') {
+					$cat_label = (string)$product->sub_category;
+				} elseif (isset($product->category) && (string)$product->category !== '') {
+					$cat_label = (string)$product->category;
+				}
+				if ($cat_label !== '' && is_numeric($cat_label)) {
+					$cat_row = $this->db
+						->select('name, slug')
+						->from('ec_categories_prod')
+						->where('id', (int)$cat_label)
+						->limit(1)
+						->get()->row();
+					if ($cat_row && isset($cat_row->name) && (string)$cat_row->name !== '') {
+						$cat_label = (string)$cat_row->name;
+						$cat_slug = isset($cat_row->slug) ? trim((string)$cat_row->slug) : '';
+						if ($cat_slug !== '') {
+							$cat_link = '/category/' . $cat_slug;
+						}
+					}
+				}
+				$crumbs = array('Home' => "/");
+				if ($cat_label !== '') {
+					$crumbs[$cat_label] = $cat_link;
+				}
+				$crumbs[$title] = '';
+				$data['breadcrumbs'] = $this->breadcrumbs->show_new($crumbs);
+
+				// Related products from new schema (simple, non-breaking)
+				$price_sql = "SELECT pp.variation_id, pp.price
+					FROM product_variation_price pp
+					JOIN (
+						SELECT variation_id, MIN(COALESCE(min_qty,0)) AS min_qty
+						FROM product_variation_price
+						GROUP BY variation_id
+					) x ON x.variation_id = pp.variation_id AND COALESCE(pp.min_qty,0) = x.min_qty";
+
+				$this->db->select('p.id, p.name');
+				$this->db->select('SUBSTRING_INDEX(GROUP_CONCAT(img.image_path ORDER BY img.id ASC SEPARATOR ","), ",", 1) AS first_image_path', false);
+				$this->db->select('MIN(pr.price) AS min_price', false);
+				$this->db->from('products p');
+				$this->db->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left');
+				$this->db->join('product_variations v', 'v.product_id = p.id', 'left');
+				$this->db->join('product_variation_images img', 'img.variation_id = v.id', 'left');
+				$this->db->join("($price_sql) pr", 'pr.variation_id = v.id', 'left', false);
+				$this->db->where('p.status', '1');
+				$this->db->where('p.id !=', $id);
+				$this->db->group_start()
+					->where('p.vendor_id', 0)
+					->or_where('p.vendor_id IS NULL', null, false)
+					->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+				->group_end();
+				if(isset($product->category) && $product->category !== null && (string)$product->category !== ''){
+					$this->db->where('p.category', $product->category);
+				}
+				$this->db->group_by('p.id');
+				$this->db->order_by('RAND()', '', false); // randomize each page load
+				$this->db->limit(10);
+				$rel_rows = $this->db->get()->result();
+				$related = array();
+				if($rel_rows){
+					foreach($rel_rows as $rr){
+						if(!is_object($rr)){
+							continue;
+						}
+						$img_path = isset($rr->first_image_path) ? trim((string)$rr->first_image_path) : '';
+						$img_url = $img_path !== '' ? base_url('uploads/products/' . ltrim($img_path, '/\\')) : base_url('assets/default_images/product.jpg');
+						$rp = (object)array(
+							'id' => (int)($rr->id ?? 0),
+							'name' => (string)($rr->name ?? ''),
+							'display_price' => isset($rr->min_price) && $rr->min_price !== null ? (float)$rr->min_price : 0,
+							'image_url' => $img_url,
+						);
+						$related[] = $rp;
+					}
+				}
+			}
+		}
+		if(!$product){
+			redirect("/");
+			return;
+		}
+
+		$data['product'] = $product;
+		$data['related_products'] = $related ? $related : array();
+
+		// ── Fetch real review data for product_detail_modern.php ─────────────
+		$reviews_raw = $this->db
+			->select('r.review_rating_id, r.customer_id, r.title, r.rating, r.review, r.date_created')
+			->select("TRIM(CONCAT(COALESCE(c.fname,''), ' ', COALESCE(c.lname,''))) AS reviewer_name", false)
+			->from('ec_review_rating r')
+			->join('ec_customer c', 'c.customer_id = r.customer_id', 'left')
+			->where('r.product_id', $id)
+			->where('r.status', '1')
+			->order_by('r.date_created', 'DESC')
+			->get()->result_array();
+
+		$review_total   = count($reviews_raw);
+		$star_counts    = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0];
+		$review_sum     = 0;
+		$my_review      = null;
+		$customer_sess  = $this->session->userdata('customer');
+		$customer_id    = ($customer_sess && isset($customer_sess['login_id'])) ? (int)$customer_sess['login_id'] : 0;
+
+		foreach ($reviews_raw as &$rv) {
+			$s = (int)$rv['rating'];
+			if (isset($star_counts[$s])) $star_counts[$s]++;
+			$review_sum += $s;
+			$rv['reviewer_name']    = trim($rv['reviewer_name']) ?: 'Anonymous';
+			$rv['reviewer_initial'] = strtoupper(substr($rv['reviewer_name'], 0, 1));
+			$rv['date_formatted']   = date('M j, Y', strtotime($rv['date_created']));
+			$rv['rating']           = $s;
+			if ($customer_id && (int)$rv['customer_id'] === $customer_id) {
+				$my_review = $rv;
+			}
+		}
+		unset($rv);
+
+		$review_avg = $review_total > 0 ? round($review_sum / $review_total, 1) : 0;
+		$breakdown  = [];
+		for ($i = 5; $i >= 1; $i--) {
+			$cnt          = $star_counts[$i];
+			$breakdown[$i] = [
+				'count'   => $cnt,
+				'percent' => $review_total > 0 ? round(($cnt / $review_total) * 100) : 0,
+			];
+		}
+
+		$data['reviews']        = $reviews_raw;
+		$data['review_summary'] = [
+			'total'     => $review_total,
+			'avg'       => $review_avg,
+			'breakdown' => $breakdown,
+		];
+		$data['my_review']      = $my_review;
+		$data['customer_id']    = $customer_id;
+		// ─────────────────────────────────────────────────────────────────────
+
+		$this->load->template('customer/product_detail_modern', $data);
+	}
+
+	public function slug($slug = null)
+	{
+		$slug = trim((string)$slug);
+		if ($slug === '') {
+			redirect("/");
+			return;
+		}
+
+			$row = $this->db
+				->select('p.id')
+				->from('products p')
+				->join('ec_vendor v_check', 'v_check.vendor_id = p.vendor_id', 'left')
+				->where('p.slug', $slug)
+				->group_start()
+					->where('p.vendor_id', 0)
+					->or_where('p.vendor_id IS NULL', null, false)
+					->or_where("CAST(v_check.status AS CHAR) IN ('1', 'approved', 'Approved')", null, false)
+				->group_end()
+				->limit(1)
+				->get()->row();
+
+		$id = ($row && isset($row->id)) ? (int)$row->id : 0;
+		if ($id <= 0) {
+			redirect("/");
+			return;
+		}
+
+		$this->details($id, true);
+	}
+
+	private function _resolve_product_image_urls($product)
+	{
+		$placeholder = base_url('assets/default_images/product.jpg');
+		$sku_dir = '';
+		if(isset($product->sku) && $product->sku){
+			$sku_dir = trim((string)$product->sku, '/\\');
+		}
+
+		$candidates_raw = array();
+		if(isset($product->images) && $product->images){
+			$imgs = json_decode($product->images, true);
+			if(is_array($imgs)){
+				foreach($imgs as $img){
+					if(is_string($img) && $img !== ''){
+						$candidates_raw[] = $img;
+					}
+				}
+			}
+		}
+		if(!$candidates_raw && isset($product->prices) && $product->prices){
+			$prices_obj = json_decode($product->prices);
+			if(is_array($prices_obj) && isset($prices_obj[0]) && is_object($prices_obj[0]) && isset($prices_obj[0]->images) && is_array($prices_obj[0]->images)){
+				foreach($prices_obj[0]->images as $img){
+					if(is_string($img) && $img !== ''){
+						$candidates_raw[] = $img;
+					}
+				}
+			}
+		}
+
+		$resolved_urls = array();
+		foreach($candidates_raw as $raw){
+			$raw = (string)$raw;
+			if(preg_match('#^https?://#i', $raw)){
+				$resolved_urls[] = $raw;
+				continue;
+			}
+
+			$raw_rel = ltrim($raw, '/\\');
+			$raw_path = FCPATH.$raw_rel;
+			if(@file_exists($raw_path)){
+				$resolved_urls[] = base_url($raw_rel);
+				continue;
+			}
+
+			$fn = $raw_rel;
+			$try_fns = array($fn);
+			if(strpos($fn, '_thumb.') !== false){
+				$try_fns[] = preg_replace('/_thumb(\.[a-z0-9]+)$/i', '$1', $fn);
+			}
+			$url = '';
+			foreach($try_fns as $tfn){
+				$paths = array(
+					array('url' => base_url().'uploads/products/'.$tfn, 'path' => FCPATH.'uploads/products/'.$tfn),
+					($sku_dir ? array('url' => base_url().'uploads/products/'.$sku_dir.'/'.$tfn, 'path' => FCPATH.'uploads/products/'.$sku_dir.'/'.$tfn) : null),
+					array('url' => base_url().'assets/uploads/files/'.$tfn, 'path' => FCPATH.'assets/uploads/files/'.$tfn),
+					($sku_dir ? array('url' => base_url().'assets/uploads/files/'.$sku_dir.'/'.$tfn, 'path' => FCPATH.'assets/uploads/files/'.$sku_dir.'/'.$tfn) : null),
+					array('url' => base_url().'assets/uploads/'.$tfn, 'path' => FCPATH.'assets/uploads/'.$tfn),
+				);
+				foreach($paths as $p){
+					if(!$p){
+						continue;
+					}
+					if(isset($p['path']) && @file_exists($p['path'])){
+						$url = $p['url'];
+						break 2;
+					}
+				}
+			}
+			if(!$url && (strpos($fn, 'uploads/') === 0 || strpos($fn, 'assets/') === 0)){
+				$resolved_urls[] = base_url($fn);
+			}else{
+				$resolved_urls[] = $url ? $url : (base_url().'uploads/products/'.$fn);
+			}
+		}
+
+		$resolved_urls = array_values(array_unique(array_filter($resolved_urls)));
+		return $resolved_urls ? $resolved_urls : array($placeholder);
+	}
+
+    public function category($arg=null) 
+    {
+		$data         = array();
+		$data['page_count'] = page_count();		
+		$length = (isset($_POST['length']))?$_POST['length']: page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+		
+		$data['page_lang'] = get_page_language_data('product_list_lang');
+        $data['TYPE'] = $this->TYPE;
+        $data['csrf'] = csrf_token();
+
+        $category_slug = get_slug($arg);
+        $category_obj = $this->Query_model->get_data_obj('ec_categories_prod',array('slug' => $category_slug),array(),array('length' => 1));
+        
+		if($category_obj){
+		    $data['cat'] = $category_obj->id;
+			$data['cat_image'] = base_url().'assets/categories/'.$category_obj->banner_image;
+            $data['fts'] = '';
+            $cat_parent_obj  = $this->Product_model->get_all_parent($category_obj->id);
+            $crumbs = array($data['page_lang']->home => "/$this->TYPE/product/");
+            if($cat_parent_obj){
+                foreach($cat_parent_obj as $cpo){
+                    $crumbs[$cpo->name] = get_slug($cpo->name);
+                }
+            }
+        }else{
+            $data['fts'] = $arg;
+            $data['cat'] = 0;
+			$data['cat_image'] = 0;
+            $crumbs = array($data['page_lang']->home => "/$this->TYPE/product/", $data['page_lang']->products => "");
+        }		
+        $breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+        $data['breadcrumbs']    = $breadcrumbs;
+		$data['homepage'] = 1;
+        $this->load->template("$this->TYPE/product_list", $data);
+    }
+	
+    public function ajax_search() 
+    {
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode(array(
+                'status' => 1,
+                'message' => 'success',
+                'data' => array(array(
+                    'draw' => isset($_POST['draw']) ? $_POST['draw'] : '',
+                    'recordsSummary' => '',
+                    'recordsTotal' => 0,
+                    'recordsFiltered' => 0,
+                    'pagination' => '',
+                    'result' => array(),
+                    'brand' => array(),
+                    'cat_data' => array(),
+                    'cat_image' => '',
+                ))
+            )));
+        return;
+
+        $length = $_POST['length'] = page_count();
+        $page  = (isset( $_POST['page']))?$_POST['page']: 1;
+
+        $cat_image = $this->input->post('cat_image');
+        $fts = $this->input->post('fts');
+        $category_id = $this->input->post('category_id');
+	    $sorting = $this->input->post('sorting');
+		$filter = $this->input->post('filter');
+
+        $sub_cat_array = array();
+        $ln = current_language();
+        if($this->input->post('category_id')){
+            $result_obj   = $this->Product_model->get_product_by_category($category_id);
+            $sub_cat_obj  = $this->Product_model->get_all_subcat($category_id);
+            $sub_cat_array[$category_id] = 1;
+            if($sub_cat_obj){
+                foreach($sub_cat_obj as $r){
+                    $sub_cat_array[$r->category_id] = 1;
+                }
+            }
+        }else{
+            $result_obj   = $this->Product_model->get_search_result(array('fts' => $fts));
+            if($result_obj){
+
+            }else{
+                $result_obj   = $this->Product_model->get_product_by_category($fts);	
+            }
+        }
+
+        $product_array = array();
+        $search_data = array(); 
+		$brand_array = array();
+        $category_array = array();
+		$attribute_array = array();
+        if($result_obj){
+            foreach($result_obj as $row){
+                $product_id = $row->product_id;
+                $product_obj = $this->Query_model->get_data_obj('ec_product',array('product_id' => $product_id, 'enabled' => '1'));
+			    if($product_obj){
+                    $categories_obj = $this->Query_model->get_data('ec_product_categories',array('post_id' => $product_id));
+                    $tmp_cat_array = array();
+                    if($categories_obj){
+                        foreach($categories_obj as $cat){
+                            if($this->input->post('category_id')){
+                                if(isset($sub_cat_array[$cat->category_id])){
+                                    $category_array[] = $cat->category_id;
+                                }
+                            }else{
+                                $category_array[] = $cat->category_id;
+                            }
+                            $tmp_cat_array[]  = $cat->category_id;
+                        }
+                    }
+                    $product_obj->category_id = $tmp_cat_array;
+                    $product_obj->vendor_id = $product_obj->vendor_id;
+                    $product_obj = $this->Product_model->get_product_info(array('product_obj' => $product_obj));
+					$search_data[] = $product_obj;
+					$brand_array[] = $product_obj->brand_id;
+                }
+                $product_array[] = $row->product_id;
+            }
+        }
+        $category_array = array_unique($category_array);
+        $brand_array = array_unique($brand_array);
+		if($search_data && isset($sorting) && $sorting==2){	
+			// Asc sort		
+			$column = 'regular_price';
+			usort($search_data,function($first,$second){
+				return $first->regular_price > $second->regular_price;
+			});
+		}		
+		if($search_data && isset($sorting) && $sorting==3){
+			// Desc sort			
+			$column = 'regular_price';
+			usort($search_data,function($first,$second){
+				return $first->regular_price < $second->regular_price;
+			});
+		}
+
+        $filter_search_data = array();
+        $filter_params = array('brand' => 0, 'category' => 0);;
+        if($search_data){
+            if($filter['brand']){
+                $filter['brand'] = json_decode($filter['brand']);
+            }
+            if($filter['category']){
+                $filter['category'] = json_decode($filter['category']);
+            }
+            if(isset($filter['price_range'])){
+                $filter_price = $filter['price_range'];
+            //    $filter = 1;
+            }
+    
+            foreach($search_data as $r){
+                $filter_success = array('brand' => 0, 'category' => 0);;
+                if($filter['brand'] && count($filter['brand']) > 0){
+                    if (is_array($filter['brand']) && in_array($r->brand_id, $filter['brand'])){
+                        $filter_success['brand'] = 1;
+                    }
+                }
+
+                if($filter['category'] && count($filter['category']) > 0){
+                    foreach($r->category_id as $index => $val){
+                        if (in_array($val, $filter['category'])){
+                            $filter_success['category'] = 1;
+                            break;
+                        }
+                    }
+                }
+
+                $error = 0;
+                if($filter){
+                foreach($filter as $key => $val){
+                    if(($key == 'brand' || $key == 'category') && (count($val) > 0 && $filter_success[$key] == 0)){
+                        $error = 1;
+                        break;
+                    }
+                }
+                }
+                if($error == 0){
+                    $filter_search_data[] = $r;
+                }
+            } 
+        }
+         
+        $recordsTotal = count($search_data); 
+        $recordsFiltered = count($filter_search_data);
+        $product_array = array_chunk($filter_search_data, $length);
+        if($product_array){
+            $filter_search_data = $product_array[$page -1];
+        }
+		
+		$brand_data = array();	
+		if($brand_array){
+			$brand_data = $this->Query_model->get_data('ec_brand', array('brand_id' => $brand_array));
+            if($brand_data){
+                foreach($brand_data as $r){
+                    if($ln == 12){
+                       $r->name = ($r->name_es) ? $r->name_es : $r->name;
+                    }
+                    if (is_array($filter['brand']) && in_array($r->brand_id, $filter['brand'])){
+                        $r->checked = 1;
+                    }else{
+                        $r->checked = 0;
+                    }
+                }
+            }
+		}	
+		
+		$cat_data= array();		
+		if($category_array){			
+			$cat_data = $this->Query_model->get_data('ec_categories_prod', array('id' => $category_array));
+            if($cat_data){
+                foreach($cat_data as $r){
+                    if($ln == 12){
+                        $r->name = ($r->name_es) ? $r->name_es : $r->name;
+                    }
+                    if (is_array($filter['category']) && in_array($r->id, $filter['category'])){
+                        $r->checked = 1;
+                    }else{
+                        $r->checked = 0;
+                    }
+                }
+            }
+		}	
+	   
+        $this->load->library('pager');
+        $pagination = $this->pager->showLinks('', $page, $recordsFiltered, $length);
+        $recordsSummary = ''; #$recordsTotal = $recordsFiltered = '';
+
+        $output = array(
+                "draw" => isset($_POST['draw'])?$_POST['draw']:'',
+                "recordsSummary" => $recordsSummary,
+                "recordsTotal" => $recordsFiltered,
+                "recordsFiltered" => $recordsFiltered,
+                "pagination" => $pagination,
+                "result" => $filter_search_data,
+				"brand" => $brand_data,
+				"cat_data" => $cat_data,
+				"cat_image" => $cat_image				
+                );		
+				
+        $response = array('status' => 1, 'message' => 'success', 'data' => [$output]);
+        $this->output
+        ->set_content_type('application/json')
+        ->set_output(json_encode($response));
+    }
+
+    public function detail($slug=null) 
+    {
+        wfile($_POST);
+        $raw_slug = $slug;
+        $get_slug_puid = get_slug_puid($slug);
+        $slug = $get_slug_puid['slug'];
+        $puid = $get_slug_puid['puid'];
+
+        // Support new route: /product/details/{id}
+        // If URL is numeric (no slug), treat it as ec_product.id
+        if(is_numeric((string)$raw_slug) && (string)$raw_slug !== ''){
+            $slug = '';
+            $puid = (string)$raw_slug;
+        }
+        if((!$slug || $slug === '') && is_numeric((string)$puid)){
+            $slug = '';
+        }
+
+		if(is_numeric((string)$puid) && (string)$puid !== ''){
+			$this->details((int)$puid, true);
+			return;
+		}
+		redirect("/");
+		return;
+       
+        // Vendor list relies on legacy ec_product columns (post_slug/enabled).
+        // For new schema /product/details/{id} we skip vendor list to avoid DB errors.
+        $vendordata = array('vendor_detail' => array(), 'supplier_wise_product' => array());
+        if($slug){
+            $vendordata = $this->get_vendor_list($slug);
+        }
+         
+        $data = array(); 
+		$data['page_lang'] = get_page_language_data('product_detail_lang');
+		$data['cate_all_strip']  = $this->Product_model->categories_all_strip();
+		$categories = '';
+        $data['csrf'] = csrf_token(); 
+        $data['TYPE'] = $this->TYPE;  
+		$data['homepage'] = 1;	
+		if(is_api())
+		{
+			$product_id = $this->input->post('product_id');
+            $args = array('id' => (int)$product_id, 'status'=> '1');
+		}else{
+            // Prefer numeric id lookup for new ec_product schema
+            if(is_numeric((string)$puid) && (string)$puid !== ''){
+                $args = array('id' => (int)$puid, 'status'=> '1');
+            }else{
+                // Backward compatibility removed for this DB schema (ec_product has no post_slug/enabled)
+                $args = array('id' => 0);
+            }
+        }
+        $product_obj = $this->Query_model->get_data_obj('ec_product',$args);
+        #print_r($product_obj); exit;
+		$admin_obj = '';
+        if($product_obj){
+            if(is_array($product_obj)){
+                $product_obj = $product_obj[0];
+            }
+
+            // Map current ec_product schema to fields expected by legacy product detail view
+            if(isset($product_obj->id)){
+                $product_obj->product_id = $product_obj->id;
+            }
+            if(isset($product_obj->name)){
+                $product_obj->post_title = $product_obj->name;
+            }
+            if(isset($product_obj->short_description) && $product_obj->short_description){
+                $product_obj->post_content = $product_obj->short_description;
+            }
+            if(isset($product_obj->status)){
+                $product_obj->enabled = ((string)$product_obj->status === '1') ? '1' : '0';
+            }
+            if(isset($product_obj->product_type)){
+                $product_obj->type = ($product_obj->product_type === 'simple') ? 'simple' : 'variable';
+            }
+            if(isset($product_obj->login_id) && $product_obj->login_id){
+                $product_obj->user_id = $product_obj->login_id;
+            }
+
+            // Price mapping from ec_product.prices JSON
+            $product_obj->regular_price = 0;
+            $product_obj->sale_price = 0;
+            if(isset($product_obj->prices) && $product_obj->prices){
+                $price_data = json_decode($product_obj->prices, true);
+                if(is_array($price_data) && isset($price_data[0])){
+                    $product_obj->regular_price = isset($price_data[0]['regular_price']) ? (float)$price_data[0]['regular_price'] : 0;
+                    $product_obj->sale_price = isset($price_data[0]['sale_price']) ? (float)$price_data[0]['sale_price'] : 0;
+                }
+            }
+
+            $product_id = $product_obj->product_id;
+			$admin_obj = get_data_utils('ec_admin', array('admin_id'=>$product_obj->user_id));
+        }else{
+            if(isset($_POST['api']) && $_POST['api'] == 1){
+                $ret_data = array('status' => '0', 'message' => 'Invalid Product', 'data' => array());
+                header('Content-Type: application/json');
+                echo json_encode($ret_data);
+                die();
+            }else{
+                redirect("/");
+            }
+        }
+
+        $discount = 0;
+        $sale_price_dates_from = isset($product_obj->sale_price_dates_from) ? $product_obj->sale_price_dates_from : '';
+        $sale_price_dates_to   = isset($product_obj->sale_price_dates_to) ? $product_obj->sale_price_dates_to : '';
+        $product_obj->vendor_id = $product_obj->user_id;
+        
+        if($sale_price_dates_from && $sale_price_dates_from != '0000-00-00 00:00:00' && $sale_price_dates_to && $sale_price_dates_to != '0000-00-00 00:00:00'){
+            $ctime = time();
+            $sale_ftime = strtotime($sale_price_dates_from);
+            $sale_ttime = strtotime($sale_price_dates_to);
+            if($ctime > $sale_ftime && $ctime < $sale_ttime){
+                $discount = 1;
+            }
+        }
+        $current_language = current_language();
+        $current_currency = current_currency();
+        $currency = get_currency($current_currency);
+        $rate = $currency->rate;
+        $symbol = $currency->symbol;
+
+        if($current_language == 12){
+            $product_obj->post_title = ($product_obj->post_title_es) ? $product_obj->post_title_es : $product_obj->post_title;
+            $product_obj->post_content = ($product_obj->post_content_es) ? $product_obj->post_content_es : $product_obj->post_content;
+        }
+        
+        $prod_currency_id = isset($product_obj->currency_id) && $product_obj->currency_id !== '' ? (int)$product_obj->currency_id : 1;
+        $qty_price = array();
+        if($product_obj->type == 'simple'){
+            $quantity_range = isset($product_obj->quantity_range) ? $product_obj->quantity_range : '';
+            $price_range = isset($product_obj->price_range) ? $product_obj->price_range : '';
+            $qty_range = unserialize($quantity_range);
+            $pricerange = unserialize($price_range);
+
+            if($qty_range && $pricerange){
+                foreach($qty_range as $key => $val){
+                    if((isset($key) && $val) && (isset($pricerange[$key]) && $pricerange[$key])){
+                        $qty_price[$qty_range[$key]] = sprintf('%.02f', convert_price($pricerange[$key], $prod_currency_id, $current_currency));
+                    }
+                }
+            }
+            if(is_api()){
+                $quantity_price_range = array();
+                foreach($qty_price as $quantity => $price){
+                    $quantity_price_range[] = (object) array('quantity' => $quantity, 'price' => $price);
+                }
+                $product_obj->price_range = $quantity_price_range;
+            }else{
+                //$product_obj->vendor_id = $product_obj->vendor_id;
+                $product_obj->price_range = $qty_price;
+            }
+        }else{
+            $product_obj->price_range = array();
+        }
+
+		$data['rate'] = $rate;
+		$data['symbol'] = $symbol;
+		$data['iso_code'] = $currency->iso_code;
+		$data['discount'] = $discount;
+		
+		$title= substr($product_obj->post_title,0,40);	
+		
+        $category_arr = $this->Product_model->get_category($product_id);
+		$cat_name = isset($category_arr[0]->name)? $category_arr[0]->name:'';
+		$cat_slug = isset($category_arr[0]->slug)? $category_arr[0]->slug:'';
+		
+		$crumbs = array('Home' => "/",$cat_name => '/category/'.$cat_slug, "$title" => '');
+		$breadcrumbs = $this->breadcrumbs->show_new($crumbs);
+		$data['breadcrumbs']    = $breadcrumbs;       
+              
+		$args_image = array('product_id' => $product_id );	
+        $product_gallery = $this->Query_model->get_data('ec_gallery',$args_image);
+
+        if($product_gallery){
+            foreach($product_gallery as $key=>$val){			
+				$val->file_name = base_url().'assets/uploads/files/'.$val->file_name;
+                $val->url = $val->file_name; 			
+            }
+        }else{
+            $url = base_url().'assets/default_images/product.jpg';
+            $product_gallery = array((object) array ('file_name' => $url, 'url' => $url));
+        }
+        $data['product_gallery'] = $product_gallery;
+
+		if(is_api())
+		$product_obj->variations_img = $product_gallery;
+
+        #print '<pre>';print_r($data['product_gallery']);
+		
+
+        if(!isset($product_obj->brand_id)){
+            $product_obj->brand_id = 0;
+        }
+        if(!isset($product_obj->supplier_id)){
+            $product_obj->supplier_id = 0;
+        }
+        $brand_obj = ($product_obj->brand_id) ? $this->Query_model->get_data_obj('ec_brand',array('brand_id' => $product_obj->brand_id)) : (object) array();
+        $supplier_obj = ($product_obj->supplier_id) ? $this->Query_model->get_data_obj('ec_supplier',array('supplier_id' => $product_obj->supplier_id,'status'=>'1')) : (object) array();
+        $comment_obj = $this->Product_model->get_product_comment($product_obj->product_id);
+        $rating_obj = $this->Product_model->get_rating($product_obj->product_id);
+        $rating_obj->rating = $rating_obj->rating ?? '0.00';
+		$data['avgrating'] = number_format($rating_obj->rating, 1);
+		$data['cntreview'] = $rating_obj->cntreview;
+		$data['sumrating'] = $rating_obj->sumrating;
+		
+		#this query use for the count star	
+		$starcnt = $this->Product_model->get_starcnt($product_obj->product_id);
+		$data['starcnt'] = $starcnt;
+
+		if($supplier_obj){
+            unset($supplier_obj->status);unset($supplier_obj->password);unset($supplier_obj->date_added);unset($supplier_obj->last_updated);unset($supplier_obj->supplier_uid);
+            if($supplier_obj->country){
+                $country = get_country($supplier_obj->country);
+                $supplier_obj->country = $country->name;
+            }
+        }else{
+            $supplier_obj = (object) array();
+        }
+        
+        $variations      = array();
+        $attributes      = array();
+        $attribute_items = array();
+        $variation_mapping = array();
+        $attribute_item_array = array(); 
+
+
+        if($product_obj->type == 'variable'){
+            $img_array = array();
+            $variation = $this->Query_model->get_attr_vari_item($product_id);
+            if($variation){
+                foreach($variation as $v){
+                    $arr = explode(',',$v->attribute_item_id);
+                    if($arr){
+                        foreach($arr as $a){
+                            $attribute_item_array[$a] = base_url().'assets/uploads/'.$v->_thumbnail_id;
+                        }
+                    }
+
+					$img_array_vrns = (object) array(
+                            'file_name' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                            'url' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                    );
+            
+					$tmp_array = array(
+                            'sale_price'    => sprintf('%.02f', convert_price($v->_sale_price, $prod_currency_id, $current_currency)),
+                            'regular_price' => sprintf('%.02f', convert_price($v->_regular_price, $prod_currency_id, $current_currency)),
+                            'stock'         => $v->_stock,
+                            );
+
+
+                    sort($arr);
+                    $att_item_id = implode(',',$arr);
+					$variations[$att_item_id] = $tmp_array;
+					$variations_img[$att_item_id][] =$img_array_vrns; 
+                    #$vstock[$att_item_id][] = $stock_array_vrns;
+
+					$img_array[] = (object) array(
+                            'file_name' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                            'url' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                    );
+                    
+                }
+            }
+            #print_r($variations_img);
+            #print_r($attribute_item_array);
+            if($attribute_item_array){
+                $ata = array_keys($attribute_item_array);
+                $variations_keys_array = array_keys($variations);
+                $first_variation = $variations_keys_array[0];
+                $first_variation_array = explode(',',$first_variation);
+                $first_variation_hash  = array();
+                foreach($first_variation_array as $i){
+                    $first_variation_hash[$i] = 1;
+                }
+
+
+                if($variations[$first_variation]){
+                    $product_obj->sale_price = sprintf('%.02f',$variations[$first_variation]['sale_price']);
+                    $product_obj->regular_price = sprintf('%.02f',$variations[$first_variation]['regular_price']);
+					$product_obj->variations_img = $variations_img[$first_variation];
+					$product_obj->stock         = $variations[$first_variation]['stock'];
+                    $product_obj->is_stock      = isset($variations[$first_variation]['stock']) && $variations[$first_variation]['stock'] > 0 ? 1 : 0;
+                }
+                $attribute_item_obj = $this->Query_model->get_data('ec_attribute_item', array('attribute_item_id' => $ata));
+                $it_at_mapping = array();
+                if($attribute_item_obj){
+                    foreach($attribute_item_obj as $ai){
+                        if(isset($attribute_item_array[$ai->attribute_item_id])){
+                            $ai->image = $attribute_item_array[$ai->attribute_item_id];
+                            if($ai->attribute_id != 1){
+                                $ai->image = '';
+                            }
+                        }else{
+                            $ai->image = '';
+                        }
+                        if(isset($first_variation_hash[$ai->attribute_item_id])){
+                            $ai->selected = 1;
+                        }else{
+                            $ai->selected = 0;
+                        }
+                        $attribute_items[$ai->attribute_id][] = $ai;
+                        $it_at_mapping[$ai->attribute_item_id] = $ai->attribute_id;
+                    }
+
+                    $attribute_array = array_keys($attribute_items);
+                    $attribute_obj = $this->Query_model->get_data('ec_attribute', array('attribute_id' => $attribute_array));
+                    if($attribute_obj){
+                        foreach($attribute_obj as $a){
+                            if($current_language == 12){
+                                $a->name = ($a->name_es) ? $a->name_es : $a->name;
+                            }
+                            $attributes[] = $a;
+                        }
+                    }
+                }
+                $data['product_gallery'] = $img_array;
+
+                foreach($attribute_item_array as $ak => $av){
+                    foreach($variations as $vk => $vv){
+                        $vk_array = explode(',',$vk);
+                        if(in_array($ak,$vk_array)){
+                            $tmp_array = [];
+                            foreach($vk_array as $i){
+                                $tmp_array[$i] = 1;
+                            }
+                            if(isset($variation_mapping[$ak])){
+                                $tarray = $variation_mapping[$ak];
+                                foreach($tmp_array as $tk => $tv){
+                                    $tarray[$tk] = 1;
+                                }
+                                $variation_mapping[$ak] = $tarray;
+                            }else{
+                                $variation_mapping[$ak] = $tmp_array;
+                            }
+                        }
+                    }
+                }
+                foreach($variation_mapping as $key => $val){
+                    $taken = array();
+                    foreach($val as $k => $v){
+                        if(isset($taken[$it_at_mapping[$k]])){
+                            $variation_mapping[$key][$k]+=1; 
+                        }
+                        $taken[$it_at_mapping[$k]] = 1;   
+                    }
+                    foreach($it_at_mapping as $k1 => $v1){
+                        if(!isset($variation_mapping[$key][$k1])){
+                            $variation_mapping[$key][$k1] = 0;
+                        }
+                    }
+                }
+            }else{
+                $product_obj->enabled = 0;
+            }
+        }else{
+            $product_obj->sale_price = sprintf('%.02f', convert_price($product_obj->sale_price, $prod_currency_id, $current_currency));
+            $product_obj->regular_price = sprintf('%.02f', convert_price($product_obj->regular_price, $prod_currency_id, $current_currency));
+            $product_obj->stock  = $product_obj->stock;
+            $product_obj->is_stock  = isset($product_obj->stock) && $product_obj->stock > 0 ? 1 : 0;
+
+            $attribute_item_obj = $this->Query_model->get_product_attr_item($product_id);
+            if($attribute_item_obj){
+                $tmp_attr = array();
+                foreach($attribute_item_obj as $ai){
+                    $ai->image = '';
+                    if(isset($tmp_attr[$ai->attribute_id])){
+                        $ai->selected = '';
+                    }
+                    if(isset($tmp_attr[$ai->attribute_id])){
+                        $ai->selected = 0;
+                    }else{
+                        $tmp_attr[$ai->attribute_id] = 1;
+                        $ai->selected = 1;
+                    }
+                    $attribute_items[$ai->attribute_id][] = $ai;
+                }
+
+                $attribute_array = array_keys($attribute_items);
+                $attribute_obj = $this->Query_model->get_data('ec_attribute', array('attribute_id' => $attribute_array));
+                if($attribute_obj){
+                    foreach($attribute_obj as $a){
+                        if($current_language == 12){
+                            $a->name = ($a->name_es) ? $a->name_es : $a->name;
+                        }
+                        $attributes[] = $a;
+                    }
+                }
+            }
+        }
+
+        $product_obj->subtotal =  ($discount) ? $product_obj->sale_price : $product_obj->regular_price;
+
+
+        if(!isset($product_obj->tax_id)){
+            $product_obj->tax_id = 0;
+        }
+        if(!isset($product_obj->shipping_id)){
+            $product_obj->shipping_id = 0;
+        }
+
+        $tax_obj = null;
+        if(method_exists($this->Cart_model, 'get_tax') && $product_obj->tax_id){
+            $tax_obj = $this->Cart_model->get_tax($product_obj->tax_id, $product_obj->subtotal);
+        }
+
+        $shipping_obj = null;
+        if(method_exists($this->Cart_model, 'get_shipping') && $product_obj->shipping_id){
+            $shipping_obj = $this->Cart_model->get_shipping($product_obj->shipping_id);
+        }
+        if($shipping_obj){
+            if(is_numeric($shipping_obj->shipping)){
+                $shipping_obj->shipping = sprintf('%.02f',$rate*$shipping_obj->shipping);
+            }
+            $product_obj->shipping = $shipping_obj->shipping; 
+        }else{
+            $product_obj->shipping = 0;
+        }
+        if($tax_obj){
+            if(is_numeric($tax_obj->tax)){
+                $product_obj->tax = sprintf('%.02f',$tax_obj->tax);
+            }else{
+                $product_obj->tax = $tax_obj->tax;
+            }
+            $product_obj->tax_type = $tax_obj->tax_type;
+            $product_obj->tax_rate = $tax_obj->tax_rate;
+        }else{
+            $product_obj->tax = 0;
+            $product_obj->tax_type = '';
+            $product_obj->tax_rate = 0;
+        }
+        $product_obj->total = $product_obj->subtotal;
+        if(is_numeric($product_obj->shipping)){
+            $product_obj->total+= $product_obj->shipping;
+        }
+        if(is_numeric($product_obj->tax)){
+            $product_obj->total+= $product_obj->tax;
+        }
+	
+	$product_obj->percentage_off = percentage_off(array('sale_price'=>$product_obj->sale_price, 'org_price'=>$product_obj->regular_price));	
+        $tmp_attribute_items;
+        if($attributes){
+            foreach($attributes as $at => $av){
+                if($attribute_items && isset($attribute_items[$av->attribute_id])){
+                    $av->attribute_items = $attribute_items[$av->attribute_id];
+
+                    foreach($attribute_items[$av->attribute_id] as $k => $v){
+                        $tmp_attribute_items[$v->attribute_item_id] = $v;
+                    }
+                }
+            }
+        }
+
+        $tmp_variations = array();
+        if(is_api() && $variations){
+            foreach($variations as $k => $v){
+                if($k){
+                    $tmp_array = array();
+                    $k_array = explode(',',$k);
+                    if($k_array){
+                        foreach($k_array as $i => $j){
+                            if($tmp_attribute_items[$j]){
+                                $tmp_array[$tmp_attribute_items[$j]->name] = $j;
+                            }
+                        }
+                    }
+                    $tmp_array['sale_price'] = $v['sale_price'];
+                    $tmp_array['regular_price'] = $v['regular_price'];
+                    $tmp_variations[] = $tmp_array;
+                }
+            }
+            $data['variations'] = $tmp_variations;
+        }else{
+            $data['variations'] = $variations;
+        }
+
+
+
+		$data['brand_obj'] = $brand_obj;
+		$data['supplier_obj'] = $supplier_obj;
+		$data['comment_obj'] = $comment_obj;
+        $data['attributes'] = $attributes;
+        $data['attribute_items'] = $attribute_items;
+        $data['variation_mapping'] = $variation_mapping;
+        $data['lead_time'] = lead_time();
+        $data['shipping_time'] = shipping_time();
+        
+
+        $wishlist = 0;
+        if($this->LOGIN_ID){
+            $wishlist_obj = $this->Query_model->get_data_obj('ec_wishlist',array('customer_id' => $this->LOGIN_ID, 'product_id' => $product_obj->product_id, 'status' => '1'));
+            if($wishlist_obj){
+                $wishlist = 1;
+            }
+        }
+
+        $data['wishlist'] = $wishlist;        
+        $cart         = $this->Cart_model->cart_items();
+        $data['cart_summary'] = $cart['cart_summary'];
+        $data['related_product'] = $this->Product_model->related_product($product_id);
+
+		if($this->LOGIN_ID)
+		{
+			$wishlist_products = get_wishlist_productid($this->LOGIN_ID);
+			foreach($data['related_product'] as $related)
+			{
+				$related->wishlist = isset($wishlist_products[$related->product_id]) && $wishlist_products[$related->product_id] ? '1' : '0'; 
+			}
+		}
+	
+		$data['detail'] = $product_obj;
+		$data['admin_obj'] = $admin_obj;
+        $data['delivery_information'] = delivery_information();
+        $data['return_policy'] = return_policy();
+        $data['vendor_list'] = $vendordata;
+		$this->load->template("$this->TYPE/product_detail", $data);
+        
+        if(is_api()){
+            unset($data['csrf']);
+            unset($data['breadcrumbs']);
+            unset($data['TYPE']);
+            api_response(array('status' => 1, 'msg' => 'Success', 'data' => [$data]));
+            $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+        }
+		
+    }
+    
+    function get_page_id_by_slug($slug=null) {       
+        if(is_numeric((string)$slug) && (string)$slug !== ''){
+            return (int)$slug;
+        }
+        return null;
+    }
+
+    public function ajax_product_variation()
+    {
+		$product_id = (int)$this->input->post('product_id');
+		$quantity = (int)$this->input->post('quantity');
+		if ($quantity < 1) {
+			$quantity = 1;
+		}
+
+		$response = array(
+			'status' => '0',
+			'message' => 'Error',
+		);
+
+		if ($product_id) {
+			$variation_id = (int)($this->db
+				->select('id')
+				->from('product_variations')
+				->where('product_id', $product_id)
+				->order_by('id', 'ASC')
+				->limit(1)
+				->get()->row()->id ?? 0);
+
+			if ($variation_id) {
+				$price_row = $this->db
+					->select('price')
+					->from('product_variation_price')
+					->where('variation_id', $variation_id)
+					->where('min_qty <=', $quantity)
+					->order_by('min_qty', 'DESC')
+					->limit(1)
+					->get()->row();
+				$price = $price_row && isset($price_row->price) ? (float)$price_row->price : 0;
+
+				$img_rows = $this->db
+					->select('image_path')
+					->from('product_variation_images')
+					->where('variation_id', $variation_id)
+					->order_by('id', 'ASC')
+					->limit(10)
+					->get()->result();
+				$product_gallery = array();
+				if ($img_rows) {
+					foreach ($img_rows as $ir) {
+						$fn = isset($ir->image_path) ? trim((string)$ir->image_path) : '';
+						if ($fn === '') {
+							continue;
+						}
+						$url = base_url('uploads/products/' . ltrim($fn, '/\\'));
+						$product_gallery[] = (object)array('file_name' => $url, 'url' => $url);
+					}
+				}
+				if (!$product_gallery) {
+					$url = base_url('assets/default_images/product.jpg');
+					$product_gallery = array((object)array('file_name' => $url, 'url' => $url));
+				}
+
+				$response = array(
+					'status' => '1',
+					'message' => 'Success',
+					'data' => array(
+						'sale_price' => sprintf('%.02f', $price),
+						'regular_price' => sprintf('%.02f', $price),
+						'stock' => 0,
+						'variations_img' => $product_gallery,
+					)
+				);
+			}
+		}
+
+		header('Content-Type: application/json');
+		echo json_encode($response);
+		return;
+
+        $current_language = current_language();
+        $current_currency = current_currency();
+        $currency = get_currency($current_currency);
+        $rate = $currency->rate;
+        $symbol = $currency->symbol;
+
+        $product_id         = $this->input->post('product_id');
+        $quantity           = $this->input->post('quantity');
+        $attribute_item     = $this->input->post('attribute_item');
+        $selected_item_id   = $this->input->post('attribute_item_id');
+        $attribute_items = array();
+        if($attribute_item){
+            $attribute_items = json_decode($attribute_item);
+            if($attribute_items){
+                sort($attribute_items);
+            }
+        }
+      
+        $response = array(
+                        'status'    => '0',
+                        'message'   => 'Error',
+                    );
+        $data = array(); 
+        $product_obj = $this->Query_model->get_data_obj('ec_product',array('product_id' => $product_id));
+        $prod_currency_id = isset($product_obj->currency_id) && $product_obj->currency_id !== '' ? (int)$product_obj->currency_id : 1;
+        $variations      = array();
+        $attribute_item_array = array();
+        $image_array = array();
+        if($product_obj->type == 'variable'){
+            $attribute_item_id = implode(',',$attribute_items);
+            $variation = $this->Query_model->get_attr_vari_item($product_id);
+            if($variation){
+                foreach($variation as $v){
+                    $arr = explode(',',$v->attribute_item_id);
+                    if($arr){
+                        foreach($arr as $a){
+                            $image_array[$a] = base_url().'assets/uploads/'.$v->_thumbnail_id;
+                            $attribute_item_array[$a] = 0;
+                        }
+                    }
+					/*
+                    $tmp_array = array(
+                            'sale_price' => sprintf('%.02f',$rate*$v->_sale_price),
+                            'regular_price' => sprintf('%.02f',$rate*$v->_regular_price),
+                            );
+					*/
+
+					$tmp_array = array(
+                            'sale_price'    => sprintf('%.02f', convert_price($v->_sale_price, $prod_currency_id, $current_currency)),
+                            'regular_price' => sprintf('%.02f', convert_price($v->_regular_price, $prod_currency_id, $current_currency)),
+                            'stock'         => $v->_stock,
+                            );
+					$img_array_vrns = (object) array(
+                            'file_name' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                            'url' => base_url().'assets/uploads/'.$v->_thumbnail_id,
+                    );
+
+                    #$stock_array_vrns = $v->_stock;
+                    
+
+                    sort($arr);
+                    $att_item_id = implode(',',$arr);
+                    $variations[$att_item_id] = $tmp_array;
+					$variations_img[$att_item_id][] =$img_array_vrns;
+					#$variations_stock[$att_item_id] =$stock_array_vrns;
+                }
+            }
+
+            if(!isset($variations[$attribute_item_id])){
+                $compare = array();
+                if($variations){
+                    foreach($variations as $vk => $vv){
+                        $vk_array = explode(',',$vk);
+                        if(in_array($selected_item_id,$vk_array)){
+                            $result   = array_diff($vk_array,$attribute_items);
+                            $compare[$vk] = count($result);
+                        }else{
+                            $compare[$vk] = 999999999;
+                        }
+                    }
+                }
+                asort($compare);
+                if($compare){
+                    foreach($compare as $vk => $vv){
+                        if(isset($variations[$vk])){
+                            $attribute_item_id = $vk;
+                            $attribute_items   = explode(',',$attribute_item_id);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if($variations){
+                foreach($variations as $vk => $vv){
+                    $vk_array = explode(',',$vk);
+                    if(in_array($selected_item_id,$vk_array)){
+                        foreach($vk_array as $i){
+                            $attribute_item_array[$i] = 2;
+                        }
+                    }
+                }
+            }
+            if($attribute_items){  
+                foreach($attribute_items as $ak => $av){
+                    if(isset($attribute_item_array[$av])){
+                        $attribute_item_array[$av] = 1;
+                    }
+                }
+            }
+            $data['variations'] = $attribute_item_array;
+            $ata = array_keys($attribute_item_array);
+            $attribute_item_obj = $this->Query_model->get_data('ec_attribute_item', array('attribute_item_id' => $ata));
+            $attribute_items = array();
+            $it_at_mapping = array();
+            if($attribute_item_obj){
+                foreach($attribute_item_obj as $ai){
+                    if($ai->attribute_id == 1 && isset($image_array[$ai->attribute_item_id])){
+                        $ai->image = $image_array[$ai->attribute_item_id];
+                        $img_array[] = (object) array(
+									'file_name' => $ai->image,
+									'url' => $ai->image,
+								);
+                    }else{
+                        $ai->image = '';
+                    }
+                    $ai->selected = $attribute_item_array[$ai->attribute_item_id];
+                    $attribute_items[$ai->attribute_id][] = $ai;
+                    $it_at_mapping[$ai->attribute_item_id] = $ai->attribute_id;
+                }
+                $attribute_array = array_keys($attribute_items);
+                $attribute_obj = $this->Query_model->get_data('ec_attribute', array('attribute_id' => $attribute_array));
+                if($attribute_obj){
+                    foreach($attribute_obj as $a){
+                        if($current_language == 12){
+                            $a->name = ($a->name_es) ? $a->name_es : $a->name;
+                        }
+                        if($attribute_items && isset($attribute_items[$a->attribute_id])){
+                            $a->attribute_items = $attribute_items[$a->attribute_id];
+                        }
+                        $attributes[] = $a;
+                    }
+                }
+            }
+
+            $data['attributes'] = $attributes;
+
+            $product_obj->sale_price = $variations[$attribute_item_id]['sale_price'];
+            $product_obj->regular_price = $variations[$attribute_item_id]['regular_price'];
+			$product_obj->variations_img = $variations_img[$attribute_item_id];
+			$product_obj->stock = $variations[$attribute_item_id]['stock'];
+            $discount = 0;
+            $sale_price_dates_from = $product_obj->sale_price_dates_from;
+            $sale_price_dates_to   = $product_obj->sale_price_dates_to;
+            if($sale_price_dates_from && $sale_price_dates_from != '0000-00-00 00:00:00' && $sale_price_dates_to && $sale_price_dates_to != '0000-00-00 00:00:00'){
+                $ctime = time();
+                $sale_ftime = strtotime($sale_price_dates_from);
+                $sale_ttime = strtotime($sale_price_dates_to);
+                if($ctime > $sale_ftime && $ctime < $sale_ttime){
+                    $discount = 1;
+                }
+            }
+
+            $product_obj->subtotal = ($discount) ? $product_obj->sale_price : $product_obj->regular_price;
+            $tax_obj = null;
+            if(method_exists($this->Cart_model, 'get_tax') && isset($product_obj->tax_id) && $product_obj->tax_id){
+                $tax_obj = $this->Cart_model->get_tax($product_obj->tax_id,$product_obj->subtotal);
+            }
+            $shipping_obj = null;
+            if(method_exists($this->Cart_model, 'get_shipping') && isset($product_obj->shipping_id) && $product_obj->shipping_id){
+                $shipping_obj = $this->Cart_model->get_shipping($product_obj->shipping_id);
+            }
+            if($shipping_obj){
+                if(is_numeric($shipping_obj->shipping)){
+                    $product_obj->shipping  = sprintf('%.02f',$rate*$shipping_obj->shipping);
+                }else{
+                    $product_obj->shipping  = $shipping_obj->shipping;
+                }
+            }else{
+                $product_obj->shipping = 0;
+            }
+            if($tax_obj){
+                    $product_obj->tax = $tax_obj->tax;
+                $product_obj->tax_type  = $tax_obj->tax_type;
+            }else{
+                $product_obj->tax = 0;
+                $product_obj->tax_type = '';
+            }
+
+			$product_obj->percentage_off = percentage_off(array('sale_price'=>$product_obj->sale_price, 'org_price'=>$product_obj->regular_price));
+
+            $data['sale_price']         = $product_obj->sale_price;
+            $data['regular_price']      = $product_obj->regular_price;
+			$data['percentage_off']     = $product_obj->percentage_off.'% OFF';
+            $data['variations_img']     = $product_obj->variations_img;
+            $data['subtotal']           = $product_obj->subtotal;
+            $data['shipping']           = $product_obj->shipping;
+            $data['tax']                = $product_obj->tax;
+            $data['tax_type']           = $product_obj->tax_type;
+            $data['discount']           = $discount;
+            $data['stock']              = $product_obj->stock;
+            $data['is_stock']           = isset($product_obj->stock) && $product_obj->stock > 0 ? 1 : 0;
+            $data['is_price_update']    = 1;
+            $data['symbol']             = $symbol;
+            $data['iso_code']           = $currency->iso_code;
+			$data['detail']				= $product_obj;
+
+            $response = array(
+                        'status'    => '1',
+                        'message'   => 'Success',
+                        'data'      => [$data]
+                    );
+
+        }
+        if($product_obj->type == 'simple'){
+            $data['is_price_update'] = 0;
+            $response = array(
+                        'status'    => '0',
+                        'message'   => 'Success',
+                        'data'      => [$data]
+                    );
+
+        }
+        if(!isset($response['data'])){
+            $response['data'] = array();
+        }
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($response));
+    }
+
+
+    public function get_vendor_list($slug = NULL)
+    {
+        return array('vendor_detail' => array(), 'supplier_wise_product' => array());
+    }
+    
+    
+    public function get_vendor_detail($data = NULL)
+    {
+        if(count($data)){
+            $condition = array('admin_id' => $data, 'status'=> '1');
+            $vendordata = $this->Query_model->get_data('ec_admin', $condition);
+            return $vendordata;
+        }
+        return [];
+    }
+
+}

@@ -1,0 +1,313 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Category_prod_model extends MY_Model{
+    function __construct() {
+        parent::__construct();
+        $this->TYPE = $this->session->userdata('type');
+        $type = $this->TYPE ? $this->TYPE : 'admin';
+        $session_data = $this->session->userdata($type);
+        if (!is_array($session_data)) {
+            $session_data = [];
+        }
+
+        // vendor panel commonly stores vendor_id/login_id; admin panel may not have these
+        $this->login_id = isset($session_data['vendor_id'])
+            ? (int)$session_data['vendor_id']
+            : (isset($session_data['login_id']) ? (int)$session_data['login_id'] : 0);
+    }
+
+	var $table = 'ec_categories_prod';
+	var $column_search = array('name','status');
+	var $column_alias = array(); //set column field database
+	
+	function create($category){		
+		//$category['slug'] = url_title($category['name'],'-',true);		
+		$this->master->insert($this->table, $category);
+	}
+
+	function update($category,$id){
+		#$category['slug'] = url_title($category['name'],'-',true);
+		$this->master->where('id',$id);
+		$this->master->update($this->table,$category);
+	}
+
+	function delete($id){
+		$this->master->where('id',$id);
+		$this->master->delete($this->table);
+	}
+	
+	function find_by_id($id){
+		$this->slave->where('id',$id);
+		return $this->slave->get($this->table,1)->row_array();
+	}
+
+	function find_by_slug($id){
+		$this->slave->where('slug',$id);
+		return $this->slave->get($this->table,1)->row_array();
+	}
+
+	function find_list(){
+		$this->slave->order_by('name','asc');
+		$query = $this->slave->get($this->table);
+        $data = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result_array() as $row) {
+                $data[$row['id']] = $row['name'];
+            }
+        }
+        return $data; 
+	}
+
+	function find_list_prod(){
+		$this->slave->order_by('name','asc');
+		$query = $this->slave->get($this->table);
+        $data = $parent = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result_array() as $row) {
+                $data[$row['id']] = $row['name'];
+            }
+        }
+        return $data; 
+	}
+
+	function find_list_prod_vendor(){
+		$this->slave->order_by('name','asc');
+		$query = $this->slave->get($this->table);
+        $data = $parent = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result_array() as $row) {
+                $data[$row['id']] = $row['name'];
+				if($row['parent_id'] == '0')
+				{
+					$parent[] = $row;
+				}
+            }
+        }
+		$ret_data = array();
+		$ret_data['data'] = $data;
+		$ret_data['parent'] = $parent;
+        return $ret_data; 
+	}
+
+    public function get_datatable()
+    {
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        #$this->slave->where('login_id', $this->LOGIN_ID);
+        $this->slave->where('parent_id', '0');
+        $this->get_datatables_query();
+        $this->slave->order_by('date_added', 'desc');
+        $this->slave->limit($_POST['length'], $_POST['start']);
+        $user = $this->slave->get()->result();
+        return $user;
+    }
+	 public function get_child_cats($parent_id=null)
+    {
+       // $parent_id = 45;
+		$this->slave->select('*');
+        $this->slave->from('ec_categories_prod');      
+        $this->slave->where('parent_id', $parent_id);       
+       // $this->slave->order_by('date_added', 'DESC');        
+        $cats = $this->slave->get()->result();
+		//echo $this->slave->last_query();
+		//die;
+        return $cats;
+    }
+
+    public function get_datatables_query()
+    {
+        if(isset($_POST['filter'])){
+            $this->slave->group_start();
+            foreach($_POST['filter'] as $col_name => $col_value){
+                if (in_array($col_name, $this->column_search) && (is_array($col_value) || $col_value != '')) {
+                    $column_name_alias = $col_name;
+                    if(isset($this->column_alias[$col_name])){
+                        $column_name_alias =  $this->column_alias[$col_name].".".$col_name;
+                    }
+                    if(is_array($col_value)){
+                        $this->slave->where_in($column_name_alias, $col_value);
+                    }else{
+                        $this->slave->like($column_name_alias, $col_value); 
+                    }
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+
+    
+
+    public function categoryTree($parent_id = 0, $sub_mark = '', $selected = 0){
+        $query = $this->slave->query("SELECT * FROM ec_categories_prod WHERE parent_id = $parent_id AND status = '1' ORDER BY name ASC");
+        if($query->num_rows() > 0){
+            $result = $query->result();
+            $array = 0;
+            if(is_array($selected)){
+                $array = 1;
+            }
+            foreach($result as $row){
+                if($array){
+                    $sel = in_array($row->id,$selected) ? 'selected' : '';
+                }else{
+                    $sel = ($selected == $row->id) ? 'selected' : '';
+                }
+                echo '<option value="'.$row->id.'" '.$sel.'>'.$sub_mark.$row->name.'</option>';
+                $this->categoryTree($row->id, $sub_mark.'-', $selected);
+            }
+        }
+    }
+
+    public function get_categories_n()
+    {
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        //$this->slave->where('id', 27);  
+        $query = $this->slave->get()->result();
+        return $query;  
+    }
+
+    public function get_categories_n_parent()
+    {   
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        $this->slave->where('parent_id', '0');  
+        $query = $this->slave->get()->result();
+        return $query;
+    }
+
+    public function sub_get_categories_n($parent_id)
+    {   
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        $this->slave->where('parent_id', $parent_id);   
+        $query = $this->slave->get()->result();
+        return $query;
+    }
+
+	public function get_categories(){
+
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+		
+        if(empty($_POST['filter']))
+        {
+            $this->slave->where('parent_id', 0);
+        }
+        $this->get_datatables_query_cat();
+		$this->slave->limit($_POST['length'], $_POST['start']);
+        $parent = $this->slave->get();
+		//echo $this->slave->last_query(); 
+		$categories = $parent->result();
+        $i=0;
+        foreach($categories as $p_cat){
+
+            $categories[$i]->sub = $this->sub_categories($p_cat->id);
+            $i++;
+        }
+        return $categories;
+    }
+
+    public function get_categories_new($parent_id=0){
+
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+		
+        if(empty($_POST['filter']) || (int)$parent_id > 0)
+        {
+            $this->slave->where('parent_id', (int)$parent_id);
+        }
+        
+        if ((int)$parent_id === 0) {
+            $this->get_datatables_query_cat();
+        }
+        
+		$this->slave->order_by('id', 'DESC');
+		#$this->slave->limit($_POST['length'], $_POST['start']);
+        $parent = $this->slave->get();
+		//echo $this->slave->last_query(); 
+		$categories = $parent->result();
+        $i=0;
+        foreach($categories as $p_cat){
+                $categories[$i]->sub = $this->get_categories_new($p_cat->id);
+                $i++;
+        }
+        return $categories;
+    }
+
+    public function sub_categories($id){
+
+        $this->slave->select('*');
+        $this->slave->from('ec_categories_prod');
+        $this->slave->where('parent_id', $id);
+		
+        if(isset($_POST['filter']) && empty($_POST['filter']['status']))
+        {   
+            $this->get_datatables_query_cat();
+        }
+		//$this->slave->limit($_POST['length'], $_POST['start']);
+		$child = $this->slave->get();
+		//echo $this->slave->last_query();die;
+        $categories = $child->result();
+        
+        $i=0;
+        foreach($categories as $p_cat){
+
+            $categories[$i]->sub = $this->sub_categories($p_cat->id);
+            $i++;
+        }
+        return $categories;       
+    }
+	
+	public function count_filtered()
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from('ec_categories_prod');
+        #$this->slave->where('login_id', $this->LOGIN_ID);
+        #$this->slave->where('status', '1');
+        $this->get_datatables_query_cat();
+        $query = $this->slave->get()->row();
+		//echo $this->slave->last_query();die;
+        return $query->CNT;
+    }
+
+    public function count_all()
+    {
+        $this->slave->select('COUNT(*) CNT');
+        $this->slave->from('ec_categories_prod');       
+        $query = $this->slave->get()->row();
+        return $query->CNT;
+    }
+	
+	 public function get_datatables_query_cat()
+    {
+        if(isset($_POST['filter'])){
+            $this->slave->group_start();
+            foreach($_POST['filter'] as $col_name => $col_value){
+                if (in_array($col_name, $this->column_search) && (is_array($col_value) || $col_value != '')) {
+                    $column_name_alias = $col_name;
+                    if(isset($this->column_alias[$col_name])){
+                        $column_name_alias =  $this->column_alias[$col_name].".".$col_name;
+                    }
+                    if(is_array($col_value)){
+                        $this->slave->where_in($column_name_alias, $col_value);
+                    }else{
+                        $this->slave->like($column_name_alias, $col_value); 
+                    }
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+	public function delete_image($id,$img_id)
+    {
+      	
+		$sql ="UPDATE ec_categories_prod set $img_id=NULL WHERE id=$id";  //thumbnail banner_image icon
+		$query  =  $this->slave->query($sql);
+		return ($query > 0) ? TRUE : FALSE;		
+		
+    }
+
+	
+
+}

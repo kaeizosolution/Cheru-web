@@ -1,0 +1,7 @@
+{
+    "require": {
+        "spipu/html2pdf": "^5.2",
+        "knplabs/knp-snappy": "^1.2",
+        "koolreport/core": "^4.7"
+    }
+}

@@ -1,0 +1,500 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+if (!class_exists('API_Controller')) {
+    require_once(APPPATH . 'core/API_Controller.php');
+}
+
+class Product_list extends API_Controller
+{
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->model('Query_model');
+        $this->load->model('Product_model');
+        $this->load->library('session');
+    }
+
+    public function ajax_search()
+    {
+        if (!$this->require_post()) {
+            return;
+        }
+
+        // Resolve active currency and rate first, to use in price filtering
+        $symbol = '$';
+        $cur_rate = 1.0;
+        try {
+            $cc_id = (int)$this->input->post('currency_id');
+            if ($cc_id <= 0) {
+                $cc_id = isset($_SESSION['cur']) ? (int)$_SESSION['cur'] : 0;
+            }
+            if ($cc_id <= 0 && $this->session) {
+                $cc_id = (int)$this->session->userdata('cur');
+            }
+            if ($cc_id > 0) {
+                $cur = $this->db
+                    ->select('currency_id, symbol, rate')
+                    ->from('ec_currency')
+                    ->where('currency_id', $cc_id)
+                    ->get()->row();
+                if ($cur) {
+                    if (!empty($cur->symbol)) {
+                        $symbol = (string)$cur->symbol;
+                    }
+                    if (isset($cur->rate) && is_numeric($cur->rate)) {
+                        $cur_rate = (float)$cur->rate;
+                    }
+                }
+            }
+            // Fallback: use the basic/default currency if none selected
+            if ($cur_rate == 1.0 && $cc_id <= 0) {
+                $def_cur = $this->db
+                    ->select('symbol, rate')
+                    ->from('ec_currency')
+                    ->where('basic', 1)
+                    ->limit(1)
+                    ->get()->row();
+                if ($def_cur) {
+                    if (!empty($def_cur->symbol)) $symbol = (string)$def_cur->symbol;
+                    if (is_numeric($def_cur->rate))  $cur_rate = (float)$def_cur->rate;
+                }
+            }
+        } catch (Exception $e) {
+            // Currency resolution failed — proceed with defaults ($, rate 1.0)
+            log_message('error', 'ajax_search currency resolution error: ' . $e->getMessage());
+        }
+
+
+        $show_categories = (int)$this->input->post('show_categories');
+        $length = (int)$this->input->post('length');
+        if ($length <= 0) {
+            $length = function_exists('page_count') ? page_count() : 12;
+        }
+        if ($length > 100) {
+            $length = 100;
+        }
+
+        $page = (int)$this->input->post('page');
+        if ($page <= 0) {
+            $page = 1;
+        }
+
+        $cat_image = $this->input->post('cat_image');
+        $fts = (string)$this->input->post('fts');
+        $fts_trim = trim($fts);
+        $category_id = (int)$this->input->post('category_id');
+        $category_slug = trim((string)$this->input->post('category_slug'));
+        $sorting = (int)$this->input->post('sorting');
+        $filter = $this->input->post('filter');
+        $vendor_obj = $this->input->post('vendor_obj');
+        $vendor_categories = [];
+
+        $filter_arr = $filter;
+        if (is_string($filter_arr) && $filter_arr !== '') {
+            $tmp = json_decode($filter_arr, true);
+            if (is_array($tmp)) {
+                $filter_arr = $tmp;
+            }
+        }
+        if (!is_array($filter_arr)) {
+            $filter_arr = [];
+        }
+
+        $filter = $filter_arr;
+        if (isset($filter['brand']) && is_string($filter['brand']) && trim($filter['brand']) !== '') {
+            $tmp_brand = json_decode($filter['brand'], true);
+            if (is_array($tmp_brand)) {
+                $filter['brand'] = $tmp_brand;
+            }
+        }
+
+        $brand_ids = [];
+        if (isset($filter['brand']) && is_array($filter['brand'])) {
+            $brand_ids = array_values(array_unique(array_filter(array_map(function ($v) {
+                return (int)$v;
+            }, $filter['brand']), function ($v) {
+                return $v > 0;
+            })));
+        }
+
+        $price_from = null;
+        $price_to = null;
+        if (isset($filter['price_range']) && $filter['price_range'] !== '') {
+            $pr = $filter['price_range'];
+            if (is_string($pr)) {
+                $tmp_pr = json_decode($pr, true);
+                if (is_array($tmp_pr)) {
+                    $pr = $tmp_pr;
+                }
+            }
+            if (is_array($pr)) {
+                if (isset($pr['from']) && $pr['from'] !== '' && $pr['from'] !== null) {
+                    $price_from = (float)$pr['from'];
+                    if ($cur_rate > 0) {
+                        $price_from = $price_from / $cur_rate;
+                    }
+                }
+                if (isset($pr['to']) && $pr['to'] !== '' && $pr['to'] !== null) {
+                    $price_to = (float)$pr['to'];
+                    if ($cur_rate > 0) {
+                        $price_to = $price_to / $cur_rate;
+                    }
+                }
+            }
+        }
+
+        // Resolve category by slug (supports clicking category tiles)
+        if ($category_id <= 0 && $category_slug !== '' && $category_slug !== 'AllCategory') {
+            $cat_slug_norm = function_exists('get_slug') ? get_slug($category_slug) : $category_slug;
+            $cat_name_norm = strtolower(str_replace('-', ' ', (string)$cat_slug_norm));
+            $cat_row = $this->db
+                ->select('id')
+                ->from('ec_categories_prod')
+                ->group_start()
+                    ->where('slug', $category_slug)
+                    ->or_where('slug', $cat_slug_norm)
+                    ->or_where('name', $category_slug)
+                    ->or_where('LOWER(name) = ' . $this->db->escape($cat_name_norm), null, false)
+                ->group_end()
+                ->order_by('id', 'DESC')
+                ->limit(1)
+                ->get()->row();
+            if ($cat_row && isset($cat_row->id)) {
+                $category_id = (int)$cat_row->id;
+            }
+        }
+
+        $category_id_int = (int)$category_id;
+
+        $has_vendor_ctx = false;
+        if (is_array($vendor_obj) && (isset($vendor_obj['admin_id']) || isset($vendor_obj['admin_uid']))) {
+            $has_vendor_ctx = true;
+        } elseif (is_object($vendor_obj) && (isset($vendor_obj->admin_id) || isset($vendor_obj->admin_uid))) {
+            $has_vendor_ctx = true;
+        }
+
+        $has_category_filter = isset($filter_arr['category']) && is_array($filter_arr['category']) && count($filter_arr['category']) > 0;
+        $has_category_slug_ctx = ($category_slug !== '' && $category_slug !== 'AllCategory');
+        $has_brand_filter = is_array($brand_ids) && count($brand_ids) > 0;
+        if ($show_categories === 1 && $has_brand_filter) {
+            $show_categories = 0;
+        }
+
+        // Sidebar category tree (HTML) always available
+        $root_parent = [];
+        if ($category_id_int > 0 && $this->Product_model && method_exists($this->Product_model, 'get_root_parent')) {
+            $root_parent = $this->Product_model->get_root_parent((int)$category_id_int);
+            if (!is_array($root_parent)) {
+                $root_parent = [];
+            }
+        }
+        $all_childs = function_exists('getcategories') ? getcategories() : [];
+        $buildtree_data = $this->buildtree($all_childs, [], $vendor_obj, 0);
+        $make_final_tree = $this->make_final_tree($buildtree_data, $vendor_obj, $root_parent);
+
+        // All Category listing
+        if ($show_categories === 1 && !$has_vendor_ctx && $category_id_int <= 0 && !$has_category_filter && !$has_category_slug_ctx) {
+            $cats = $this->db
+                ->select('id, name, slug, thumbnail')
+                ->from('ec_categories_prod')
+                ->where('status', '1')
+                ->where('parent_id', '0')
+                ->order_by('id', 'DESC')
+                ->get()->result();
+
+            $categories_list = [];
+            if ($cats) {
+                foreach ($cats as $c) {
+                    $image_url = base_url('assets/default_images/product.jpg');
+                    if (isset($c->thumbnail) && $c->thumbnail) {
+                        $image_url = base_url('assets/categories/' . $c->thumbnail);
+                    }
+                    $categories_list[] = [
+                        'id' => (int)$c->id,
+                        'name' => (string)$c->name,
+                        'slug' => (string)$c->slug,
+                        'url' => base_url('products/category/' . (string)$c->slug),
+                        'image_url' => $image_url,
+                    ];
+                }
+            }
+
+            $breadcrumb = '<li class="breadcrumb-item"><a href="/">Home</a></li>';
+            $breadcrumb .= '<li class="breadcrumb-item active" aria-current="page">All Category</li>';
+            $heading_name = 'All Category';
+
+            $brand_data = $this->db
+                ->from('ec_brand')
+                ->where('status', '1')
+                ->order_by('name', 'ASC')
+                ->get()->result();
+
+            $ln = function_exists('current_language') ? current_language() : null;
+            if ($brand_data) {
+                foreach ($brand_data as $br) {
+                    if ($ln == 12) {
+                        $br->name = ($br->name_es) ? $br->name_es : $br->name;
+                    }
+                    $br_id = isset($br->brand_id) ? (int)$br->brand_id : 0;
+                    $br->checked = ($br_id > 0 && in_array($br_id, $brand_ids)) ? 1 : 0;
+                }
+            }
+
+            $output = [
+                'draw' => isset($_POST['draw']) ? $_POST['draw'] : '',
+                'recordsSummary' => '',
+                'recordsTotal' => count($categories_list),
+                'recordsFiltered' => count($categories_list),
+                'pagination' => '',
+                'result' => [],
+                'categories_list' => $categories_list,
+                'brand' => $brand_data,
+                'cat_data' => $make_final_tree,
+                'cat_image' => $cat_image,
+                'vendor_obj' => $vendor_obj,
+                'vendor_categories' => $vendor_categories,
+                'breadcrumb' => $breadcrumb,
+                'heading_name' => $heading_name,
+                'root_parent' => $root_parent,
+            ];
+
+            return $this->ok([$output], 'success');
+        }
+
+        // Product listing / search (products table)
+        $cat_ctx = null;
+        $heading_name = 'Products';
+        $breadcrumb = '<li class="breadcrumb-item"><a href="/">Home</a></li>';
+
+        if ($category_id_int > 0 && $this->Product_model && method_exists($this->Product_model, 'get_all_subcat')) {
+            $cat_row = $this->db
+                ->select('id, name, slug')
+                ->from('ec_categories_prod')
+                ->where('id', $category_id_int)
+                ->limit(1)
+                ->get()->row();
+            $cat_name = $cat_row && isset($cat_row->name) ? (string)$cat_row->name : '';
+            if ($cat_name !== '') {
+                $heading_name = $cat_name;
+            }
+            $sub = $this->Product_model->get_all_subcat($category_id_int);
+            $cat_ids = [$category_id_int];
+            if ($sub) {
+                foreach ($sub as $s) {
+                    if (isset($s->category_id) && (int)$s->category_id > 0) {
+                        $cat_ids[] = (int)$s->category_id;
+                    }
+                }
+            }
+            $cat_ids = array_values(array_unique(array_filter($cat_ids, function ($v) {
+                return (int)$v > 0;
+            })));
+            $cat_ctx = array_map(function ($v) {
+                return (string)$v;
+            }, $cat_ids);
+
+            $breadcrumb .= '<li class="breadcrumb-item"><a href="/products/category/AllCategory">All Category</a></li>';
+            $breadcrumb .= '<li class="breadcrumb-item active" aria-current="page">' . htmlspecialchars($heading_name, ENT_QUOTES, 'UTF-8') . '</li>';
+        } else {
+            $breadcrumb .= '<li class="breadcrumb-item active" aria-current="page">Products</li>';
+        }
+
+        $res = $this->Product_model->get_new_products_page((int)$page, (int)$length, $fts_trim, $cat_ctx, $sorting, $brand_ids, $price_from, $price_to);
+        $rows = $res['items'] ?? [];
+        $total = (int)($res['total'] ?? 0);
+
+        
+
+
+        $result = [];
+        if ($rows) {
+            foreach ($rows as $r) {
+                if (!is_object($r)) {
+                    continue;
+                }
+                $pid = isset($r->id) ? (int)$r->id : 0;
+                $post_title = isset($r->name) ? (string)$r->name : '';
+                $img_path = isset($r->first_image_path) ? (string)$r->first_image_path : '';
+                $featured_image = $img_path !== '' ? base_url('uploads/products/' . $img_path) : base_url('assets/default_images/product.jpg');
+
+                $min_price = isset($r->min_price) && $r->min_price !== null ? (float)$r->min_price * $cur_rate : 0;
+
+                $result[] = [
+                    'id' => $pid,
+                    'product_id' => $pid,
+                    'post_title' => $post_title,
+                    'post_title_trim' => $post_title,
+                    'featured_image' => $featured_image,
+                    'url' => base_url('product/details/' . $pid),
+                    'discount' => 0,
+                    'percentage_off' => 0,
+                    'symbol' => $symbol,
+                    'regular_price' => $min_price,
+                    'sale_price' => $min_price,
+                    'vendor_id' => null,
+                    'store_name' => '',
+                    'avg_rating' => isset($r->avg_rating) ? (float)$r->avg_rating : 0,
+                    'review_count' => isset($r->review_count) ? (int)$r->review_count : 0,
+                    'video_path' => isset($r->video_path) && $r->video_path ? (string)$r->video_path : '',
+                    'video_url' => isset($r->video_path) && $r->video_path ? base_url('uploads/product_videos/' . $r->video_path) : '',
+                    'product_type' => isset($r->product_type) ? (string)$r->product_type : 'simple',
+                ];
+            }
+        }
+
+        $ln = function_exists('current_language') ? current_language() : null;
+        $brand_data = [];
+        $brand_cat_id = 0;
+        if ($category_id_int > 0) {
+            if (!empty($root_parent) && isset($root_parent[0]) && isset($root_parent[0]->category_id)) {
+                $brand_cat_id = (int)$root_parent[0]->category_id;
+            } else {
+                $brand_cat_id = (int)$category_id_int;
+            }
+        }
+
+        // Brand filter list:
+        // - On category pages: show brands for that category root (legacy behavior: ec_brand.cat_id)
+        // - On All Categories / global search: show all brands and keep checked state
+        if (!$has_vendor_ctx) {
+            $brand_q = $this->db
+                ->from('ec_brand')
+                ->where('status', '1');
+            if ($brand_cat_id > 0) {
+                $brand_q->where('cat_id', $brand_cat_id);
+            }
+            $brand_data = $brand_q->order_by('name', 'ASC')->get()->result();
+            if ($brand_data) {
+                foreach ($brand_data as $br) {
+                    if ($ln == 12) {
+                        $br->name = ($br->name_es) ? $br->name_es : $br->name;
+                    }
+                    $br_id = isset($br->brand_id) ? (int)$br->brand_id : 0;
+                    $br->checked = ($br_id > 0 && in_array($br_id, $brand_ids)) ? 1 : 0;
+                }
+            }
+        }
+
+        $pagination = '';
+        if ($total > 0) {
+            $this->load->library('pager');
+            if (isset($this->pager) && method_exists($this->pager, 'showLinks')) {
+                $pagination = $this->pager->showLinks('', (int)$page, (int)$total, (int)$length);
+            }
+        }
+
+        $output = [
+            'draw' => isset($_POST['draw']) ? $_POST['draw'] : '',
+            'recordsSummary' => '',
+            'recordsTotal' => $total,
+            'recordsFiltered' => $total,
+            'pagination' => $pagination,
+            'result' => $result,
+            'categories_list' => [],
+            'brand' => $brand_data,
+            'cat_data' => $make_final_tree,
+            'cat_image' => $cat_image,
+            'vendor_obj' => $vendor_obj,
+            'vendor_categories' => $vendor_categories,
+            'breadcrumb' => $breadcrumb,
+            'heading_name' => $heading_name,
+            'root_parent' => $root_parent,
+        ];
+
+        return $this->ok([$output], 'success');
+    }
+
+    public function buildtree($src_arr, $cat_arr, $vendor_obj, $parent_id = 0, $tree = array())
+    {
+        if (!is_array($src_arr) && !is_object($src_arr)) {
+            return $tree;
+        }
+
+        foreach ($src_arr as $idx => $row) {
+            $vendor_countable = !empty($vendor_obj) && (is_array($vendor_obj) || $vendor_obj instanceof Countable);
+            if ($vendor_countable && count($vendor_obj) && is_array($cat_arr) && !in_array($row->id, $cat_arr)) {
+                continue;
+            }
+            if ((int)$row->parent_id === (int)$parent_id) {
+                foreach ($row as $k => $v) {
+                    $tree[$row->id][$k] = $v;
+                }
+                unset($src_arr[$idx]);
+                $tree[$row->id]['children'] = $this->buildtree($src_arr, $cat_arr, $vendor_obj, $row->id);
+            }
+        }
+        ksort($tree);
+        return $tree;
+    }
+
+    public function display_list($nested_categories, $type = 'parent', $vendor_obj = null, $root_parent = null)
+    {
+        $current_ids_arr = [];
+        if (!is_array($root_parent)) {
+            $root_parent = [];
+        }
+        if (count($root_parent)) {
+            foreach ($root_parent as $current_ids) {
+                if (isset($current_ids->category_id)) {
+                    $current_ids_arr[] = $current_ids->category_id;
+                }
+            }
+        }
+
+        $list = '';
+        if ($type == 'child') {
+            $list .= '<ul class="list-unstyled pb-2">';
+        }
+        foreach ($nested_categories as $nested) {
+            $url = (is_array($vendor_obj) && isset($vendor_obj['admin_uid']))
+                ? ("/store/" . $vendor_obj['admin_uid'] . "/" . $nested['slug'])
+                : ("/products/category/" . $nested['slug']);
+            if ($type == 'parent') {
+                $class_plus = (!empty($nested['children'])) ? '<span class="accordion-plusicon"></span>' : '';
+                $class_open = in_array($nested['id'], $current_ids_arr) ? ' active' : '';
+                $class_link2 = ' link2_' . $nested['id'];
+                $list .= '<li class="mb-1"><div class="link2 ' . $class_open . $class_link2 . '" style="position:relative;"><a href="' . $url . '" class="text-black parent_list">' . $nested['name'] . '</a>' . $class_plus . '</div>';
+            } else {
+                $class_active = in_array($nested['id'], $current_ids_arr) ? ' class="active"' : '';
+                $list .= '<li' . $class_active . '><a href="' . $url . '" class="child_list">' . $nested['name'] . '</a></li>';
+            }
+            if (!empty($nested['children'])) {
+                $list .= $this->display_list($nested['children'], 'child', $vendor_obj, $root_parent);
+                $list .= '</ul>';
+            }
+            if ($type == 'parent') {
+                $list .= '</li>';
+            }
+        }
+        $list .= '';
+
+        return $list;
+    }
+
+    public function make_final_tree($tree_arr, $vendor_obj, $root_parent)
+    {
+        $allHt = '';
+        foreach ($tree_arr as $cat) {
+            $url = (is_array($vendor_obj) && isset($vendor_obj['admin_uid']))
+                ? ("/store/" . $vendor_obj['admin_uid'] . "/" . $cat['slug'])
+                : ("/products/category/" . $cat['slug']);
+            $child_link2 = 'link';
+            $plus_icon = empty($cat['children']) ? '' : '<span class="accordion-plusicon"></span>';
+            $class_active = $class_open = $class_submenu = '';
+            if ($root_parent && isset($root_parent[0]) && isset($root_parent[0]->category_id) && $cat['id'] == $root_parent[0]->category_id) {
+                $class_active = ' active';
+                $class_open = 'class="cat_' . $cat['id'] . '"';
+                $class_submenu = 'submenu_cat_' . $cat['id'];
+            }
+
+            $allHt .= '<li ' . $class_open . '><div class="' . $child_link2 . $class_active . '"><a href="' . $url . '" class="main_cat_css parent_list">' . $cat['name'] . '</a>' . $plus_icon . '</div>';
+            $allHt .= '<ul id="accordion-subcategory-three" class="list-unstyled pb-2 accordion-subcategory-three accordion3 side_categories submenu ' . $class_submenu . '">';
+            if (!empty($cat['children'])) {
+                $allHt .= $this->display_list($cat['children'], 'parent', $vendor_obj, $root_parent);
+            }
+            $allHt .= '</ul></li>';
+        }
+        return $allHt;
+    }
+}

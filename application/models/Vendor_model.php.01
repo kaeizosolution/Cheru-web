@@ -1,0 +1,150 @@
+<?php  if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Vendor_model extends MY_Model {
+
+    var $column_search = array('name','email','mobile');
+    var $column_alias = array(); 
+
+    function __construct() {
+        parent::__construct();
+    }
+
+    // 1. The Main Query Engine (Unified)
+    public function get_datatables_query()
+    {
+        $this->slave->select('v.*');
+        $this->slave->from('ec_vendor v');
+
+        if(isset($_POST['filter'])){
+            $this->slave->group_start();
+            foreach($_POST['filter'] as $col_name => $col_value){
+                if (!empty($col_value)) {
+                    $this->slave->like("v.$col_name", $col_value); 
+                }
+            }
+            $this->slave->group_end();
+        }
+    }
+
+    public function get_data_by_month($data) 
+{
+    $vendor_id = $data['vendor_id'];
+    
+    // We group by month to calculate the earnings for the vendor amount transfer
+    // Note: Adjust 'login_id' to match the column name in ec_order_items if it's different
+    $sql = "SELECT SUM(price) as total, 
+                   MONTHNAME(date_added) as month, 
+                   YEAR(date_added) as Year,
+                   login_id as supplier_id
+            FROM ec_order_items 
+            WHERE login_id = ? 
+            GROUP BY YEAR(date_added), MONTH(date_added)";
+            
+    $query = $this->db->query($sql, array($vendor_id));
+    return $query->result();
+}
+
+    // 2. Fetch Data
+    public function get_datatable()
+    {
+        $this->get_datatables_query(); // This sets up FROM, JOIN, and WHERE
+        
+        if(isset($_POST['length']) && $_POST['length'] != -1) {
+            $this->slave->limit($_POST['length'], $_POST['start']);
+        }
+        
+        $this->slave->order_by('v.vendor_id', 'desc');
+        
+        // IMPORTANT: Do not pass 'ec_admin' into get() because it's already in get_datatables_query()
+        return $this->slave->get()->result();
+    }
+
+    // 3. Count Filtered
+    public function count_filtered()
+    {
+        $this->get_datatables_query();
+        $query = $this->slave->get();
+        return $query->num_rows();
+    }
+
+    // 4. Count All
+    public function count_all()
+    {
+        $this->slave->from('ec_vendor');
+        return $this->slave->count_all_results();
+    }
+
+	public function count_all_item($table_name, $condition = array())
+	{
+		$this->slave->from($table_name);
+		if($condition){
+			foreach($condition as $column => $value){
+				if(is_array($value)){
+					$this->slave->where_in($column, $value);
+				}else{
+					$this->slave->where($column, $value);
+				}
+			}
+		}
+		return $this->slave->count_all_results();
+	}
+
+	public function get_last_orderId($table_name, $condition = array())
+	{
+		$this->slave->select('*');
+		$this->slave->from($table_name);
+		if($condition){
+			foreach($condition as $column => $value){
+				if(is_array($value)){
+					$this->slave->where_in($column, $value);
+				}else{
+					$this->slave->where($column, $value);
+				}
+			}
+		}
+		// ec_order_items primary key is `id` (not order_item_id)
+		$this->slave->order_by('id', 'DESC');
+		return $this->slave->get()->row();
+	}
+
+	public function count_earning($table_name, $condition = array())
+	{
+		$this->slave->select('SUM(subtotal) as total');
+		$this->slave->from($table_name);
+		if($condition){
+			foreach($condition as $column => $value){
+				if(is_array($value)){
+					$this->slave->where_in($column, $value);
+				}else{
+					$this->slave->where($column, $value);
+				}
+			}
+		}
+		$row = $this->slave->get()->row();
+		return $row ? $row->total : 0;
+	}
+
+	public function get_vendor_category_ids($vendor_id)
+	{
+		$this->slave->select('id');
+		$this->slave->from('ec_vendor_categories');
+		$this->slave->where('vendor_id', $vendor_id);
+		$this->slave->where('status', '1');
+		$res = $this->slave->get()->result();
+		if(!$res){
+			return array();
+		}
+		return array_map(function($row){ return (int)$row->id; }, $res);
+	}
+
+    // ... (rest of your existing functions like count_earning, get_active_categories stay as they are)
+    
+    public function get_active_categories() {
+        $this->slave->select('id, name'); 
+        $this->slave->from('ec_categories_prod');
+        $this->slave->where('status', '1'); 
+        $this->slave->order_by('name', 'ASC');
+        $query = $this->slave->get();
+        return ($query->num_rows() > 0) ? $query->result() : array();
+    }
+}
